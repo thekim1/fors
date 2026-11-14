@@ -22,9 +22,10 @@ public sealed class IntegrationProvisioner(VirtualKeyHasher hasher, CredentialPr
     /// <summary>
     /// Applies <paramref name="manifest"/> as <paramref name="actor"/> (the audit log's actor). The secrets of keys created
     /// now are in the result and nowhere else in plain text; the caller hands them over once. Nothing is saved when the
-    /// manifest conflicts with existing data (<see cref="ManifestException"/>).
+    /// manifest conflicts with existing data (<see cref="ManifestException"/>). With <paramref name="preview"/> nothing is
+    /// saved at all: the result says what would be created (without ids, prefixes or secrets) and what differs.
     /// </summary>
-    public async Task<ProvisioningResult> ApplyAsync(GatewayDbContext db, IntegrationManifest manifest, string actor, CancellationToken ct)
+    public async Task<ProvisioningResult> ApplyAsync(GatewayDbContext db, IntegrationManifest manifest, string actor, CancellationToken ct, bool preview = false)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(manifest);
@@ -45,9 +46,11 @@ public sealed class IntegrationProvisioner(VirtualKeyHasher hasher, CredentialPr
 
         var integration = await db.Integrations.Include(i => i.OwnerTeam).SingleOrDefaultAsync(i => i.Name == declared.Name, ct);
         var createdIntegration = integration is null;
+        var createdOwner = (Team: false, Department: false);
         if (integration is null)
         {
             var owner = await OwnerTeamAsync(db, declared.Owner!, now, Audit, ct);
+            createdOwner = (db.Entry(owner).State == EntityState.Added, owner.Department is { } d && db.Entry(d).State == EntityState.Added);
             integration = new Integration
             {
                 Name = declared.Name!, Description = Trimmed(declared.Description), OwnerTeam = owner, OwnerTeamId = owner.Id,
@@ -100,9 +103,16 @@ public sealed class IntegrationProvisioner(VirtualKeyHasher hasher, CredentialPr
             keys.Add(new ProvisionedKey(wanted.Name!, current.Id, current.Prefix, ProvisionedKeyState.Existing, null));
         }
 
+        if (preview)
+        {
+            db.ChangeTracker.Clear();
+            return new ProvisioningResult(createdIntegration ? null : integration.Id, integration.Name, createdIntegration, createdOwner.Team, createdOwner.Department,
+                [.. keys.Select(k => k.State == ProvisionedKeyState.Created ? k with { Id = null, Prefix = null, Secret = null } : k)], warnings);
+        }
+
         db.AuditLog.AddRange(audit);
         await db.SaveChangesAsync(ct);
-        return new ProvisioningResult(integration.Id, integration.Name, createdIntegration, keys, warnings);
+        return new ProvisioningResult(integration.Id, integration.Name, createdIntegration, createdOwner.Team, createdOwner.Department, keys, warnings);
     }
 
     /// <summary>The team with the manifest's code, or a new one in the department with its code (also new if absent).</summary>
@@ -183,10 +193,13 @@ public sealed class IntegrationProvisioner(VirtualKeyHasher hasher, CredentialPr
 }
 
 /// <summary>What <see cref="IntegrationProvisioner.ApplyAsync"/> did.</summary>
-public sealed record ProvisioningResult(Guid IntegrationId, string IntegrationName, bool CreatedIntegration, IReadOnlyList<ProvisionedKey> Keys, IReadOnlyList<string> Warnings);
+/// <remarks><see cref="IntegrationId"/> is null in a preview that would create the integration.</remarks>
+public sealed record ProvisioningResult(
+    Guid? IntegrationId, string IntegrationName, bool CreatedIntegration, bool CreatedTeam, bool CreatedDepartment,
+    IReadOnlyList<ProvisionedKey> Keys, IReadOnlyList<string> Warnings);
 
-/// <summary>A manifest's credential key: its id, prefix and state, and its secret only when it was created now.</summary>
-public sealed record ProvisionedKey(string Name, Guid Id, string? Prefix, ProvisionedKeyState State, string? Secret)
+/// <summary>A manifest's credential key: its id, prefix and state, and its secret only when it was created now (no id in a preview).</summary>
+public sealed record ProvisionedKey(string Name, Guid? Id, string? Prefix, ProvisionedKeyState State, string? Secret)
 {
     /// <summary>Never the secret, so a result can be logged or shown in a list.</summary>
     public override string ToString() => $"{Name} ({Prefix ?? "-"}, {State})";

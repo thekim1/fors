@@ -18,7 +18,13 @@ The migration service applies the JSON manifests in `Provisioning:Manifests` on 
 `manifest:<file>`, and writes each key's secret to `Provisioning:SecretsPath/<integration>/<key>` for the platform's
 bootstrap. Create-only: an existing key is never changed or re-issued and a revoked one is not created again;
 differences from the file are logged. A missing secret file is written again from the stored secret (audited as a
-reveal). Off unless configured. The organisation, key and integration audit snapshots moved to
+reveal). Off unless configured.
+
+**Add an integration from a manifest in the admin console** (thekim1/llmgateway#88). *Integrations → Add from
+manifest*: paste a manifest or start from a preset, preview, create; all new keys' secrets are shown together once.
+New endpoints `GET /api/integrations/presets`, `POST /api/integrations/import/preview` and `POST /api/integrations/import`
+(gateway admins). Presets are manifest files in `Admin:IntegrationPresetsPath` (default `integration-presets` next to
+the admin API, shipped from `deploy/integration-presets`, which holds `ume-rag.json`, owned by that platform). The organisation, key and integration audit snapshots moved to
 `Ume.LlmGateway.Infrastructure.Auditing` so the migration service writes the same entries as the admin API.
 
 ## 0.10.1 - 2026-11-12

@@ -280,6 +280,39 @@ export interface IntegrationRequest {
   isActive?: boolean
 }
 
+/** A manifest offered as a starting point (docs/integrations.md, "Provisioning from a manifest"). */
+export interface IntegrationPreset {
+  id: string
+  title: string
+  description: string | null
+  /** The file as written, to edit before previewing. */
+  manifest: string
+}
+
+export type ImportedKeyState = 'Created' | 'Existing' | 'Revoked'
+
+export interface ImportedKey {
+  name: string
+  /** Null in a preview of a key that would be created. */
+  id: string | null
+  prefix: string | null
+  state: ImportedKeyState
+  /** Only in the answer to the import that created the key; never again. */
+  secret: string | null
+}
+
+/** What an import created, or a preview would create; nothing that exists is changed. */
+export interface IntegrationImportResult {
+  integrationId: string | null
+  integrationName: string
+  createdIntegration: boolean
+  createdTeam: boolean
+  createdDepartment: boolean
+  keys: ImportedKey[]
+  /** Existing settings that differ from the manifest, which were not changed. */
+  warnings: string[]
+}
+
 export interface IntegrationOptions {
   scopes: string[]
   roles: IntegrationRole[]

@@ -17,6 +17,10 @@ public sealed record IntegrationManifest
     public const int CurrentSchemaVersion = 1;
 
     public int SchemaVersion { get; init; }
+
+    /// <summary>Only in a preset file: how the admin console lists it. Not applied.</summary>
+    public ManifestPreset? Preset { get; init; }
+
     public ManifestIntegration? Integration { get; init; }
     public IReadOnlyList<ManifestCredentialKey> CredentialKeys { get; init; } = [];
 
@@ -59,6 +63,12 @@ public sealed record IntegrationManifest
         if (SchemaVersion != CurrentSchemaVersion)
         {
             errors.Add($"'schemaVersion' must be {CurrentSchemaVersion}.");
+        }
+
+        if (Preset is { } preset)
+        {
+            Required(errors, "preset.title", preset.Title, 100);
+            Length(errors, "preset.description", preset.Description, 1000);
         }
 
         if (Integration is not { } integration)
@@ -138,6 +148,13 @@ public sealed record IntegrationManifest
             errors.Add($"'{field}' must be at most {max} characters without control characters.");
         }
     }
+}
+
+/// <summary>How a preset (a manifest the admin console offers) is listed.</summary>
+public sealed record ManifestPreset
+{
+    public string? Title { get; init; }
+    public string? Description { get; init; }
 }
 
 /// <summary>The integration itself and the team that owns its credential keys.</summary>

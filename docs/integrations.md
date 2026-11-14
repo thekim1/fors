@@ -356,6 +356,15 @@ file instead of having an admin create them (ADR 022). The migration service app
   later one a running gateway accepts a new key at once (its secret was never presented, so no gateway has it
   cached as unknown) and shows new teams in the context within its key cache time.
 
+**In the admin console** (*Integrations → Add from manifest*, gateway admins): paste a manifest or start from a
+**preset**, edit it, preview what would be created and which existing settings differ, then create. The secrets of all
+new keys are shown together, once. Presets are manifests with a `preset` title (`{ "title": "…", "description": "…" }`,
+ignored when applied) in `Admin:IntegrationPresetsPath` (default: the `integration-presets` directory next to the admin
+API, which the image fills from [deploy/integration-presets](../deploy/integration-presets)). A preset is data, not
+code: the platform it is for owns its content, and an adopter points the setting at a directory of their own or sets
+it empty. The repository ships `ume-rag.json` for Ume.Rag, with the owner's department left empty so the preview asks
+for it.
+
 A Compose sketch for a combined stack:
 
 ```yaml
