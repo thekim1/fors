@@ -108,6 +108,14 @@ public sealed class GatewayOptions
     [RegularExpression("^$|^https?://\\S+$", ErrorMessage = "Gateway:AdminUrl must be empty or an absolute http(s) URL.")]
     public string? AdminUrl { get; set; }
 
+    /// <summary>
+    /// The Integration API's base address (<c>…/integration/v1</c> on the admin API) as the integrations reach it, handed out on
+    /// <c>/v1/ume/context</c> so a platform finds it from the gateway address it already has (docs/integrations.md). In a
+    /// combined stack it is often an internal address rather than <see cref="AdminUrl"/>. Empty leaves it out.
+    /// </summary>
+    [RegularExpression("^$|^https?://\\S+$", ErrorMessage = "Gateway:IntegrationApiUrl must be empty or an absolute http(s) URL.")]
+    public string? IntegrationApiUrl { get; set; }
+
     /// <summary>Optional webhook that receives budget threshold alerts (metadata only).</summary>
     public Uri? AlertWebhookUrl { get; set; }
 

@@ -7,6 +7,7 @@ using Ume.LlmGateway.AdminApi.Auditing;
 using Ume.LlmGateway.AdminApi.Settings;
 using Ume.LlmGateway.Domain.Entities;
 using Ume.LlmGateway.Infrastructure.Persistence;
+using Ume.LlmGateway.Infrastructure.Stores;
 using Ume.LlmGateway.ServiceDefaults;
 
 namespace Ume.LlmGateway.AdminApi.Tests;
@@ -41,10 +42,14 @@ public sealed class BrandingTests(AdminFixture fixture)
     {
         using var admin = await fixture.ClientAsync();
         using var anonymous = await fixture.ClientAsync(null);
+        var changes = new List<InvalidationKind>();
+        using var subscription = fixture.Services.GetRequiredService<IInvalidationBus>().Subscribe(kind => { lock (changes) { changes.Add(kind); } });
         try
         {
             using var named = await admin.PutAsJsonAsync("/api/settings/branding", new { organisationName = "  Example kommun " }, Ct);
             (await AdminFixture.ReadAsync(named))["organisationName"]!.GetValue<string>().ShouldBe("Example kommun");
+            // The gateways hand the name to integrations (/v1/ume/context), so they reload it with the catalogue.
+            lock (changes) { changes.ShouldContain(InvalidationKind.Config); }
 
             using var uploaded = await admin.PutAsJsonAsync("/api/settings/branding/logo", new { data = Convert.ToBase64String(Png) }, Ct);
             var logoUrl = (await AdminFixture.ReadAsync(uploaded))["logoUrl"]!.GetValue<string>();

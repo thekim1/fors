@@ -26,9 +26,11 @@ public sealed class CatalogSnapshot
         RoutingRuleSet? rules = null,
         IReadOnlyList<RuleBuildError>? ruleErrors = null,
         ImmutableArray<IPNetwork> trustedProxies = default,
-        DateTimeOffset? logAllRequestsUntil = null)
+        DateTimeOffset? logAllRequestsUntil = null,
+        string? organisationName = null)
     {
         Providers = providers;
+        OrganisationName = string.IsNullOrWhiteSpace(organisationName) ? null : organisationName;
         TrustedProxies = trustedProxies.IsDefault ? [] : trustedProxies;
         _logAllRequestsUntil = logAllRequestsUntil;
         var duplicates = new List<string>();
@@ -104,6 +106,12 @@ public sealed class CatalogSnapshot
     /// 24-hour switch ends on time even if the snapshot is older.
     /// </summary>
     public bool LogsAllRequests(DateTimeOffset now) => _logAllRequestsUntil is { } until && now < until;
+
+    /// <summary>
+    /// The organisation's name from the admin console's branding, handed to integrations on <c>/v1/ume/context</c>; null when
+    /// the name is empty. Only this column is loaded, never the logo.
+    /// </summary>
+    public string? OrganisationName { get; }
 
     public DateTimeOffset LoadedAt { get; }
     public IReadOnlyDictionary<Guid, Guid> KeyReplacements { get; }
@@ -323,6 +331,7 @@ public sealed partial class GatewayCatalog : IDisposable
         var ruleEntities = await db.RoutingRules.AsNoTracking().Include(r => r.Targets).ToListAsync(cancellationToken);
         var replacements = await db.KeyRotationMapAsync(cancellationToken);
         var settings = await db.Settings.AsNoTracking().SingleOrDefaultAsync(cancellationToken) ?? new GatewaySettings();
+        var organisationName = await db.Branding.AsNoTracking().Select(b => b.OrganisationName).FirstOrDefaultAsync(cancellationToken);
         var now = _time.GetUtcNow();
 
         // Wire navigation properties across the separately loaded graphs.
@@ -375,7 +384,8 @@ public sealed partial class GatewayCatalog : IDisposable
 
         var snapshot = new CatalogSnapshot(providers, routes, budgets, now, replacements, rules, ruleErrors,
             trustedProxies: [.. NetworkRanges.ParseValid(settings.TrustedProxies)],
-            logAllRequestsUntil: settings.LogAllRequests ? settings.LogAllRequestsUntil ?? DateTimeOffset.MaxValue : null);
+            logAllRequestsUntil: settings.LogAllRequests ? settings.LogAllRequestsUntil ?? DateTimeOffset.MaxValue : null,
+            organisationName: organisationName);
         foreach (var name in snapshot.DuplicateNames)
         {
             LogDuplicateName(_logger, name);

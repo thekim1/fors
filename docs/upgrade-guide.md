@@ -11,6 +11,15 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
+## Unreleased: organisation name and Integration API address in the context
+
+- **Rolling update: yes.** No migration. The migration service grants the gateway role `SELECT ("OrganisationName")` on
+  `Branding`; a previous gateway ignores it.
+- **Optional:** set `UME_INTEGRATION_API_URL` (gateway `Gateway__IntegrationApiUrl`) to the Integration API's address as
+  platforms reach it, for example `https://adminapi:8443/integration/v1` when they share a network with `adminapi`.
+  Unset leaves `integration_api_url` null. The Compose files and the Portainer stack pass it; the Kubernetes example
+  lists it as a comment.
+
 ## 0.10.1: acting refusals answer 403
 
 - **Rolling update: yes.** No migration, no configuration change.

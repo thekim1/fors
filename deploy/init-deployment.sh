@@ -283,6 +283,8 @@ UME_DATA_PORT=10443
 # UME_OIDC_GROUPS_TEAM_ADMIN=
 # Integration API (/integration/v1): requests per minute per credential key (default 60).
 # UME_INTEGRATION_REQUESTS_PER_MINUTE=60
+# The Integration API's address as integrations reach it, handed out on /v1/ume/context (empty leaves it out), e.g.
+# UME_INTEGRATION_API_URL=https://adminapi:8443/integration/v1
 # Pin images by digest once pushed to your registry, for example:
 # GATEWAY_IMAGE=registry.example.se/ume/gateway@sha256:...
 # ADMINAPI_IMAGE=registry.example.se/ume/adminapi@sha256:...

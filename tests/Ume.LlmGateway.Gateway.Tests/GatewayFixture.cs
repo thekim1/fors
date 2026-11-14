@@ -37,6 +37,9 @@ public sealed class GatewayFixture : IAsyncLifetime
     public HttpClient Client { get; private set; } = null!;
     public CapturingLoggerProvider Logs { get; } = new();
     public IServiceProvider Services => _factory.Services;
+
+    /// <summary>The configured <c>Gateway:IntegrationApiUrl</c>, as <c>/v1/ume/context</c> hands it out.</summary>
+    public const string IntegrationApiUrl = "https://adminapi:8443/integration/v1";
     public Guid DepartmentId { get; private set; }
     private readonly string _keyPepper = TestSecrets.RandomHex(); // fixed, so derived gateways accept the same keys
     public string ProviderSecret { get; } = TestSecrets.RandomHex();
@@ -65,6 +68,7 @@ public sealed class GatewayFixture : IAsyncLifetime
             builder.UseSetting("Gateway:ContentGuard:BlockedPatterns:0", "Test answer"); // the mock provider's answer
             // Tests flush refused-key counts themselves; a timed flush between a test's requests would split its row in two.
             builder.UseSetting("Gateway:Security:AuthFailureFlushSeconds", "3600");
+            builder.UseSetting("Gateway:IntegrationApiUrl", IntegrationApiUrl);
             builder.ConfigureLogging(logging =>
             {
                 logging.SetMinimumLevel(LogLevel.Trace);

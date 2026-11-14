@@ -194,7 +194,8 @@ chatbot's model picker and the check on save.
 ```json
 {
   "object": "ume.context",
-  "gateway": { "version": "0.10.0", "admin_url": "https://…", "features": ["max-residency", "model-facts", "integrations"] },
+  "gateway": { "version": "0.11.0", "admin_url": "https://…", "integration_api_url": "https://adminapi:8443/integration/v1",
+               "organisation_name": "Umeå kommun", "features": ["max-residency", "model-facts", "integrations"] },
   "key": { "id": "…", "name": "Ume.Rag api", "prefix": "ume-sk-AbC1", "team_id": "…", "integration_role": "Credential",
            "integration_scopes": ["usage.read"], "require_max_residency": true, "allowed_residencies": [] },
   "integration": { "id": "…", "name": "Ume.Rag", "owner_team_id": "…" },
@@ -225,6 +226,14 @@ chatbot's model picker and the check on save.
 - `features` lets a client test for a capability instead of comparing versions (phase 2 adds `act-as-key`,
   `run-metadata`, `stream-cost`; then `credential-residencies` for the residency bound, `organisation` for the
   scope and `member-groups` for the departments' member groups). `admin_url` is `Gateway:AdminUrl` (optional), for links to a key or budget.
+- `integration_api_url` (feature `integration-api-url`) is `Gateway:IntegrationApiUrl` (optional): the
+  [Integration API](#integration-api-control-plane)'s base address, ending in `/integration/v1`, as the platform's
+  services reach it. A platform finds it from the gateway address it already has instead of a setting of its own; it is
+  often an internal address (`https://adminapi:8443/integration/v1` in a combined stack) rather than `admin_url`.
+  `null` when not set.
+- `organisation_name` (feature `organisation-name`) is the organisation's name from the admin console's branding
+  (*Settings*), so a platform can show it without keeping a copy; `null` when the name is empty. The gateway reads only
+  that column with its catalogue (never the logo), and a change reaches it at once through the `Config` invalidation.
 - With the same scope each department carries **`member_groups`** (feature `member-groups`): the values of the
   identity provider's group claim whose members belong to the department, set on *Organisation* in the gateway
   ([Department scope](identity-and-roles.md#department-scope)). A platform gives a signed-in user the department's
@@ -237,7 +246,11 @@ chatbot's model picker and the check on save.
 
 ## Integration API (control plane)
 
-`/integration/v1` on the Admin API, for what queries the database, which the data plane must not do (ADR 001).
+`/integration/v1` on the Admin API, for what queries the database, which the data plane must not do (ADR 001). It is
+not served on the gateway host: a platform learns its address from `integration_api_url` on
+[`/v1/ume/context`](#discovery-data-plane). When the platform runs in the same Compose stack or host as the gateway,
+attach `adminapi` to a network the platform's services share (a separate one, not `llm`, which is for provider traffic)
+and set `UME_INTEGRATION_API_URL=https://adminapi:8443/integration/v1`; otherwise use the admin API's published address.
 
 - **Authentication:** a credential key (`Authorization: Bearer ume-sk-…`) of an active integration, carrying the scope
   (401 for any other key or none, 403 without the scope). The Admin API already holds the hasher and pepper. Status,

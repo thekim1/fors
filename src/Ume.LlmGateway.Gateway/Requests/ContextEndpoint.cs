@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
 using Ume.LlmGateway.Domain;
 using Ume.LlmGateway.Domain.Entities;
+using Ume.LlmGateway.Gateway.Routing;
 
 namespace Ume.LlmGateway.Gateway.Requests;
 
@@ -14,10 +15,10 @@ namespace Ume.LlmGateway.Gateway.Requests;
 /// Answered from the key cache (a credential key carries its assigned keys), with an <c>ETag</c>. Not accounted, like
 /// <c>/v1/models</c>.
 /// </summary>
-public sealed class ContextEndpoint(RequestStages stages, IOptionsMonitor<GatewayOptions> options, TimeProvider time)
+public sealed class ContextEndpoint(RequestStages stages, GatewayCatalog catalog, IOptionsMonitor<GatewayOptions> options, TimeProvider time)
 {
     /// <summary>What this gateway supports, for clients to test instead of comparing versions. Values are only added.</summary>
-    public static IReadOnlyList<string> Features { get; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups"];
+    public static IReadOnlyList<string> Features { get; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups", "organisation-name", "integration-api-url"];
 
     /// <summary>The release version, without the commit after <c>+</c> (as <c>/version</c> reports it in full).</summary>
     private static readonly string? Version = typeof(ContextEndpoint).Assembly
@@ -34,10 +35,15 @@ public sealed class ContextEndpoint(RequestStages stages, IOptionsMonitor<Gatewa
         }
 
         // With x-ume-on-behalf-of, the context of the assigned key: as if it had been presented.
-        await CacheableJson.WriteAsync(http, Build(authenticated.Key, now, options.CurrentValue.AdminUrl), ct);
+        var snapshot = await catalog.GetAsync(ct);
+        var current = options.CurrentValue;
+        await CacheableJson.WriteAsync(http, Build(authenticated.Key, now, new ContextGateway(current.AdminUrl, current.IntegrationApiUrl, snapshot.OrganisationName)), ct);
     }
 
-    internal static JsonObject Build(VirtualKey key, DateTimeOffset now, string? adminUrl)
+    /// <summary>What the answer says about the gateway itself, besides its version and features.</summary>
+    internal sealed record ContextGateway(string? AdminUrl, string? IntegrationApiUrl, string? OrganisationName);
+
+    internal static JsonObject Build(VirtualKey key, DateTimeOffset now, ContextGateway gateway)
     {
         var credential = key is { IntegrationRole: IntegrationRole.Credential, Integration: not null };
         IReadOnlyList<VirtualKey> assigned = credential ? key.AssignedKeys : [];
@@ -74,7 +80,9 @@ public sealed class ContextEndpoint(RequestStages stages, IOptionsMonitor<Gatewa
             ["gateway"] = new JsonObject
             {
                 ["version"] = Version,
-                ["admin_url"] = string.IsNullOrEmpty(adminUrl) ? null : adminUrl,
+                ["admin_url"] = NullIfEmpty(gateway.AdminUrl),
+                ["integration_api_url"] = NullIfEmpty(gateway.IntegrationApiUrl),
+                ["organisation_name"] = NullIfEmpty(gateway.OrganisationName),
                 ["features"] = new JsonArray([.. Features.Select(f => (JsonNode?)JsonValue.Create(f))]),
             },
             ["key"] = new JsonObject
@@ -155,6 +163,8 @@ public sealed class ContextEndpoint(RequestStages stages, IOptionsMonitor<Gatewa
             ["has_system_prompt"] = !string.IsNullOrEmpty(policy?.SystemPrompt),
         };
     }
+
+    private static string? NullIfEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
 
     private static JsonArray Strings(IEnumerable<string> values) => new([.. values.Select(v => (JsonNode?)JsonValue.Create(v))]);
 }

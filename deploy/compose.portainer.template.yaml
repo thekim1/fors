@@ -25,6 +25,9 @@
 #   COMPOSE_PROFILES=data     also start the read-only Data API (DATAAPI_IMAGE, UME_DATA_PORT 10443, UME_DATA_HOST,
 #                             UME_DATA_AUTHORITY defaults to UME_OIDC_AUTHORITY; see docs/data-access.md)
 #   UME_DATA_PUBLIC_URL       the Data API's public URL, shown with new Data API keys in the admin UI
+#   UME_ADMIN_PUBLIC_URL      the admin console's address, handed to integrations (docs/integrations.md)
+#   UME_INTEGRATION_API_URL   the Integration API's address as integrations reach it (for example
+#                             https://adminapi:8443/integration/v1 when they share a network with adminapi)
 #
 # The data lives in the volumes <stack>_postgres-data, <stack>_ume-certs and <stack>_ume-secrets
 # (<stack>_ume-config holds static configuration and is rewritten on every start).
@@ -161,6 +164,7 @@ services:
       Gateway__Security__SourceAddress: ${UME_SOURCE_ADDRESS:-Truncated}
       # Integrations (docs/integrations.md): the admin console's address, for links in /v1/ume/context. Empty = none.
       Gateway__AdminUrl: ${UME_ADMIN_PUBLIC_URL:-}
+      Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: gateway
       SSL_CERT_FILE: /run/certs/ca.pem

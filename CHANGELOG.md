@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+No migration. **Rolling update: yes.** Requested by the Ume.Rag platform (thekim1/llmgateway#89, #90).
+
+**`/v1/ume/context` names the organisation and the Integration API.** `gateway.organisation_name` is the organisation's
+name from the admin console's branding (`null` when empty; feature `organisation-name`), so a platform no longer keeps a
+copy. `gateway.integration_api_url` is the new optional `Gateway:IntegrationApiUrl` (`UME_INTEGRATION_API_URL` in
+Compose; feature `integration-api-url`), so a platform finds the Integration API from the gateway address it already
+has. The Integration API itself stays on the admin API (ADR 021). The gateway's database role may now read
+`Branding.OrganisationName` (that column only, never the logo); changing the name publishes a `Config` invalidation so
+running gateways pick it up. Contract: `docs/openapi/integrations.json` (additions only).
+
 ## 0.10.1 - 2026-11-12
 
 Fix. No migration. **Rolling update: yes.** **Changed behaviour** for integrations (thekim1/ume-rag-platform#580).
