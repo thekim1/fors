@@ -5,6 +5,7 @@ using Ume.LlmGateway.AdminApi.Auditing;
 using Ume.LlmGateway.AdminApi.Common;
 using Ume.LlmGateway.Domain.Entities;
 using Ume.LlmGateway.Infrastructure.Persistence;
+using Ume.LlmGateway.Infrastructure.Stores;
 
 namespace Ume.LlmGateway.AdminApi.Settings;
 
@@ -12,7 +13,7 @@ namespace Ume.LlmGateway.AdminApi.Settings;
 public sealed class BrandingService(AdminContext ctx, BrandingCache cache)
 {
     public async Task<BrandingDto> SetNameAsync(BrandingRequest input, CancellationToken ct) =>
-        await ChangeAsync(b => b.OrganisationName = input.OrganisationName.Trim(), ct);
+        await ChangeAsync(b => b.OrganisationName = input.OrganisationName.Trim(), [InvalidationKind.Config], ct); // the gateways hand the name to integrations
 
     public async Task<BrandingDto> SetLogoAsync(LogoRequest input, CancellationToken ct)
     {
@@ -21,16 +22,16 @@ public sealed class BrandingService(AdminContext ctx, BrandingCache cache)
         {
             b.Logo = logo;
             b.LogoContentType = contentType;
-        }, ct);
+        }, [], ct);
     }
 
     public async Task<BrandingDto> RemoveLogoAsync(CancellationToken ct) => await ChangeAsync(b =>
     {
         b.Logo = null;
         b.LogoContentType = null;
-    }, ct);
+    }, [], ct);
 
-    private async Task<BrandingDto> ChangeAsync(Action<Branding> change, CancellationToken ct)
+    private async Task<BrandingDto> ChangeAsync(Action<Branding> change, IReadOnlyCollection<InvalidationKind> kinds, CancellationToken ct)
     {
         var branding = await ctx.Db.Branding.SingleOrDefaultAsync(ct);
         if (branding is null)
@@ -45,7 +46,7 @@ public sealed class BrandingService(AdminContext ctx, BrandingCache cache)
         branding.UpdatedAt = ctx.Now;
         try
         {
-            await ctx.SaveAsync(AuditActions.Update, AuditEntities.Settings, Branding.SingletonId, before, BrandingAudit.Of(branding), [], ct);
+            await ctx.SaveAsync(AuditActions.Update, AuditEntities.Settings, Branding.SingletonId, before, BrandingAudit.Of(branding), kinds, ct);
         }
         catch (DbUpdateException)
         {

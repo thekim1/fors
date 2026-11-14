@@ -21,6 +21,8 @@ GRANT SELECT ON "Departments", "Teams", "VirtualKeys", "Integrations", "Provider
   "UsageRecords", "UsageMonthlyTotals", "AlertEvents", "AuthFailures", "DataProtectionKeys" TO ume_gateway;
 GRANT INSERT ON "UsageRecords", "AlertEvents", "AuthFailures" TO ume_gateway;
 GRANT UPDATE ("LastUsedAt") ON "VirtualKeys" TO ume_gateway;
+-- The organisation's name for integrations' context; never the logo.
+GRANT SELECT ("OrganisationName") ON "Branding" TO ume_gateway;
 
 -- Admin API: reads everything it shows (and the schema version for Operations); changes configuration, appends audit
 -- entries, creates Data Protection keys. Settings column by column, without UsageRetainedFrom.

@@ -125,15 +125,18 @@ public sealed class DatabaseRoleTests(DatabaseRolesFixture fixture) : IClassFixt
     }
 
     [Fact]
-    public async Task Only_the_admin_role_reads_and_updates_the_branding()
+    public async Task Only_the_admin_role_reads_and_updates_the_branding_and_the_gateway_reads_only_the_name()
     {
         var admin = Connection("ume_admin");
         (await ScalarAsync<string>(admin, """SELECT "OrganisationName" FROM "Branding" """)).ShouldNotBeNull();
         await ExecuteAsync(admin, """UPDATE "Branding" SET "OrganisationName" = "OrganisationName", "UpdatedAt" = now() """);
         await ShouldBeDeniedAsync(admin, """INSERT INTO "Branding" ("Id") VALUES (2)""");
         await ShouldBeDeniedAsync(admin, """DELETE FROM "Branding" """);
-        // The gateway never loads the logo, and the Data API has no use for it.
-        await ShouldBeDeniedAsync(Connection("ume_gateway"), """SELECT count(*) FROM "Branding" """);
+        // The gateway reads only the name (for integrations' context), never the logo; the Data API has no use for either.
+        (await ScalarAsync<string>(Connection("ume_gateway"), """SELECT "OrganisationName" FROM "Branding" """)).ShouldNotBeNull();
+        await ShouldBeDeniedAsync(Connection("ume_gateway"), """SELECT "Logo" FROM "Branding" """);
+        await ShouldBeDeniedAsync(Connection("ume_gateway"), """SELECT * FROM "Branding" """);
+        await ShouldBeDeniedAsync(Connection("ume_gateway"), """UPDATE "Branding" SET "OrganisationName" = "OrganisationName" """);
         await ShouldBeDeniedAsync(Connection("ume_data"), """SELECT count(*) FROM "Branding" """);
     }
 

@@ -402,6 +402,46 @@ public sealed class IntegrationGatewayTests(GatewayFixture fixture)
         return ((int)response.StatusCode, await ErrorCodeAsync(response));
     }
 
+    [Fact]
+    public async Task The_context_names_the_organisation_from_the_branding_and_the_integration_api_address()
+    {
+        var key = await fixture.CreateKeyAsync();
+        var name = "Org " + Guid.NewGuid().ToString("N");
+        await SetOrganisationNameAsync(name);
+
+        using var named = await GetAsync(key, "/v1/ume/context");
+        var gateway = JsonNode.Parse(await named.Content.ReadAsStringAsync(Ct))!["gateway"]!;
+        gateway["organisation_name"]!.GetValue<string>().ShouldBe(name);
+        gateway["integration_api_url"]!.GetValue<string>().ShouldBe(GatewayFixture.IntegrationApiUrl);
+        var features = ((JsonArray)gateway["features"]!).Select(f => f!.GetValue<string>()).ToList();
+        features.ShouldContain("organisation-name");
+        features.ShouldContain("integration-api-url");
+
+        // An empty name means "show no name"; the ETag follows the change.
+        await SetOrganisationNameAsync("");
+        using var unnamed = await GetAsync(key, "/v1/ume/context", ifNoneMatch: named.Headers.ETag!.Tag);
+        unnamed.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = JsonNode.Parse(await unnamed.Content.ReadAsStringAsync(Ct))!;
+        ((JsonObject)body["gateway"]!).ContainsKey("organisation_name").ShouldBeTrue();
+        body["gateway"]!["organisation_name"].ShouldBeNull();
+        IntegrationContract.Differences(body, "UmeContext").ShouldBeEmpty();
+    }
+
+    private async Task SetOrganisationNameAsync(string name)
+    {
+        using var scope = fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+        var branding = await db.Branding.SingleOrDefaultAsync(Ct);
+        if (branding is null)
+        {
+            branding = new Branding();
+            db.Branding.Add(branding);
+        }
+
+        branding.OrganisationName = name;
+        await db.SaveChangesAsync(Ct);
+    }
+
     private static void Assign(VirtualKey key, Guid integration, IntegrationRole role)
     {
         key.IntegrationId = integration;
