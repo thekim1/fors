@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import type { Integration } from '@/api/types'
+import type { Integration, IntegrationImportResult } from '@/api/types'
 import { useIntegrationsStore } from '@/stores/integrations'
 import { useUiStore } from '@/stores/ui'
 import { plural } from '@/utils/labels'
 import { formatDate } from '@/utils/format'
 import IntegrationFormDrawer from '@/components/integrations/IntegrationFormDrawer.vue'
+import IntegrationImportDrawer from '@/components/integrations/IntegrationImportDrawer.vue'
+import KeySecretsDialog from '@/components/integrations/KeySecretsDialog.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -21,6 +23,9 @@ const formOpen = ref(false)
 const editing = ref<Integration | null>(null)
 const target = ref<Integration | null>(null)
 const deleteOpen = ref(false)
+const importOpen = ref(false)
+const secrets = ref<{ name: string; secret: string }[]>([])
+const secretsOpen = ref(false)
 
 const columns: Column[] = [
   { key: 'integration', label: 'Integration' },
@@ -54,6 +59,20 @@ function onSaved(integration: Integration, created: boolean): void {
   ui.notify(created ? `${integration.name} created` : `${integration.name} saved`)
 }
 
+function onImported(result: IntegrationImportResult): void {
+  void store.load()
+  const created = result.keys.filter((k) => k.secret).map((k) => ({ name: k.name, secret: k.secret as string }))
+  ui.notify(`${result.integrationName}: ${plural(created.length, 'credential key')} created`)
+  if (created.length > 0) {
+    secrets.value = created
+    secretsOpen.value = true
+  }
+}
+
+function forgetSecrets(): void {
+  secrets.value = []
+}
+
 async function remove(): Promise<void> {
   if (!target.value) return
   const name = target.value.name
@@ -68,13 +87,14 @@ onMounted(() => {
 
 <template>
   <PageHeader title="Integrations" :description="summary">
+    <UiButton icon="upload" @click="importOpen = true">Add from manifest</UiButton>
     <UiButton variant="primary" icon="add" @click="openCreate">New integration</UiButton>
   </PageHeader>
 
   <p class="mb-4 flex items-start gap-2 text-small text-fg-2">
     <AppIcon name="info" :size="18" class="mt-px shrink-0" />
     <span>
-      Credential keys are what the integration’s services sign in with; create them on the Keys page in the owner team. Department and team
+      Credential keys are what the integration’s services sign in with; create them on the Keys page in the owner team, or add an integration with all its keys at once with Add from manifest. Department and team
       admins create assigned keys for their own chatbots and knowledge bases there too, and set their limits and budgets. See docs/integrations.md.
     </span>
   </p>
@@ -113,6 +133,8 @@ onMounted(() => {
   </AsyncState>
 
   <IntegrationFormDrawer v-model:open="formOpen" :existing="editing" @saved="onSaved" />
+  <IntegrationImportDrawer v-model:open="importOpen" @imported="onImported" />
+  <KeySecretsDialog v-model:open="secretsOpen" :secrets="secrets" @done="forgetSecrets" />
   <ConfirmDialog
     v-model:open="deleteOpen"
     :title="`Delete ${target?.name ?? 'integration'}?`"

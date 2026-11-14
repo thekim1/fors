@@ -233,6 +233,13 @@ own 999 "$certs/redis" "$secrets/redis"
 own 1654 "$certs/gateway" "$certs/adminapi" "$certs/dataapi" "$certs/migrations" \
   "$secrets/gateway" "$secrets/adminapi" "$secrets/dataapi" "$secrets/migrations"
 chmod 755 "$certs" "$secrets" 2>/dev/null || true
+# Integration manifests and the secrets of the credential keys they create (docs/integrations.md); empty provisions nothing.
+manifests="$here/integration-manifests"; integration_secrets="$here/integration-secrets"
+mkdir -p "$manifests" "$integration_secrets"
+# Manifests hold no secrets, and the migration service (uid 1654) must list them despite this script's umask.
+chmod 755 "$manifests"
+chmod 700 "$integration_secrets"
+own 1654 "$integration_secrets"
 
 # --- deploy/.env (non-secret settings only) ------------------------------------------
 if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
@@ -283,6 +290,9 @@ UME_DATA_PORT=10443
 # UME_OIDC_GROUPS_TEAM_ADMIN=
 # Integration API (/integration/v1): requests per minute per credential key (default 60).
 # UME_INTEGRATION_REQUESTS_PER_MINUTE=60
+# Integration manifests to provision on every deploy, and where the new keys' secrets are written (docs/integrations.md).
+UME_INTEGRATION_MANIFESTS_DIR=$manifests
+UME_INTEGRATION_SECRETS_DIR=$integration_secrets
 # The Integration API's address as integrations reach it, handed out on /v1/ume/context (empty leaves it out), e.g.
 # UME_INTEGRATION_API_URL=https://adminapi:8443/integration/v1
 # Pin images by digest once pushed to your registry, for example:

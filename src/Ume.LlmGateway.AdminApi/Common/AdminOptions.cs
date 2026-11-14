@@ -17,6 +17,13 @@ public sealed class AdminOptions
     public int IntegrationRequestsPerMinute { get; set; } = 60;
 
     /// <summary>
+    /// The directory of integration presets (manifests with a <c>preset</c> title) offered when adding an integration,
+    /// relative to the admin API's application directory. The image ships the repository's <c>deploy/integration-presets</c>;
+    /// point it at a mounted directory for your own, or set it empty to offer none.
+    /// </summary>
+    public string? IntegrationPresetsPath { get; set; } = "integration-presets";
+
+    /// <summary>
     /// Hours a session may last from sign-in, however often it is extended. After that the user signs in at the identity
     /// provider again (which also picks up role changes made there).
     /// </summary>

@@ -147,6 +147,16 @@ Other systems that use gateway keys for the teams they serve, such as a RAG plat
 - `GET /api/integrations/options` → `{ scopes: string[], roles: IntegrationRole[] }`
 - `GET /api/integrations/{id}` → `Integration`
 - `POST /api/integrations` `{ name, ownerTeamId, description?, isActive? }` → 201 `Integration` (gateway-admin)
+- `GET /api/integrations/presets` → `{ id, title, description, manifest }[]` (gateway-admin): the presets in
+  `Admin:IntegrationPresetsPath`; `manifest` is the file's text, to edit before importing
+- `POST /api/integrations/import/preview` `{ manifest }` → `IntegrationImportResult` (gateway-admin): what importing the
+  [manifest](integrations.md#provisioning-from-a-manifest) would create and which existing settings differ; nothing is saved
+- `POST /api/integrations/import` `{ manifest }` → `IntegrationImportResult` (gateway-admin): creates the owner team (and
+  department), the integration and each credential key that are missing, audited as the signed-in admin; never changes an
+  existing key. `IntegrationImportResult = { integrationId, integrationName, createdIntegration, createdTeam,
+  createdDepartment, keys: { name, id, prefix, state: Created|Existing|Revoked, secret }[], warnings: string[] }`; `secret`
+  is set only for keys this call created, once. A manifest that cannot be applied is a 400 with every reason under
+  `errors.manifest`
 - `PUT /api/integrations/{id}` (same body) → `Integration` (gateway-admin). Deactivating refuses all its keys at once
   (`key_disabled`); the owner team changes only while it has no credential keys (409).
 - `DELETE /api/integrations/{id}` → 204 (gateway-admin); 409 while a key of it is not revoked. The revoked keys keep their

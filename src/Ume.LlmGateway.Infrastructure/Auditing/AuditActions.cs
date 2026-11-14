@@ -1,4 +1,4 @@
-namespace Ume.LlmGateway.AdminApi.Auditing;
+namespace Ume.LlmGateway.Infrastructure.Auditing;
 
 /// <summary>Audit log <c>Action</c> values.</summary>
 public static class AuditActions

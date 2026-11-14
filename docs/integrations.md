@@ -8,7 +8,9 @@ the gateway's values, without the Data API.
 > keys, `/v1/ume/context`, the model facts on `/v1/models`, the model output limit (phase 1); acting as an assigned key,
 > run metadata, the cost of streamed answers and the Data API fields (phase 2); the Integration API with usage and
 > budget status (phase 3). After the RAG platform's review: the credential key's residencies bound every key it acts
-> as, the scope `organisation.read`, the contract as an OpenAPI document, and department member groups. Webhooks (phase 4) are not planned yet. Decided by the gateway owner: a chatbot
+> as, the scope `organisation.read`, the contract as an OpenAPI document, and department member groups; in 0.10.2 the organisation name and the
+> Integration API's address in the context, and provisioning from a manifest (on deploy, or from a preset in the admin
+> console). Webhooks (phase 4) are not planned yet. Decided by the gateway owner: a chatbot
 > (assistant) is configured with a gateway key of its own, set up in the gateway; gateway keys are reused on the
 > Integration API; settings are entered once; streamed cost is wanted. It replaces the delegation design kept in the
 > RAG platform's repository (`plans/gateway-changes/design.md` §5, draft ADR 020). The gateway still never depends
@@ -194,7 +196,7 @@ chatbot's model picker and the check on save.
 ```json
 {
   "object": "ume.context",
-  "gateway": { "version": "0.11.0", "admin_url": "https://…", "integration_api_url": "https://adminapi:8443/integration/v1",
+  "gateway": { "version": "0.10.2", "admin_url": "https://…", "integration_api_url": "https://adminapi:8443/integration/v1",
                "organisation_name": "Umeå kommun", "features": ["max-residency", "model-facts", "integrations"] },
   "key": { "id": "…", "name": "Ume.Rag api", "prefix": "ume-sk-AbC1", "team_id": "…", "integration_role": "Credential",
            "integration_scopes": ["usage.read"], "require_max_residency": true, "allowed_residencies": [] },
@@ -310,6 +312,73 @@ commands (8) per request as the baseline, and no more allocations. Phase 2 (the 
 and the via key on the usage record) shows the same in its `check` run on 2026-11-12: 50.5 KB per warm chat, 0
 Postgres statements and 8 Redis commands, as before.
 
+## Provisioning from a manifest
+
+A stack that deploys a platform together with the gateway can declare the integration and its credential keys in a
+file instead of having an admin create them (ADR 022). The migration service applies it on every deploy.
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "integration": {
+    "name": "Ume.Rag",
+    "description": "Retrieval platform",
+    // Found by code; created (and its department, by cost centre code) when absent.
+    "owner": { "teamCode": "ume-rag", "teamName": "Ume.Rag", "departmentCode": "1000", "departmentName": "IT" }
+  },
+  "credentialKeys": [
+    { "name": "rag-api", "requireMaxResidency": true },
+    { "name": "rag-admin", "integrationScopes": ["organisation.read", "usage.read"], "requireMaxResidency": true },
+    { "name": "rag-worker", "allowedResidencies": ["OnPrem", "Eu"], "requireMaxResidency": true,
+      "piiPolicy": "Off", "allowedIpRanges": [] }
+  ]
+}
+```
+
+- **Configuration** (migration service): `Provisioning:Manifests`, a manifest file or a directory of `*.json`
+  manifests (applied in name order); `Provisioning:SecretsPath`, required with it; `Provisioning:SecretFileMode`, `600`
+  (default) or `640`. Empty `Manifests` turns it off. A manifest that cannot be applied (unknown property or scope,
+  invalid range, a team that does not exist and cannot be created) fails the migration with every reason, so the stack
+  does not start half-configured.
+- **Names:** integration and key names are letters, digits, `.`, `_` and `-` (they are directory and file names). A
+  key is identified by its integration and name: renaming a key in the admin console makes the manifest create a new
+  one with the old name.
+- **Create-only:** what exists is never changed. If an existing key's scopes, residencies, ceiling, PII policy or
+  address list differ from the file, the migration logs a warning naming the settings; change the key in the admin
+  console. A revoked key is not created again. Nothing is deleted.
+- **Secrets:** each key's secret is written once to `<SecretsPath>/<integration>/<key>` (through a temporary file
+  and a rename). Mount a volume of its own there, writable by the migration service's user (uid 1654), and share it
+  only with the platform's bootstrap; never use the certificate or secret volumes, which hold the internal CA's
+  private key. The platform copies each file to where its service reads its gateway key.
+- **Lost file or rotation:** a missing file is written again from the key's stored secret on the next deploy (audited
+  as a reveal with the actor `manifest:<file>`); an existing file is never touched. To rotate: rotate the key in the
+  admin console (with a grace period), delete its file, deploy again.
+- **Audit and caches:** every created department, team, integration and key is audited with the actor
+  `manifest:<file>`. The migration service has no Redis connection; on a first deploy nothing is cached yet, and on a
+  later one a running gateway accepts a new key at once (its secret was never presented, so no gateway has it
+  cached as unknown) and shows new teams in the context within its key cache time.
+
+**In the admin console** (*Integrations → Add from manifest*, gateway admins): paste a manifest or start from a
+**preset**, edit it, preview what would be created and which existing settings differ, then create. The secrets of all
+new keys are shown together, once. Presets are manifests with a `preset` title (`{ "title": "…", "description": "…" }`,
+ignored when applied) in `Admin:IntegrationPresetsPath` (default: the `integration-presets` directory next to the admin
+API, which the image fills from [deploy/integration-presets](../deploy/integration-presets)). A preset is data, not
+code: the platform it is for owns its content, and an adopter points the setting at a directory of their own or sets
+it empty. The repository ships `ume-rag.json` for Ume.Rag, with the owner's department left empty so the preview asks
+for it.
+
+**In the shipped stacks** (an empty manifest directory or variable provisions nothing):
+
+- **Compose** (`compose.prod.yaml`, `compose.hardening.yaml`): put manifests in `UME_INTEGRATION_MANIFESTS_DIR`
+  (`deploy/integration-manifests`, readable by uid 1654: `chmod 644` the files); the secrets appear in `UME_INTEGRATION_SECRETS_DIR` (`deploy/integration-secrets`,
+  mode 700, owned by uid 1654). `init-deployment.sh` creates both and writes them to `.env`.
+- **Portainer** (`compose.portainer.yaml`): set `UME_INTEGRATION_MANIFEST` to the manifest's JSON; the bootstrap writes it
+  for the migration service on every start (clearing it provisions nothing more). The secrets are written to the stack's
+  `integration-secrets` volume, which the bootstrap gives to uid 1654; a platform in the same stack mounts that volume
+  read-only in its own bootstrap.
+- **Kubernetes:** set `Provisioning__Manifests` and `Provisioning__SecretsPath` on the migrations Job, with the
+  manifest from a ConfigMap and a volume the platform's bootstrap can read.
+
 ## What a platform changes (Ume.Rag as the example)
 
 | Today | With this |
@@ -351,7 +420,7 @@ Each is additive and safe for a rolling update ([zero-downtime-updates.md](zero-
 
 ## Decisions
 
-Recorded as ADR 020 and 021 in [adr.md](adr.md).
+Recorded as ADR 020, 021 and 022 (provisioning from a manifest) in [adr.md](adr.md).
 
 ## Open points
 

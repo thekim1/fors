@@ -11,14 +11,24 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
-## Unreleased: organisation name and Integration API address in the context
+## 0.10.2: organisation name and Integration API address in the context, provisioning integrations from a manifest
 
 - **Rolling update: yes.** No migration. The migration service grants the gateway role `SELECT ("OrganisationName")` on
-  `Branding`; a previous gateway ignores it.
+  `Branding`; a previous gateway ignores it. Use the release bundle's files (compose files, `init-deployment.sh`, the
+  Portainer stack), which carry the new grant and mounts.
 - **Optional:** set `UME_INTEGRATION_API_URL` (gateway `Gateway__IntegrationApiUrl`) to the Integration API's address as
   platforms reach it, for example `https://adminapi:8443/integration/v1` when they share a network with `adminapi`.
   Unset leaves `integration_api_url` null. The Compose files and the Portainer stack pass it; the Kubernetes example
   lists it as a comment.
+- **Compose:** the migrations service now mounts `UME_INTEGRATION_MANIFESTS_DIR` (read-only) and
+  `UME_INTEGRATION_SECRETS_DIR` (defaults `deploy/integration-manifests` and `deploy/integration-secrets`). Docker creates
+  missing directories empty, which provisions nothing. To use them on an existing installation, run `init-deployment.sh
+  --renew` again, or create the secrets directory yourself (`mkdir -m 700 deploy/integration-secrets; chown 1654:1654
+  deploy/integration-secrets`).
+- **Portainer:** the stack has a new volume, `<stack>_integration-secrets`, and an optional variable,
+  `UME_INTEGRATION_MANIFEST`. Nothing is provisioned unless you set the variable.
+- **Admin API:** presets are read from `Admin:IntegrationPresetsPath` (default `integration-presets` next to the admin
+  API; the image ships `ume-rag.json`). Set it empty to offer none, or to a mounted directory to offer your own.
 
 ## 0.10.1: acting refusals answer 403
 

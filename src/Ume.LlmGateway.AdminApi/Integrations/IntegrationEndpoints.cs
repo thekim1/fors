@@ -12,6 +12,17 @@ public static class IntegrationEndpoints
             .WithName("ListIntegrations").WithSummary("Integrations, for assigning a key to one");
         integrations.MapGet("/options", () => TypedResults.Ok(IntegrationService.Options()))
             .WithName("GetIntegrationOptions").WithSummary("The roles a key can have in an integration and the scopes a credential key can hold");
+        integrations.MapGet("/presets", async (IntegrationPresets presets, CancellationToken ct) => TypedResults.Ok(await presets.ListAsync(ct)))
+            .RequireAuthorization(AdminPolicies.Admin).WithName("ListIntegrationPresets")
+            .WithSummary("Manifests offered as a starting point for adding an integration with its credential keys");
+        integrations.MapPost("/import/preview", async (IntegrationImportRequest input, IntegrationImportService service, CancellationToken ct) =>
+            TypedResults.Ok(await service.PreviewAsync(input, ct)))
+            .RequireAuthorization(AdminPolicies.Admin).WithName("PreviewIntegrationImport")
+            .WithSummary("What importing a manifest would create and which existing settings differ; nothing is saved");
+        integrations.MapPost("/import", async (IntegrationImportRequest input, IntegrationImportService service, CancellationToken ct) =>
+            TypedResults.Ok(await service.ImportAsync(input, ct)))
+            .RequireAuthorization(AdminPolicies.Admin).WithName("ImportIntegration")
+            .WithSummary("Creates the integration and the credential keys a manifest declares where missing; new keys' secrets are answered once");
         integrations.MapGet("/{id:guid}", async (Guid id, IntegrationService service, CancellationToken ct) => TypedResults.Ok(await service.GetAsync(id, ct)))
             .WithName("GetIntegration");
         integrations.MapPost("", async (IntegrationRequest input, IntegrationService service, CancellationToken ct) =>

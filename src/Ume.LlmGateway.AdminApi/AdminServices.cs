@@ -11,6 +11,7 @@ using Ume.LlmGateway.AdminApi.Reports;
 using Ume.LlmGateway.AdminApi.RoutingRules;
 using Ume.LlmGateway.AdminApi.Security;
 using Ume.LlmGateway.AdminApi.Settings;
+using Ume.LlmGateway.Infrastructure.Provisioning;
 
 namespace Ume.LlmGateway.AdminApi;
 
@@ -37,6 +38,9 @@ public static class AdminServices
         services.AddScoped<OrganisationService>();
         services.AddScoped<KeyService>();
         services.AddScoped<IntegrationService>();
+        services.AddScoped<IntegrationImportService>();
+        services.AddSingleton<IntegrationPresets>();
+        services.AddTransient<IntegrationProvisioner>();
         services.AddScoped<IntegrationApiService>();
         services.AddSingleton<IntegrationKeyStore>();
         services.AddScoped<DataAccessService>();

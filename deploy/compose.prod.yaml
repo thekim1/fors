@@ -76,10 +76,16 @@ services:
       DataProtection__CertificatePath: /run/certs/data-protection.pfx
       Migration__RolesSqlPath: /run/config/app-roles.sql
       Seed__Enabled: "false"
+      # Integration manifests (docs/integrations.md, "Provisioning from a manifest"): an empty directory provisions nothing.
+      Provisioning__Manifests: /run/integration-manifests
+      Provisioning__SecretsPath: /run/integration-secrets
     volumes:
       - ${UME_SECRETS_DIR}/migrations:/run/app-secrets:ro
       - ${UME_CERTS_DIR}/migrations:/run/certs:ro
       - ./postgres/app-roles.sql:/run/config/app-roles.sql:ro
+      - ${UME_INTEGRATION_MANIFESTS_DIR:-./integration-manifests}:/run/integration-manifests:ro
+      # Each new credential key's secret, for the platform's bootstrap only (owned by uid 1654, mode 700).
+      - ${UME_INTEGRATION_SECRETS_DIR:-./integration-secrets}:/run/integration-secrets
     depends_on:
       postgres: {condition: service_healthy}
     networks: [data]

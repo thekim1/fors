@@ -2,12 +2,12 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Ume.LlmGateway.AdminApi.Auditing;
 using Ume.LlmGateway.AdminApi.Settings;
 using Ume.LlmGateway.Domain;
 using Ume.LlmGateway.Domain.Budgets;
 using Ume.LlmGateway.Domain.Entities;
 using Ume.LlmGateway.Domain.Usage;
+using Ume.LlmGateway.Infrastructure.Auditing;
 using Ume.LlmGateway.Infrastructure.Persistence;
 
 namespace Ume.LlmGateway.AdminApi.Tests;

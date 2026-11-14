@@ -9,6 +9,10 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
     <PackageReference Include="Scalar.AspNetCore" />
   </ItemGroup>
+  <!-- Integration presets (manifests the admin console offers; docs/integrations.md), data rather than code. -->
+  <ItemGroup>
+    <None Include="..\..\deploy\integration-presets\*.json" Link="integration-presets\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
   <ItemGroup Condition="'$(PublishAdminUi)' == 'true'">
     <Content Include="..\admin-ui\dist\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
@@ -33,5 +37,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Ume.LlmGateway.AdminApi.Tests" />
     <Using Include="Ume.LlmGateway.ServiceDefaults" />
+    <Using Include="Ume.LlmGateway.Infrastructure.Auditing" />
   </ItemGroup>
 </Project>

@@ -85,7 +85,12 @@ fi
 
 # Static configuration files (services run read-only, so they get them from a volume).
 F=/conf
-mkdir -p "$F/postgres-init" "$F/postgres" "$F/redis" "$F/migrations"
+mkdir -p "$F/postgres-init" "$F/postgres" "$F/redis" "$F/migrations" "$F/migrations/integration-manifests"
+# Integration manifest (optional): rewritten from the variable on every start, so removing it provisions nothing more.
+rm -f "$F/migrations/integration-manifests/"*.json
+if [ -n "${UME_INTEGRATION_MANIFEST:-}" ]; then
+  printf '%s' "$UME_INTEGRATION_MANIFEST" > "$F/migrations/integration-manifests/manifest.json"
+fi
 cp /config/postgres-init.sql "$F/postgres-init/10-roles.sql"
 cp /config/pg_hba.conf "$F/postgres/pg_hba.conf"
 cp /config/redis.conf "$F/redis/redis.conf"
@@ -96,4 +101,6 @@ chown -R 70:70 "$C/postgres" "$S/postgres"
 chown -R 999:999 "$C/redis" "$S/redis"
 chown -R 1654:1654 "$C/gateway" "$C/adminapi" "$C/dataapi" "$C/migrations" "$S/gateway" "$S/adminapi" "$S/dataapi" "$S/migrations"
 chmod 755 "$C" "$S"
+# Secrets of credential keys created from the manifest: the migration service writes them, a platform's bootstrap reads them.
+chown 1654:1654 /integration-secrets && chmod 700 /integration-secrets
 echo "bootstrap: certificates and secrets ready"

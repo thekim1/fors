@@ -25,7 +25,9 @@ import type {
   Department,
   DiscoveredModel,
   Integration,
+  IntegrationImportResult,
   IntegrationOptions,
+  IntegrationPreset,
   IntegrationRequest,
   NetworkSettings,
   RequestLogSettings,
@@ -114,6 +116,11 @@ export const api = {
     options: () => http.get<IntegrationOptions>('/api/integrations/options'),
     create: (body: IntegrationRequest) => http.post<Integration>('/api/integrations', body),
     update: (integrationId: string, body: IntegrationRequest) => http.put<Integration>(`/api/integrations/${id(integrationId)}`, body),
+    presets: () => http.get<IntegrationPreset[]>('/api/integrations/presets'),
+    /** What importing the manifest would create; nothing is saved. */
+    previewImport: (manifest: string) => http.post<IntegrationImportResult>('/api/integrations/import/preview', { manifest }),
+    /** Creates what the manifest declares and is missing; the answer holds new keys' secrets, once. */
+    import: (manifest: string) => http.post<IntegrationImportResult>('/api/integrations/import', { manifest }),
     /** Only an integration whose keys are all revoked can be deleted. */
     remove: (integrationId: string) => http.del(`/api/integrations/${id(integrationId)}`),
   },
