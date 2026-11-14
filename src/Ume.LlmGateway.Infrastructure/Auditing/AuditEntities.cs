@@ -1,4 +1,4 @@
-namespace Ume.LlmGateway.AdminApi.Auditing;
+namespace Ume.LlmGateway.Infrastructure.Auditing;
 
 /// <summary>Audit log <c>EntityType</c> values (also the <c>entityType</c> filter of <c>GET /api/audit</c>).</summary>
 public static class AuditEntities

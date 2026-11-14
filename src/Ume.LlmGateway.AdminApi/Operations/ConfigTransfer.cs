@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
-using Ume.LlmGateway.AdminApi.Auditing;
 using Ume.LlmGateway.AdminApi.Catalog;
 using Ume.LlmGateway.AdminApi.Common;
 using Ume.LlmGateway.AdminApi.RoutingRules;

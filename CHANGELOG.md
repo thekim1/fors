@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-No migration. **Rolling update: yes.** Requested by the Ume.Rag platform (thekim1/llmgateway#89, #90).
+No migration. **Rolling update: yes.** Requested by the Ume.Rag platform (thekim1/llmgateway#87, #89, #90).
 
 **`/v1/ume/context` names the organisation and the Integration API.** `gateway.organisation_name` is the organisation's
 name from the admin console's branding (`null` when empty; feature `organisation-name`), so a platform no longer keeps a
@@ -11,6 +11,15 @@ Compose; feature `integration-api-url`), so a platform finds the Integration API
 has. The Integration API itself stays on the admin API (ADR 021). The gateway's database role may now read
 `Branding.OrganisationName` (that column only, never the logo); changing the name publishes a `Config` invalidation so
 running gateways pick it up. Contract: `docs/openapi/integrations.json` (additions only).
+
+**Integrations can be provisioned from a manifest** (ADR 022, [docs/integrations.md](docs/integrations.md#provisioning-from-a-manifest)).
+The migration service applies the JSON manifests in `Provisioning:Manifests` on every deploy: it creates the owner team
+(and department), the integration and its credential keys where they do not exist, audited with the actor
+`manifest:<file>`, and writes each key's secret to `Provisioning:SecretsPath/<integration>/<key>` for the platform's
+bootstrap. Create-only: an existing key is never changed or re-issued and a revoked one is not created again;
+differences from the file are logged. A missing secret file is written again from the stored secret (audited as a
+reveal). Off unless configured. The organisation, key and integration audit snapshots moved to
+`Ume.LlmGateway.Infrastructure.Auditing` so the migration service writes the same entries as the admin API.
 
 ## 0.10.1 - 2026-11-12
 

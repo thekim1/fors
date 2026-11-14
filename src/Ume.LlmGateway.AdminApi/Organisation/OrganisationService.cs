@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Ume.LlmGateway.AdminApi.Auditing;
 using Ume.LlmGateway.AdminApi.Common;
 using Ume.LlmGateway.AdminApi.RoutingRules;
 using Ume.LlmGateway.Domain.Entities;
