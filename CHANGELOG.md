@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-No migration. **Rolling update: yes.** Requested by the Ume.Rag platform (thekim1/llmgateway#87, #89, #90).
+## 0.10.2 - 2026-11-15
+
+Integrations: the organisation's name and the Integration API's address in the context, and integrations provisioned
+from a manifest, on deploy or from a preset in the admin console (ADR 022). No migration. **Rolling update: yes.**
+Requested by the Ume.Rag platform (thekim1/llmgateway#87, #88, #89, #90).
+
+**Deployment.** The migration service mounts a manifests directory and a secrets directory (Compose:
+`UME_INTEGRATION_MANIFESTS_DIR`, `UME_INTEGRATION_SECRETS_DIR`, created by `init-deployment.sh`; Portainer: the variable
+`UME_INTEGRATION_MANIFEST` and the volume `integration-secrets`, prepared by the bootstrap). The gateway gets
+`UME_INTEGRATION_API_URL` (`Gateway__IntegrationApiUrl`). Empty, nothing is provisioned. See the upgrade guide.
 
 **`/v1/ume/context` names the organisation and the Integration API.** `gateway.organisation_name` is the organisation's
 name from the admin console's branding (`null` when empty; feature `organisation-name`), so a platform no longer keeps a

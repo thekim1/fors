@@ -8,7 +8,9 @@ the gateway's values, without the Data API.
 > keys, `/v1/ume/context`, the model facts on `/v1/models`, the model output limit (phase 1); acting as an assigned key,
 > run metadata, the cost of streamed answers and the Data API fields (phase 2); the Integration API with usage and
 > budget status (phase 3). After the RAG platform's review: the credential key's residencies bound every key it acts
-> as, the scope `organisation.read`, the contract as an OpenAPI document, and department member groups. Webhooks (phase 4) are not planned yet. Decided by the gateway owner: a chatbot
+> as, the scope `organisation.read`, the contract as an OpenAPI document, and department member groups; in 0.10.2 the organisation name and the
+> Integration API's address in the context, and provisioning from a manifest (on deploy, or from a preset in the admin
+> console). Webhooks (phase 4) are not planned yet. Decided by the gateway owner: a chatbot
 > (assistant) is configured with a gateway key of its own, set up in the gateway; gateway keys are reused on the
 > Integration API; settings are entered once; streamed cost is wanted. It replaces the delegation design kept in the
 > RAG platform's repository (`plans/gateway-changes/design.md` §5, draft ADR 020). The gateway still never depends
@@ -194,7 +196,7 @@ chatbot's model picker and the check on save.
 ```json
 {
   "object": "ume.context",
-  "gateway": { "version": "0.11.0", "admin_url": "https://…", "integration_api_url": "https://adminapi:8443/integration/v1",
+  "gateway": { "version": "0.10.2", "admin_url": "https://…", "integration_api_url": "https://adminapi:8443/integration/v1",
                "organisation_name": "Umeå kommun", "features": ["max-residency", "model-facts", "integrations"] },
   "key": { "id": "…", "name": "Ume.Rag api", "prefix": "ume-sk-AbC1", "team_id": "…", "integration_role": "Credential",
            "integration_scopes": ["usage.read"], "require_max_residency": true, "allowed_residencies": [] },
@@ -365,20 +367,17 @@ code: the platform it is for owns its content, and an adopter points the setting
 it empty. The repository ships `ume-rag.json` for Ume.Rag, with the owner's department left empty so the preview asks
 for it.
 
-A Compose sketch for a combined stack:
+**In the shipped stacks** (an empty manifest directory or variable provisions nothing):
 
-```yaml
-services:
-  migrations:
-    environment:
-      Provisioning__Manifests: /run/ume-manifests
-      Provisioning__SecretsPath: /run/integration-secrets
-    volumes:
-      - ./manifests:/run/ume-manifests:ro
-      - integration-secrets:/run/integration-secrets
-volumes:
-  integration-secrets: # create it owned by uid 1654, e.g. in the platform's bootstrap before the migrations run
-```
+- **Compose** (`compose.prod.yaml`, `compose.hardening.yaml`): put manifests in `UME_INTEGRATION_MANIFESTS_DIR`
+  (`deploy/integration-manifests`); the secrets appear in `UME_INTEGRATION_SECRETS_DIR` (`deploy/integration-secrets`,
+  mode 700, owned by uid 1654). `init-deployment.sh` creates both and writes them to `.env`.
+- **Portainer** (`compose.portainer.yaml`): set `UME_INTEGRATION_MANIFEST` to the manifest's JSON; the bootstrap writes it
+  for the migration service on every start (clearing it provisions nothing more). The secrets are written to the stack's
+  `integration-secrets` volume, which the bootstrap gives to uid 1654; a platform in the same stack mounts that volume
+  read-only in its own bootstrap.
+- **Kubernetes:** set `Provisioning__Manifests` and `Provisioning__SecretsPath` on the migrations Job, with the
+  manifest from a ConfigMap and a volume the platform's bootstrap can read.
 
 ## What a platform changes (Ume.Rag as the example)
 

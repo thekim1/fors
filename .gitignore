@@ -36,3 +36,5 @@ deploy/certs/
 deploy/keycloak/.env
 deploy/keycloak/additions/*
 !deploy/keycloak/additions/README.md
+deploy/integration-secrets/
+deploy/integration-manifests/

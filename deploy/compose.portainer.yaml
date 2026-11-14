@@ -28,6 +28,8 @@
 #   UME_ADMIN_PUBLIC_URL      the admin console's address, handed to integrations (docs/integrations.md)
 #   UME_INTEGRATION_API_URL   the Integration API's address as integrations reach it (for example
 #                             https://adminapi:8443/integration/v1 when they share a network with adminapi)
+#   UME_INTEGRATION_MANIFEST  an integration manifest (JSON) to provision on every deploy; each new credential key's
+#                             secret is written to the <stack>_integration-secrets volume (docs/integrations.md)
 #
 # The data lives in the volumes <stack>_postgres-data, <stack>_ume-certs and <stack>_ume-secrets
 # (<stack>_ume-config holds static configuration and is rewritten on every start).
@@ -70,6 +72,7 @@ services:
       UME_ADMIN_HOST: ${UME_ADMIN_HOST:-}
       UME_DATA_HOST: ${UME_DATA_HOST:-}
       UME_OIDC_CLIENT_SECRET: ${UME_OIDC_CLIENT_SECRET:-}
+      UME_INTEGRATION_MANIFEST: ${UME_INTEGRATION_MANIFEST:-}
     configs:
       - {source: bootstrap-script, target: /config/bootstrap.sh}
       - {source: redis-acl-template, target: /config/users.acl.example}
@@ -81,6 +84,7 @@ services:
       - ume-certs:/certs
       - ume-secrets:/secrets
       - ume-config:/conf
+      - integration-secrets:/integration-secrets
     networks: [data]
 
   postgres:
@@ -139,10 +143,14 @@ services:
       DataProtection__CertificatePath: /run/certs/data-protection.pfx
       Migration__RolesSqlPath: /run/config/app-roles.sql
       Seed__Enabled: "false"
+      # UME_INTEGRATION_MANIFEST, written by the bootstrap (docs/integrations.md, "Provisioning from a manifest").
+      Provisioning__Manifests: /run/config/integration-manifests
+      Provisioning__SecretsPath: /run/integration-secrets
     volumes:
       - {<<: *conf-mount, volume: {subpath: migrations}}
       - {<<: *certs-mount, volume: {subpath: migrations}}
       - {<<: *secrets-mount, target: /run/app-secrets, volume: {subpath: migrations}}
+      - integration-secrets:/run/integration-secrets
     depends_on:
       postgres: {condition: service_healthy}
     networks: [data]
@@ -357,7 +365,12 @@ configs:
 
       # Static configuration files (services run read-only, so they get them from a volume).
       F=/conf
-      mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/redis" "$$F/migrations"
+      mkdir -p "$$F/postgres-init" "$$F/postgres" "$$F/redis" "$$F/migrations" "$$F/migrations/integration-manifests"
+      # Integration manifest (optional): rewritten from the variable on every start, so removing it provisions nothing more.
+      rm -f "$$F/migrations/integration-manifests/"*.json
+      if [ -n "$${UME_INTEGRATION_MANIFEST:-}" ]; then
+        printf '%s' "$$UME_INTEGRATION_MANIFEST" > "$$F/migrations/integration-manifests/manifest.json"
+      fi
       cp /config/postgres-init.sql "$$F/postgres-init/10-roles.sql"
       cp /config/pg_hba.conf "$$F/postgres/pg_hba.conf"
       cp /config/redis.conf "$$F/redis/redis.conf"
@@ -368,6 +381,8 @@ configs:
       chown -R 999:999 "$$C/redis" "$$S/redis"
       chown -R 1654:1654 "$$C/gateway" "$$C/adminapi" "$$C/dataapi" "$$C/migrations" "$$S/gateway" "$$S/adminapi" "$$S/dataapi" "$$S/migrations"
       chmod 755 "$$C" "$$S"
+      # Secrets of credential keys created from the manifest: the migration service writes them, a platform's bootstrap reads them.
+      chown 1654:1654 /integration-secrets && chmod 700 /integration-secrets
       echo "bootstrap: certificates and secrets ready"
   redis-acl-template:
     content: |
@@ -511,3 +526,5 @@ volumes:
   ume-certs:
   ume-secrets:
   ume-config:
+  # Credential key secrets from UME_INTEGRATION_MANIFEST, for a platform's bootstrap in the same stack only.
+  integration-secrets:
