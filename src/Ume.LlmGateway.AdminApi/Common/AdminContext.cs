@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Ume.LlmGateway.AdminApi.Auditing;
 using Ume.LlmGateway.AdminApi.Security;
 using Ume.LlmGateway.Domain.Entities;
 using Ume.LlmGateway.Infrastructure.Persistence;

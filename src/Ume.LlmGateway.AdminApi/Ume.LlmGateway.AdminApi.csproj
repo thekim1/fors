@@ -33,5 +33,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Ume.LlmGateway.AdminApi.Tests" />
     <Using Include="Ume.LlmGateway.ServiceDefaults" />
+    <Using Include="Ume.LlmGateway.Infrastructure.Auditing" />
   </ItemGroup>
 </Project>

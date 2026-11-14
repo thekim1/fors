@@ -3,9 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Ume.LlmGateway.AdminApi.Auditing;
 using Ume.LlmGateway.Domain;
 using Ume.LlmGateway.Domain.Entities;
+using Ume.LlmGateway.Infrastructure.Auditing;
 using Ume.LlmGateway.Infrastructure.Persistence;
 using Ume.LlmGateway.Infrastructure.Stores;
 

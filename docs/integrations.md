@@ -310,6 +310,67 @@ commands (8) per request as the baseline, and no more allocations. Phase 2 (the 
 and the via key on the usage record) shows the same in its `check` run on 2026-11-12: 50.5 KB per warm chat, 0
 Postgres statements and 8 Redis commands, as before.
 
+## Provisioning from a manifest
+
+A stack that deploys a platform together with the gateway can declare the integration and its credential keys in a
+file instead of having an admin create them (ADR 022). The migration service applies it on every deploy.
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "integration": {
+    "name": "Ume.Rag",
+    "description": "Retrieval platform",
+    // Found by code; created (and its department, by cost centre code) when absent.
+    "owner": { "teamCode": "ume-rag", "teamName": "Ume.Rag", "departmentCode": "1000", "departmentName": "IT" }
+  },
+  "credentialKeys": [
+    { "name": "rag-api", "requireMaxResidency": true },
+    { "name": "rag-admin", "integrationScopes": ["organisation.read", "usage.read"], "requireMaxResidency": true },
+    { "name": "rag-worker", "allowedResidencies": ["OnPrem", "Eu"], "requireMaxResidency": true,
+      "piiPolicy": "Off", "allowedIpRanges": [] }
+  ]
+}
+```
+
+- **Configuration** (migration service): `Provisioning:Manifests`, a manifest file or a directory of `*.json`
+  manifests (applied in name order); `Provisioning:SecretsPath`, required with it; `Provisioning:SecretFileMode`, `600`
+  (default) or `640`. Empty `Manifests` turns it off. A manifest that cannot be applied (unknown property or scope,
+  invalid range, a team that does not exist and cannot be created) fails the migration with every reason, so the stack
+  does not start half-configured.
+- **Names:** integration and key names are letters, digits, `.`, `_` and `-` (they are directory and file names). A
+  key is identified by its integration and name: renaming a key in the admin console makes the manifest create a new
+  one with the old name.
+- **Create-only:** what exists is never changed. If an existing key's scopes, residencies, ceiling, PII policy or
+  address list differ from the file, the migration logs a warning naming the settings; change the key in the admin
+  console. A revoked key is not created again. Nothing is deleted.
+- **Secrets:** each key's secret is written once to `<SecretsPath>/<integration>/<key>` (through a temporary file
+  and a rename). Mount a volume of its own there, writable by the migration service's user (uid 1654), and share it
+  only with the platform's bootstrap; never use the certificate or secret volumes, which hold the internal CA's
+  private key. The platform copies each file to where its service reads its gateway key.
+- **Lost file or rotation:** a missing file is written again from the key's stored secret on the next deploy (audited
+  as a reveal with the actor `manifest:<file>`); an existing file is never touched. To rotate: rotate the key in the
+  admin console (with a grace period), delete its file, deploy again.
+- **Audit and caches:** every created department, team, integration and key is audited with the actor
+  `manifest:<file>`. The migration service has no Redis connection; on a first deploy nothing is cached yet, and on a
+  later one a running gateway accepts a new key at once (its secret was never presented, so no gateway has it
+  cached as unknown) and shows new teams in the context within its key cache time.
+
+A Compose sketch for a combined stack:
+
+```yaml
+services:
+  migrations:
+    environment:
+      Provisioning__Manifests: /run/ume-manifests
+      Provisioning__SecretsPath: /run/integration-secrets
+    volumes:
+      - ./manifests:/run/ume-manifests:ro
+      - integration-secrets:/run/integration-secrets
+volumes:
+  integration-secrets: # create it owned by uid 1654, e.g. in the platform's bootstrap before the migrations run
+```
+
 ## What a platform changes (Ume.Rag as the example)
 
 | Today | With this |
@@ -351,7 +412,7 @@ Each is additive and safe for a rolling update ([zero-downtime-updates.md](zero-
 
 ## Decisions
 
-Recorded as ADR 020 and 021 in [adr.md](adr.md).
+Recorded as ADR 020, 021 and 022 (provisioning from a manifest) in [adr.md](adr.md).
 
 ## Open points
 
