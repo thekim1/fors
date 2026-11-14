@@ -104,7 +104,15 @@ public sealed partial class IntegrationManifests(
     {
         if (Directory.Exists(manifests))
         {
-            return Directory.GetFiles(manifests, "*.json").Order(StringComparer.Ordinal);
+            try
+            {
+                return Directory.GetFiles(manifests, "*.json").Order(StringComparer.Ordinal);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new UnauthorizedAccessException(
+                    $"Provisioning:Manifests '{manifests}' cannot be read: the directory and its manifests must be readable by the migration service's user (uid 1654 in the images).", ex);
+            }
         }
 
         return File.Exists(manifests) ? [manifests] : throw new FileNotFoundException($"Provisioning:Manifests '{manifests}' is neither a file nor a directory.");

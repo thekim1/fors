@@ -370,7 +370,7 @@ for it.
 **In the shipped stacks** (an empty manifest directory or variable provisions nothing):
 
 - **Compose** (`compose.prod.yaml`, `compose.hardening.yaml`): put manifests in `UME_INTEGRATION_MANIFESTS_DIR`
-  (`deploy/integration-manifests`); the secrets appear in `UME_INTEGRATION_SECRETS_DIR` (`deploy/integration-secrets`,
+  (`deploy/integration-manifests`, readable by uid 1654: `chmod 644` the files); the secrets appear in `UME_INTEGRATION_SECRETS_DIR` (`deploy/integration-secrets`,
   mode 700, owned by uid 1654). `init-deployment.sh` creates both and writes them to `.env`.
 - **Portainer** (`compose.portainer.yaml`): set `UME_INTEGRATION_MANIFEST` to the manifest's JSON; the bootstrap writes it
   for the migration service on every start (clearing it provisions nothing more). The secrets are written to the stack's

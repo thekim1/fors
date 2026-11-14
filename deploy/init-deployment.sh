@@ -236,6 +236,8 @@ chmod 755 "$certs" "$secrets" 2>/dev/null || true
 # Integration manifests and the secrets of the credential keys they create (docs/integrations.md); empty provisions nothing.
 manifests="$here/integration-manifests"; integration_secrets="$here/integration-secrets"
 mkdir -p "$manifests" "$integration_secrets"
+# Manifests hold no secrets, and the migration service (uid 1654) must list them despite this script's umask.
+chmod 755 "$manifests"
 chmod 700 "$integration_secrets"
 own 1654 "$integration_secrets"
 
