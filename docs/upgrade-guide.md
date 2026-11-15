@@ -11,6 +11,13 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
+## 0.10.3: Ume.Rag preset keys limited to OnPrem and Eu
+
+- **Rolling update: yes.** No migration, no configuration change.
+- **Ume.Rag preset:** `rag-api` and `rag-admin` in `ume-rag.json` now allow only `OnPrem` and `Eu`, as `rag-worker`
+  did. Keys already created from the preset are not changed (create-only): if you made them from 0.10.2's preset, set
+  their residencies to `OnPrem` and `Eu` in the admin console.
+
 ## 0.10.2: organisation name and Integration API address in the context, provisioning integrations from a manifest
 
 - **Rolling update: yes.** No migration. The migration service grants the gateway role `SELECT ("OrganisationName")` on
