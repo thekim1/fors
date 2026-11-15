@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,6 +51,15 @@ public sealed class IntegrationImportTests(AdminFixture fixture)
         preset["title"]!.GetValue<string>().ShouldBe("Ume.Rag");
         var manifest = preset["manifest"]!.GetValue<string>();
         manifest.ShouldContain("\"rag-worker\"");
+        // Every Ume.Rag model call is on-premises or EU-hosted (its register M2): each key's residencies are its ceiling.
+        using (var parsed = JsonDocument.Parse(manifest, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }))
+        {
+            foreach (var key in parsed.RootElement.GetProperty("credentialKeys").EnumerateArray())
+            {
+                key.GetProperty("allowedResidencies").EnumerateArray().Select(r => r.GetString()).ShouldBe(["OnPrem", "Eu"], key.GetProperty("name").GetString());
+            }
+        }
+
         // The department is left for the admin to fill in, so a preview asks for it instead of creating a placeholder.
         using var preview = await admin.PostAsJsonAsync("/api/integrations/import/preview", new { manifest = manifest.Replace("\"ume-rag\"", $"\"{Unique("rag")}\"", StringComparison.Ordinal) }, Ct);
         var problem = await AdminFixture.ReadAsync(preview, HttpStatusCode.BadRequest);

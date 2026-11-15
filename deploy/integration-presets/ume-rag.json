@@ -5,7 +5,7 @@
   "schemaVersion": 1,
   "preset": {
     "title": "Ume.Rag",
-    "description": "Retrieval (RAG) platform: rag-api serves chat, rag-admin reads the organisation and usage, rag-worker indexes with on-premises or EU models only."
+    "description": "Retrieval (RAG) platform: rag-api serves chat, rag-admin reads the organisation and usage, rag-worker indexes; every key on-premises or EU models only."
   },
   "integration": {
     "name": "Ume.Rag",
@@ -13,8 +13,8 @@
     "owner": { "teamCode": "ume-rag", "teamName": "Ume.Rag", "departmentCode": "", "departmentName": "" }
   },
   "credentialKeys": [
-    { "name": "rag-api", "requireMaxResidency": true, "piiPolicy": "Off", "allowedIpRanges": [] },
-    { "name": "rag-admin", "integrationScopes": ["organisation.read", "usage.read"], "requireMaxResidency": true, "piiPolicy": "Off", "allowedIpRanges": [] },
+    { "name": "rag-api", "allowedResidencies": ["OnPrem", "Eu"], "requireMaxResidency": true, "piiPolicy": "Off", "allowedIpRanges": [] },
+    { "name": "rag-admin", "integrationScopes": ["organisation.read", "usage.read"], "allowedResidencies": ["OnPrem", "Eu"], "requireMaxResidency": true, "piiPolicy": "Off", "allowedIpRanges": [] },
     { "name": "rag-worker", "allowedResidencies": ["OnPrem", "Eu"], "requireMaxResidency": true, "piiPolicy": "Off", "allowedIpRanges": [] }
   ]
 }
