@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.10.3 - 2026-11-15
+
+Patch release: preset data only, no code change. No migration. **Rolling update: yes.**
+
 - **Ume.Rag preset:** `rag-api` and `rag-admin` allow only `OnPrem` and `Eu`, as `rag-worker` already did, so a key
   made from the preset can't let a Ume.Rag assistant answer at `External` (thekim1/llmgateway#95). Keys already created
   are not changed: set their residencies in the admin console.
