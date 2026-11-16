@@ -62,8 +62,10 @@ echo "ok: a restart within the hour prints the same code"
 export UME_OIDC_AUTHORITY=https://idp.setup.test/realms/ume
 up
 declared='The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed'
-for _ in $(seq 15); do "${stack[@]}" logs --no-color adminapi | grep -q "$declared" && break; sleep 2; done
-"${stack[@]}" logs --no-color adminapi | grep -q "$declared" || fail "the declared admin API did not count setup as completed"
+# grep reads all of the logs (no -q): with pipefail, grep -q leaving early fails the pipeline through SIGPIPE.
+declared_logged() { "${stack[@]}" logs --no-color adminapi | grep -F "$declared" > /dev/null; }
+for _ in $(seq 15); do declared_logged && break; sleep 2; done
+declared_logged || fail "the declared admin API did not count setup as completed"
 r="$(api POST /bff/setup/session "{\"code\":\"$code\"}")"; [ "$(status "$r")" = 404 ] || fail "setup is still open when declared: $r"
 r="$(api GET /bff/user)"
 body "$r" | jq -e '.signIn.configured == true and .setup.open == false' > /dev/null || fail "/bff/user when declared: $(body "$r")"
