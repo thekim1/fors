@@ -44,6 +44,17 @@
   `admin.setup.completed` (2008–2012). `app-roles.sql` grants the admin role the new columns and tables; the gateway role
   reads none of them. The AppHost's `Setup:Try` opens setup locally ([local development](docs/local-development.md#trying-setup-mode)).
   The deploy files (the setup secret, `UME_SETUP_REOPEN`, an optional `UME_OIDC_AUTHORITY`) follow in a later step.
+- **The setup wizard in the admin console** (thekim1/llmgateway#100, third step). `/setup` opens without a session,
+  outside the menu ([admin UI](docs/admin-ui.md#setup-wizard)): the setup code (with where to find it, and the attempt
+  limit's countdown), the redirect URIs to register at the provider (with copy buttons) and who can save, the sign-in values
+  (a value the deployment sets is read-only, each says where it comes from; the client secret is write-only: keep the stored
+  one, a public client, or type a new one, with an optional expiry date), the test sign-in in a window of its own (a link
+  when pop-ups are blocked; it ends on `/setup?test=done`, which tells the wizard and closes), its result (who signed in,
+  roles, groups, and whether they are a gateway admin, with what to change if not) and Save, offered only for a passed
+  test by a gateway admin with the values unchanged since. The code and a typed secret live only in the page's memory.
+  The sign-in page offers the wizard while setup is open, says how to set sign-in up instead of offering a sign-in that
+  would be refused, and explains `/?signin=failed`. **Settings › Sign-in** shows the values with their sources, read only.
+  The API client reads `Retry-After` and keeps a setup session's 401 apart from the admin session.
 
 ## 0.10.3 - 2026-11-15
 

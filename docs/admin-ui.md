@@ -10,7 +10,7 @@ The side menu groups pages by the job you came to do. You only see the pages you
 | Access | Keys, Organisation, Integrations, Data API access | Give applications, platforms such as a RAG system ([integrations](integrations.md)) and reporting tools access, and set up departments and teams |
 | Models & routing | Catalogue, Providers & models, Routes, Routing rules | See which models can be called, connect providers, and decide where requests go |
 | Cost & compliance | Budgets & alerts, PII incidents, Audit log | Limit spend, follow up personal data findings and see who changed what |
-| System | Settings | Trusted proxies, data retention, request logging and version |
+| System | Settings | Trusted proxies, data retention, request logging, branding, model prices, sign-in and version |
 
 **Search** (the search box at the top, or **Ctrl K** / **⌘ K**) finds pages and the parts inside them, also by words
 that are not in the page name: *retention* opens **Settings › Data retention**, *circuit* opens **Health & operations**,
@@ -29,6 +29,57 @@ without a department code on each account; see [Department scope](identity-and-r
 as the side menu), search, the theme switch, your session and **Sign out**. Close it with ×, Esc, a tap outside, or by
 choosing a page. Search opens full screen with the field at the top, so the keyboard never covers the results; **Cancel**
 closes it.
+
+## Sign-in page and setup wizard
+
+The **sign-in page** depends on what `/bff/user` reports (`signIn.configured`, `setup.open`; see
+[admin-api.md](admin-api.md#authentication-bff)):
+
+| Sign-in set up | Setup open | The page shows |
+| --- | --- | --- |
+| yes | no | **Sign in** |
+| no | yes | **Set up sign-in** (the wizard), no sign-in: there is no provider to sign in at yet |
+| yes | yes (a re-open) | **Set up sign-in** and **Sign in**: the current sign-in keeps working until the wizard saves |
+| no | no | No button: the deployment must set `UME_OIDC_AUTHORITY`, or open setup again with a new `UME_SETUP_REOPEN` value and a restart of the admin API |
+
+After a sign-in the admin API could not complete it sends the browser to `/?signin=failed`; the page then says so (the
+sign-in was interrupted or expired, the provider refused it, or the sign-in values changed meanwhile) and **Sign in**
+starts again.
+
+### Setup wizard
+
+`/setup` sets the admin console's sign-in in [setup mode](identity-and-roles.md#setup-mode). It opens without a session,
+outside the menu, and works only while setup is open: otherwise it says that setup is closed and how to open it again. The
+steps:
+
+1. **Setup code.** The code is in the admin API's log (`docker compose logs adminapi`, Portainer's log view of the
+   `adminapi` container, `kubectl logs deploy/adminapi`), on the line `adminapi: setup mode is open until …`. A wrong code
+   is refused; after too many attempts the button waits for the seconds the admin API gives (`Retry-After`).
+2. **Identity provider.** The redirect URI and post-logout redirect URI to register for the client, with copy buttons,
+   what the client needs, and the groups the deployment maps to `gateway-admin`.
+3. **Sign-in values.** Provider address, client ID and client secret, and under *Claims and scopes* the role, group,
+   department and team claims and extra scopes. Each value says where it comes from: *Set by the deployment* (read-only:
+   the deployment's value always wins), *Set in setup*, or the default (left empty, shown as the placeholder). The client
+   secret is write-only: a stored secret is never shown; choose **Keep the stored one** (sent only to the provider and
+   client it was stored for), **No secret (public client)** (saving removes a stored one) or **Type a new one**, and an
+   optional expiry date as a reminder. **Test sign-in** opens the provider in a window of its own (when the browser blocks
+   it, a link opens it); sign in there. The window ends on `/setup?test=done`, which tells the wizard and closes. The wizard
+   shows the result: who signed in, their roles, groups, departments and teams, and above all whether they come out as a
+   gateway admin; if not, what to change (the role claim, or a gateway admin group). A failed test names the step that
+   failed and what to do.
+4. **Save.** The values that are saved, each with its source, and the tested person. **Save and close setup** is offered
+   only after a passed test by a gateway admin with the values exactly as tested: change a value, or the secret, and test
+   again. Saving closes setup and takes you to the sign-in. If someone else finished setup first, the wizard says so.
+
+The page shows when setup closes and when the setup session (30 minutes) ends; when the session ends it asks for the code
+again and keeps what was typed except the client secret. **The wizard never stores the setup code or a typed client secret**:
+both live only in the page's memory, go only in the request bodies to `/bff/setup`, are never put in an address, local or
+session storage or a log, and are dropped when the session ends or setup is saved. The secret field is a password field
+that the browser is asked not to fill in.
+
+**Settings › Sign-in** (gateway-admin) shows the sign-in values as they apply, read only: each with its source, and of
+the client secret only whether it is set, when, and its expiry date (`GET /api/settings/sign-in`). They change only in
+setup mode or in the deployment.
 
 ## Provider status and stability
 

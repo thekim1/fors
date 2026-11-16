@@ -18,6 +18,7 @@ import type {
   ProviderStatus,
   RequestOutcome,
   RoutingScope,
+  SignInValueSource,
 } from '@/api/types'
 
 export type Tone = 'ok' | 'warn' | 'danger' | 'neutral' | 'accent'
@@ -274,6 +275,103 @@ export const OUTCOME_LABEL: Record<RequestOutcome, { label: string; tone: Tone }
   PiiBlocked: { label: 'PII blocked', tone: 'warn' },
   Rejected: { label: 'Rejected', tone: 'warn' },
   ClientCancelled: { label: 'Cancelled', tone: 'neutral' },
+}
+
+/** Where a sign-in value comes from (Settings › Sign-in and the setup wizard). */
+export const SIGN_IN_SOURCE: Record<SignInValueSource, { label: string; tone: Tone }> = {
+  deployment: { label: 'Set by the deployment', tone: 'accent' },
+  wizard: { label: 'Set in setup', tone: 'ok' },
+  default: { label: 'Default', tone: 'neutral' },
+}
+
+/**
+ * Every reason a setup test sign-in can end with, as the admin API names them: the refusals of `POST /bff/setup/test` and the
+ * results of its callback. The source is `SetupTestReasons` in src/Ume.LlmGateway.AdminApi/Setup/SetupProvider.cs (without
+ * `passed`); keep this list equal to it. SETUP_TEST_REASON has a text for each (labels.spec.ts).
+ */
+export const SETUP_TEST_REASONS = [
+  'authority_invalid',
+  'authority_unreachable',
+  'tls',
+  'redirected',
+  'not_discovery',
+  'issuer_mismatch',
+  'insecure_endpoint',
+  'par_required',
+  'keys_unavailable',
+  'stored_secret_unreadable',
+  'provider_error',
+  'token_refused',
+  'token_endpoint_unreachable',
+  'id_token_missing',
+  'id_token_invalid',
+  'nonce_mismatch',
+  'secret_required',
+  'deployment_secret_without_authority',
+  'browser_mismatch',
+  'session_expired',
+  'unknown_test',
+] as const
+export type SetupTestReason = (typeof SETUP_TEST_REASONS)[number]
+
+/** Why a test sign-in could not start or failed: the step that failed and what to do. */
+export const SETUP_TEST_REASON: Record<SetupTestReason, string> = {
+  authority_invalid:
+    'The provider address is not valid. Enter the full https address of the provider’s issuer, without a query or #, for example https://login.example.org/realms/ume.',
+  authority_unreachable:
+    'The admin API could not reach the provider address. Check the address, and that the admin API can reach the provider through the network and any proxy.',
+  tls: 'The admin API does not trust the provider’s certificate. Add the provider’s certificate authority to the admin API’s trusted certificates, or check the address.',
+  redirected: 'The provider address answered with a redirect, and the admin API follows none. Enter exactly the address the provider names as its issuer.',
+  not_discovery:
+    'The provider address does not lead to an OpenID Connect discovery document. Check the address: for Keycloak it ends with /realms/ and the realm, for Entra ID with /v2.0.',
+  issuer_mismatch: 'The provider names itself with another address (its issuer). Enter exactly the issuer the provider names, including any trailing slash.',
+  insecure_endpoint: 'The provider lists an address that is not https, and the admin console signs in over https only. Fix the provider’s public address.',
+  par_required:
+    'The provider requires pushed authorization requests, which the admin console’s sign-in does not make. Turn that requirement off for this client at the provider.',
+  keys_unavailable: 'The admin API could not fetch the provider’s signing keys. Check that the provider publishes its keys and that the admin API can reach them.',
+  stored_secret_unreadable: 'The stored client secret can no longer be read (the Data Protection key ring changed). Type the client secret again.',
+  provider_error:
+    'The provider sent you back with an error instead of signing you in. Check that the redirect URI is registered for this client, that the client is enabled and that you may use it. Then test again.',
+  token_refused:
+    'The provider refused the sign-in’s code exchange. Most often the client secret or the client ID is wrong, or the client needs a secret and none was given. Check them and test again.',
+  token_endpoint_unreachable:
+    'The admin API could not reach the provider’s token address. Check that the admin API can reach the provider through the network and any proxy.',
+  id_token_missing: 'The provider sent no ID token. Check that the client is an OpenID Connect client that allows the openid scope.',
+  id_token_invalid:
+    'The provider’s ID token did not pass the checks of its signature, issuer, audience (the client ID) or lifetime. Check the client ID, and that the clocks of the admin API and the provider are right.',
+  nonce_mismatch: 'The provider’s answer did not belong to this test. Test again.',
+  secret_required:
+    'The provider address or the client ID is not the one the stored client secret belongs to, so that secret is not sent. Type the client secret of this client, or choose a public client.',
+  deployment_secret_without_authority:
+    'The deployment sets the client secret but not the provider address, so that secret is never sent to an address typed here. Remove the client secret from the deployment and type it here instead.',
+  browser_mismatch: 'The sign-in finished in another browser than the one that started the test. Test again, and sign in in the window the test opens.',
+  session_expired: 'Your setup session ended before the sign-in finished. Enter the setup code again, then test again.',
+  unknown_test: 'The test is unknown, already used or expired. Test again.',
+}
+
+/** A test reason's text; a code this console does not know gets a generic text that names it. */
+export function setupTestReasonText(reason: string | null | undefined): string {
+  return (reason && SETUP_TEST_REASON[reason as SetupTestReason]) || `The test sign-in failed (${reason ?? 'no reason given'}). Check the values and test again.`
+}
+
+/**
+ * The reasons `POST /bff/setup/complete` refuses to save with (`setup_test_required`): `SetupService.CompleteAsync` in
+ * src/Ume.LlmGateway.AdminApi/Setup/SetupService.cs. Keep this list equal to it.
+ */
+export const SETUP_COMPLETE_REASONS = ['unknown_test', 'not_latest', 'not_passed', 'not_gateway_admin', 'values_changed'] as const
+export type SetupCompleteReason = (typeof SETUP_COMPLETE_REASONS)[number]
+
+export const SETUP_COMPLETE_REASON: Record<SetupCompleteReason, string> = {
+  unknown_test: 'This setup session does not know the test. Test sign-in again, then save.',
+  not_latest: 'A newer test sign-in was started. Wait for its result, then save.',
+  not_passed: 'The latest test sign-in did not pass. Test again.',
+  not_gateway_admin:
+    'The person who tested does not come out as a gateway admin. Give them the role gateway-admin at the provider, or a group the deployment maps to it, and test again.',
+  values_changed: 'The values differ from the ones tested. Test sign-in again with these values.',
+}
+
+export function setupCompleteReasonText(reason: string | null | undefined): string {
+  return (reason && SETUP_COMPLETE_REASON[reason as SetupCompleteReason]) || `Saving needs a passed test sign-in by a gateway admin (${reason ?? 'no reason given'}). Test sign-in again.`
 }
 
 export const TONE_CLASSES: Record<Tone, string> = {

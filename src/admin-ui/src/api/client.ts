@@ -13,13 +13,16 @@ export class ApiError extends Error {
   readonly status: number
   readonly problem: ProblemDetails | null
   readonly method: HttpMethod
+  /** Seconds from the response's `Retry-After` header (a 429), when it gave a number. */
+  readonly retryAfter: number | null
 
-  constructor(status: number, method: HttpMethod, problem: ProblemDetails | null, message?: string) {
+  constructor(status: number, method: HttpMethod, problem: ProblemDetails | null, message?: string, retryAfter: number | null = null) {
     super(message ?? problem?.detail ?? problem?.title ?? `HTTP ${status}`)
     this.name = 'ApiError'
     this.status = status
     this.method = method
     this.problem = problem
+    this.retryAfter = retryAfter
   }
 
   get fieldErrors(): Record<string, string[]> {
@@ -107,6 +110,14 @@ export interface RequestOptions {
   query?: Query
   body?: unknown
   signal?: AbortSignal
+  /** A 401 that is not about the admin session (the setup session of /bff/setup): the unauthorized hook is not called. */
+  ownSession?: boolean
+}
+
+/** `Retry-After` in seconds; an HTTP date is not used by the admin API, so only the number form is read. */
+function retryAfterOf(response: Response): number | null {
+  const value = Number(response.headers.get('Retry-After') ?? '')
+  return Number.isFinite(value) && value > 0 ? Math.ceil(value) : null
 }
 
 export async function request<T>(method: HttpMethod, path: string, options: RequestOptions = {}): Promise<T> {
@@ -141,9 +152,9 @@ export async function request<T>(method: HttpMethod, path: string, options: Requ
   if (!response.ok) {
     const problem: ProblemDetails | null =
       payload && typeof payload === 'object' ? (payload as ProblemDetails) : null
-    if (response.status === 401) hooks.onUnauthorized?.()
+    if (response.status === 401 && !options.ownSession) hooks.onUnauthorized?.()
     if (response.status === 403) hooks.onForbidden?.(method, path)
-    throw new ApiError(response.status, method, problem)
+    throw new ApiError(response.status, method, problem, undefined, retryAfterOf(response))
   }
 
   if (response.headers.get(PROPAGATION_HEADER) === 'delayed') hooks.onChangeDelayed?.()

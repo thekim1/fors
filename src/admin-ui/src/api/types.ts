@@ -118,7 +118,7 @@ export interface BffUser {
   sessionLimitAt?: IsoDateTime | null
   /** Whether the admin API has a usable identity provider; false: a sign-in is refused (409 sign_in_not_configured). */
   signIn?: { configured: boolean }
-  /** Whether setup mode is open (first run or re-open): the console then goes to the setup wizard at /setup. */
+  /** Whether setup mode is open (first run or re-open): the sign-in page then offers the setup wizard at /setup. */
   setup?: { open: boolean }
 }
 
@@ -129,6 +129,122 @@ export interface Branding {
   /** Where to load the logo from; null shows the built-in icon. */
   logoUrl: string | null
   updatedAt: IsoDateTime | null
+}
+
+// ---------- Sign-in values and setup mode (docs/admin-api.md, "Setup mode") ----------
+/** Where an effective sign-in value comes from: the deployment's Oidc:* (wins, locked), the database (set in setup mode), or the default. */
+export type SignInValueSource = 'deployment' | 'wizard' | 'default'
+
+export interface SignInValue<T> {
+  value: T
+  source: SignInValueSource
+  /** The deployment sets it: setup mode shows it and cannot change it. */
+  locked: boolean
+}
+
+/** The client secret as the API shows it: never the value. `unreadable`: one is stored that the key ring cannot read. */
+export interface SignInSecretStatus {
+  set: boolean
+  source: SignInValueSource
+  setAt: IsoDateTime | null
+  /** `yyyy-mm-dd`, a reminder entered with a stored secret; null for a deployment secret. */
+  expiresOn: string | null
+  unreadable: boolean
+  locked: boolean
+}
+
+/** The admin console's sign-in values (GET /api/settings/sign-in, and `signIn` of the setup state). */
+export interface SignInSettings {
+  authority: SignInValue<string | null>
+  clientId: SignInValue<string>
+  clientSecret: SignInSecretStatus
+  roleClaim: SignInValue<string>
+  departmentClaim: SignInValue<string>
+  teamClaim: SignInValue<string>
+  groupClaim: SignInValue<string>
+  extraScopes: SignInValue<string[]>
+  /** When the stored values last changed. */
+  updatedAt: IsoDateTime | null
+}
+
+/** The sign-in values setup mode sends and stores, without the secret: null is "not set here" (the deployment's or the default). */
+export interface SignInWizardValues {
+  authority: string | null
+  clientId: string | null
+  roleClaim: string | null
+  departmentClaim: string | null
+  teamClaim: string | null
+  groupClaim: string | null
+  extraScopes: string[] | null
+  /** `yyyy-mm-dd`. */
+  clientSecretExpiresOn: string | null
+}
+
+/** POST /bff/setup/test. `clientSecret`: null tests with the stored one, "" without one (a public client), a value with that value. */
+export interface SetupValuesRequest extends SignInWizardValues {
+  clientSecret: string | null
+}
+
+/** POST /bff/setup/complete: the tested values exactly (the secret is taken from the test) and the test's id. */
+export interface SetupCompleteRequest extends SignInWizardValues {
+  testId: string
+}
+
+export interface SetupSessionStarted {
+  expiresAt: IsoDateTime
+  setupEndsAt: IsoDateTime
+}
+
+export interface SetupTestStarted {
+  testId: string
+  authorizeUrl: string
+  expiresAt: IsoDateTime
+}
+
+export type SetupTestStatus = 'pending' | 'passed' | 'failed' | 'incomplete'
+
+/** Where a test's client secret came from; completing stores it only when it was typed (`removed` deletes the stored one). */
+export type SetupSecretSource = 'deployment' | 'typed' | 'stored' | 'removed' | 'none'
+
+/** The tested person as the sign-in's claim mapping saw them; lists hold at most 100 entries, `groupCount` is the whole count. */
+export interface SetupTestResult {
+  subject: string
+  name: string | null
+  roles: string[]
+  groups: string[]
+  groupCount: number
+  departmentCodes: string[]
+  teamCodes: string[]
+  isGatewayAdmin: boolean
+  /** The claim names the test read. */
+  claimsRead: { role: string; group: string; department: string; team: string }
+}
+
+export interface SetupTest {
+  testId: string
+  status: SetupTestStatus
+  /** Why it failed (a SetupTestReasons code); null when it passed or has not finished. */
+  reason: string | null
+  startedAt: IsoDateTime
+  expiresAt: IsoDateTime
+  /** The tested values as sent, without the secret; null when the key ring cannot read the test. */
+  values: SignInWizardValues | null
+  clientSecret: SetupSecretSource | null
+  result: SetupTestResult | null
+}
+
+/** GET /bff/setup/state. */
+export interface SetupState {
+  kind: 'first_run' | 'reopen'
+  /** When the opening ends (setup closes). */
+  endsAt: IsoDateTime
+  sessionExpiresAt: IsoDateTime
+  signIn: SignInSettings
+  /** The addresses to register at the identity provider. */
+  redirectUris: { signIn: string; signOutCallback: string }
+  /** The groups the deployment maps to gateway-admin (Oidc:RoleGroups:gateway-admin). */
+  gatewayAdminGroups: string[]
+  latestTest: SetupTest | null
 }
 
 // ---------- Organisation ----------
