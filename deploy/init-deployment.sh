@@ -7,6 +7,8 @@
 #   ./deploy/init-deployment.sh                      # prompts for what it needs
 #   ./deploy/init-deployment.sh --oidc-authority https://idp.example.se/realms/ume \
 #       --gateway-host llm.example.se --admin-host llm-admin.example.se --yes
+#   ./deploy/init-deployment.sh --oidc-authority https://idp.example.se/realms/ume --domain example.se --yes
+#                                                    # the same two names, from the domain (each option overrides its own)
 #   ./deploy/init-deployment.sh --renew-certs        # re-issue internal certificates only
 #   ./deploy/init-deployment.sh --renew-ca           # new internal CA, then re-issue its certificates
 #
@@ -30,17 +32,18 @@ umask 077
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 certs="$here/certs"; secrets="$here/secrets"; env_file="$here/.env"
-oidc_authority=""; oidc_client="ume-admin"; gateway_host=""; admin_host=""; data_host=""
+oidc_authority=""; oidc_client="ume-admin"; gateway_host=""; admin_host=""; data_host=""; domain=""
 gateway_port=8443; admin_port=9443; bind=""; yes=0; renew=0; renew_ca=0; rolling=0; chown=1
 oidc_secret_file=""; proxy=0; upstream_host=""; gw_cert=""; gw_key=""; adm_cert=""; adm_key=""; ca_file=""
 
-usage() { sed -n '2,27p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --oidc-authority) oidc_authority="$2"; shift 2;;
     --oidc-client-id) oidc_client="$2"; shift 2;;
+    --domain) domain="$2"; shift 2;;
     --gateway-host) gateway_host="$2"; shift 2;;
     --admin-host) admin_host="$2"; shift 2;;
     --data-host) data_host="$2"; shift 2;;
@@ -67,6 +70,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 command -v openssl >/dev/null || die "openssl is required"
+# --domain names both hosts (llm.<domain>, llm-admin.<domain>), as UME_DOMAIN does in compose.portainer.yaml.
+if [ -n "$domain" ]; then
+  gateway_host="${gateway_host:-llm.$domain}"; admin_host="${admin_host:-llm-admin.$domain}"
+fi
 
 ask() { # ask VAR "prompt" [default]
   local var="$1" prompt="$2" default="${3:-}" reply

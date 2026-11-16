@@ -34,8 +34,10 @@ and the Aspire-generated base plus `compose.hardening.yaml`.
 `deploy/compose.portainer.yaml` is the same hardened stack configured **only through environment
 variables**, for operators who cannot run `init-deployment.sh` (Portainer, managed Docker hosts).
 Paste it into a Portainer stack (Web editor) or deploy the repository's file via Git, and set the
-variables listed at the top of the file (images, `UME_OIDC_AUTHORITY`, `UME_GATEWAY_HOST`,
-`UME_GATEWAY_PUBLIC_URL`; optional claim mapping and ports). The images must be in a registry the
+variables listed at the top of the file (images, `UME_OIDC_AUTHORITY`, `UME_DOMAIN`; optional host names, claim
+mapping and ports). With `UME_DOMAIN=example.se` the gateway API is `llm.example.se`, the admin UI
+`llm-admin.example.se` and the gateway's public URL `https://llm.example.se`; `UME_GATEWAY_HOST`, `UME_ADMIN_HOST` and
+`UME_GATEWAY_PUBLIC_URL` each override their default, and a stack that sets `UME_GATEWAY_HOST` needs no `UME_DOMAIN`. The images must be in a registry the
 host can pull from. The `compose.portainer.yaml` attached to a GitHub release already points at that
 release's images (by digest), so the image variables are optional there.
 

@@ -70,6 +70,11 @@ jobs:
             docker compose -f "$file" --profile data config --quiet
           done
           docker compose -f deploy/compose.prod.yaml -f deploy/compose.rolling.yaml --profile data config --quiet
+          # UME_DOMAIN alone names the hosts of the Portainer stack (#98): no UME_GATEWAY_HOST or UME_GATEWAY_PUBLIC_URL.
+          env -u UME_GATEWAY_HOST -u UME_GATEWAY_PUBLIC_URL UME_DOMAIN=example.se \
+            docker compose -f deploy/compose.portainer.yaml config > "$RUNNER_TEMP/portainer-domain.yaml"
+          grep -q 'Gateway__BaseUrl: https://llm.example.se$' "$RUNNER_TEMP/portainer-domain.yaml"
+          grep -q 'UME_ADMIN_HOST: llm-admin.example.se$' "$RUNNER_TEMP/portainer-domain.yaml"
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.403
