@@ -413,9 +413,11 @@ public sealed class IntegrationGatewayTests(GatewayFixture fixture)
         var gateway = JsonNode.Parse(await named.Content.ReadAsStringAsync(Ct))!["gateway"]!;
         gateway["organisation_name"]!.GetValue<string>().ShouldBe(name);
         gateway["integration_api_url"]!.GetValue<string>().ShouldBe(GatewayFixture.IntegrationApiUrl);
+        gateway["oidc_authority"]!.GetValue<string>().ShouldBe(GatewayFixture.OidcAuthority);
         var features = ((JsonArray)gateway["features"]!).Select(f => f!.GetValue<string>()).ToList();
         features.ShouldContain("organisation-name");
         features.ShouldContain("integration-api-url");
+        features.ShouldContain("oidc-authority");
 
         // An empty name means "show no name"; the ETag follows the change.
         await SetOrganisationNameAsync("");

@@ -18,7 +18,7 @@ namespace Ume.LlmGateway.Gateway.Requests;
 public sealed class ContextEndpoint(RequestStages stages, GatewayCatalog catalog, IOptionsMonitor<GatewayOptions> options, TimeProvider time)
 {
     /// <summary>What this gateway supports, for clients to test instead of comparing versions. Values are only added.</summary>
-    public static IReadOnlyList<string> Features { get; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups", "organisation-name", "integration-api-url"];
+    public static IReadOnlyList<string> Features { get; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups", "organisation-name", "integration-api-url", "oidc-authority"];
 
     /// <summary>The release version, without the commit after <c>+</c> (as <c>/version</c> reports it in full).</summary>
     private static readonly string? Version = typeof(ContextEndpoint).Assembly
@@ -37,11 +37,11 @@ public sealed class ContextEndpoint(RequestStages stages, GatewayCatalog catalog
         // With x-ume-on-behalf-of, the context of the assigned key: as if it had been presented.
         var snapshot = await catalog.GetAsync(ct);
         var current = options.CurrentValue;
-        await CacheableJson.WriteAsync(http, Build(authenticated.Key, now, new ContextGateway(current.AdminUrl, current.IntegrationApiUrl, snapshot.OrganisationName)), ct);
+        await CacheableJson.WriteAsync(http, Build(authenticated.Key, now, new ContextGateway(current.AdminUrl, current.IntegrationApiUrl, snapshot.OrganisationName, current.OidcAuthority)), ct);
     }
 
     /// <summary>What the answer says about the gateway itself, besides its version and features.</summary>
-    internal sealed record ContextGateway(string? AdminUrl, string? IntegrationApiUrl, string? OrganisationName);
+    internal sealed record ContextGateway(string? AdminUrl, string? IntegrationApiUrl, string? OrganisationName, string? OidcAuthority);
 
     internal static JsonObject Build(VirtualKey key, DateTimeOffset now, ContextGateway gateway)
     {
@@ -83,6 +83,7 @@ public sealed class ContextEndpoint(RequestStages stages, GatewayCatalog catalog
                 ["admin_url"] = NullIfEmpty(gateway.AdminUrl),
                 ["integration_api_url"] = NullIfEmpty(gateway.IntegrationApiUrl),
                 ["organisation_name"] = NullIfEmpty(gateway.OrganisationName),
+                ["oidc_authority"] = NullIfEmpty(gateway.OidcAuthority),
                 ["features"] = new JsonArray([.. Features.Select(f => (JsonNode?)JsonValue.Create(f))]),
             },
             ["key"] = new JsonObject

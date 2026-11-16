@@ -31,4 +31,18 @@ public sealed class GatewayOptionsTests
         Validator.TryValidateObject(options, new ValidationContext(options), results, validateAllProperties: true);
         results.Any(r => r.MemberNames.Contains(nameof(GatewayOptions.IntegrationApiUrl))).ShouldBe(!valid);
     }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)] // the compose files pass an unset UME_OIDC_AUTHORITY as ""
+    [InlineData("https://idp.example.se/realms/ume", true)]
+    [InlineData("http://idp.example.se/realms/ume", false)]
+    [InlineData("idp.example.se", false)]
+    public void The_oidc_authority_is_empty_or_an_https_url(string? url, bool valid)
+    {
+        var options = new GatewayOptions { OidcAuthority = url };
+        var results = new List<ValidationResult>();
+        Validator.TryValidateObject(options, new ValidationContext(options), results, validateAllProperties: true);
+        results.Any(r => r.MemberNames.Contains(nameof(GatewayOptions.OidcAuthority))).ShouldBe(!valid);
+    }
 }

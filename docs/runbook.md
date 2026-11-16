@@ -294,7 +294,8 @@ For [integrations](integrations.md): `UME_ADMIN_PUBLIC_URL` (gateway `Gateway__A
 handed to platforms on `/v1/ume/context`; `init-deployment.sh` writes it, empty leaves it out) and
 `UME_INTEGRATION_REQUESTS_PER_MINUTE` (admin API `Admin__IntegrationRequestsPerMinute`, default 60, per credential key
 on `/integration/v1`), and `UME_INTEGRATION_API_URL` (gateway `Gateway__IntegrationApiUrl`, the Integration API's address
-as platforms reach it, for example `https://adminapi:8443/integration/v1`; empty leaves it out), and
+as platforms reach it, for example `https://adminapi:8443/integration/v1`; empty leaves it out), the gateway's
+`Gateway__OidcAuthority` (set from `UME_OIDC_AUTHORITY`: the sign-in provider's address as `oidc_authority`), and
 `UME_INTEGRATION_MANIFESTS_DIR` / `UME_INTEGRATION_SECRETS_DIR` (migration service; integration manifests to provision
 on every deploy and where the new credential keys' secrets are written, see
 [Provisioning from a manifest](integrations.md#provisioning-from-a-manifest); `UME_INTEGRATION_MANIFEST` in the

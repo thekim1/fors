@@ -87,6 +87,8 @@ services:
       Gateway__Security__SourceAddress: ${UME_SOURCE_ADDRESS:-Truncated}
       Gateway__AdminUrl: ${UME_ADMIN_PUBLIC_URL:-}
       Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL:-}
+      # The admin console's sign-in provider, handed to integrations on /v1/ume/context (docs/integrations.md).
+      Gateway__OidcAuthority: ${UME_OIDC_AUTHORITY:-}
       # Client addresses come from Settings > Trusted proxies in the admin UI, never from this switch.
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "false"
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}

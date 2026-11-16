@@ -11,6 +11,17 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
+## Unreleased
+
+- **Rolling update: yes.** No migration.
+- **Portainer:** `UME_DOMAIN` names the hosts (`llm.<domain>`, `llm-admin.<domain>`, the public URL
+  `https://llm.<domain>`). An existing stack changes nothing: `UME_GATEWAY_HOST`, `UME_ADMIN_HOST` and
+  `UME_GATEWAY_PUBLIC_URL` still win, and `UME_GATEWAY_HOST` alone is enough without the domain.
+- **The context names the sign-in provider:** the Compose files and the Portainer stack now pass `UME_OIDC_AUTHORITY` to
+  the gateway as `Gateway__OidcAuthority`, which `/v1/ume/context` hands out as `gateway.oidc_authority`. Kubernetes:
+  add `Gateway__OidcAuthority` to `ume-gateway-config` (the example lists it as a comment); unset leaves the field
+  `null`.
+
 ## 0.10.3: Ume.Rag preset keys limited to OnPrem and Eu
 
 - **Rolling update: yes.** No migration, no configuration change.

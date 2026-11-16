@@ -197,7 +197,7 @@ chatbot's model picker and the check on save.
 {
   "object": "ume.context",
   "gateway": { "version": "0.10.2", "admin_url": "https://…", "integration_api_url": "https://adminapi:8443/integration/v1",
-               "organisation_name": "Umeå kommun", "features": ["max-residency", "model-facts", "integrations"] },
+               "organisation_name": "Umeå kommun", "oidc_authority": "https://idp.example.se/realms/ume", "features": ["max-residency", "model-facts", "integrations"] },
   "key": { "id": "…", "name": "Ume.Rag api", "prefix": "ume-sk-AbC1", "team_id": "…", "integration_role": "Credential",
            "integration_scopes": ["usage.read"], "require_max_residency": true, "allowed_residencies": [] },
   "integration": { "id": "…", "name": "Ume.Rag", "owner_team_id": "…" },
@@ -233,6 +233,10 @@ chatbot's model picker and the check on save.
   services reach it. A platform finds it from the gateway address it already has instead of a setting of its own; it is
   often an internal address (`https://adminapi:8443/integration/v1` in a combined stack) rather than `admin_url`.
   `null` when not set.
+- `oidc_authority` (feature `oidc-authority`) is `Gateway:OidcAuthority` (optional): the address of the sign-in
+  provider the admin console uses. A platform that signs its users in through the same provider takes it from here
+  instead of a setting of its own. It is the provider's public address, never a client id or secret; `null` when not
+  set. The Compose files and the Portainer stack pass `UME_OIDC_AUTHORITY` to the gateway for it.
 - `organisation_name` (feature `organisation-name`) is the organisation's name from the admin console's branding
   (*Settings*), so a platform can show it without keeping a copy; `null` when the name is empty. The gateway reads only
   that column with its catalogue (never the logo), and a change reaches it at once through the `Config` invalidation.
