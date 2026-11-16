@@ -15,7 +15,7 @@ See [runbook](runbook.md) for the actual deployment procedure.
 
 - **Rolling update: yes.** No migration, no configuration change.
 - **Manifests:** `integration.owner` may be left out. A manifest that names an owner behaves as before. Without one, a
-  new integration is placed in a team and department made from its name (`Ume.Rag` → code `ume-rag`), or in an
+  new integration is placed in a team and department made from its name (`My.Platform` → code `my-platform`), or in an
   existing team with that code; move it to your own team under *Integrations* afterwards. A platform's Portainer stack
   can then carry its manifest as a default instead of asking for a department code.
 - **Changed behaviour:** `PUT /api/integrations/{id}` with another `ownerTeamId` no longer answers 409 while the

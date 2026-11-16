@@ -5,7 +5,7 @@
 **An integration manifest may leave out the owner, and an integration can move to another team with its credential
 keys** (thekim1/llmgateway#101). No migration. **Rolling update: yes.** **Changed behaviour** for `PUT /api/integrations/{id}`.
 `integration.owner` is optional (schema version 1, an addition): a new integration from a manifest without one gets a
-default owner made from its name, a team and a department coded like `ume-rag` (lower case, letters and digits, `-`
+default owner made from its name, a team and a department coded like `my-platform` (lower case, letters and digits, `-`
 between) and named after the integration; an existing team with that code is used. The import result has a new
 `defaultOwner` field, and a warning (logged by the migration service, shown in the admin console's preview) names the
 team and says a gateway admin can move it. For an existing integration a manifest without an owner compares nothing.

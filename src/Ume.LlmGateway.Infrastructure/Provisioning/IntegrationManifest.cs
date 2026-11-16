@@ -198,7 +198,7 @@ public sealed record ManifestOwner
 
     /// <summary>
     /// The name in lower case with its ASCII letters and digits kept and every other run of characters one <c>-</c>, trimmed
-    /// of <c>-</c>: "Ume.Rag" gives "ume-rag", "My__Platform-2" gives "my-platform-2".
+    /// of <c>-</c>: "My.Platform" gives "my-platform", "My__Platform-2" gives "my-platform-2".
     /// </summary>
     public static string DefaultCode(string integrationName)
     {

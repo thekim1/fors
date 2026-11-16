@@ -156,7 +156,7 @@ Other systems that use gateway keys for the teams they serve, such as a RAG plat
   existing key. `IntegrationImportResult = { integrationId, integrationName, createdIntegration, createdTeam,
   createdDepartment, defaultOwner, keys: { name, id, prefix, state: Created|Existing|Revoked, secret }[], warnings: string[] }`; `secret`
   is set only for keys this call created, once. `defaultOwner` is true when the manifest names no owner and the
-  integration is created now with the default owner made from its name (a team and department coded like `ume-rag`);
+  integration is created now with the default owner made from its name (a team and department coded like `my-platform`);
   `warnings` then holds a sentence naming the team and department and saying that a gateway admin can move it. A
   manifest that cannot be applied is a 400 with every reason under `errors.manifest`
 - `PUT /api/integrations/{id}` (same body) → `Integration` (gateway-admin). Deactivating refuses all its keys at once

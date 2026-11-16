@@ -368,11 +368,13 @@ file instead of having an admin create them (ADR 022). The migration service app
 - **Owner (optional):** with `owner`, a new integration goes to the team with `teamCode`, created when absent in the
   department with `departmentCode` (a cost centre code, so specific to each organisation). Without it, a new
   integration gets a **default owner** made from its name: a team and a department whose code is the name in lower
-  case with its letters and digits kept and every other run of characters one `-` (`Ume.Rag` gives `ume-rag`), and
+  case with its letters and digits kept and every other run of characters one `-` (`My.Platform` gives `my-platform`), and
   whose name is the integration's name. An existing team with that code is used; otherwise the team is created, in the
-  department with that code, which is created when absent. A name whose code would be longer than 50 characters (a
+  department with that code, which is created when absent. So an ownerless integration named like one of the
+  organisation's own team codes (`IT` gives `it`) joins that team, with its budget, request policy and routing rules:
+  choose a name that is not a team's code, or name the `owner`; the preview says "the existing team" when it happens. A name whose code would be longer than 50 characters (a
   cost centre code's limit) needs an `owner`. A manifest can be as short as
-  `{ "schemaVersion": 1, "integration": { "name": "Ume.Rag" }, "credentialKeys": [{ "name": "rag-api" }] }`. When the
+  `{ "schemaVersion": 1, "integration": { "name": "My.Platform" }, "credentialKeys": [{ "name": "api" }] }`. When the
   default owner is used, the migration logs, and the admin console's preview shows, a warning naming the team (and
   department) the integration is placed in and saying that a gateway admin can move it to the organisation's own team
   under *Integrations* ([moving an integration](#moving-an-integration-to-another-team)).
