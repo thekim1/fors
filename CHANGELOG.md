@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.11.0 - 2026-11-16
+
+Setup mode: the admin console's sign-in can be set in a browser wizard with a setup code and a test sign-in instead of
+the deployment's variables; `UME_DOMAIN` names the Portainer stack's hosts; `/v1/ume/context` names the sign-in
+provider; an integration manifest may leave out the owner, and an integration moves to another team with its credential
+keys. Migrations `SignInSettings` and `SetupMode`. **Rolling update: yes.** **Changed behaviour** for
+`PUT /api/integrations/{id}`. Existing deployments set `UME_OIDC_AUTHORITY` and change nothing: see the
+[upgrade guide](docs/upgrade-guide.md#0110-setup-mode-and-integration-manifests-without-an-owner) (thekim1/llmgateway#98, #99, #100, #101).
+
 - **`UME_DOMAIN` names the hosts** (thekim1/llmgateway#98, requested by the Ume.Rag platform). In
   `compose.portainer.yaml`, `UME_GATEWAY_HOST` defaults to `llm.<UME_DOMAIN>`, `UME_ADMIN_HOST` to
   `llm-admin.<UME_DOMAIN>` and `UME_GATEWAY_PUBLIC_URL` to `https://<gateway host>`; each variable still overrides its
@@ -79,7 +88,7 @@
   and `init-deployment.sh` twice (`deploy/tests/setup-mode-deploy.sh`); *Deploy end to end* boots a new Portainer stack
   into setup mode (`deploy/tests/setup-mode-boot.sh`); the release smoke test checks that a declared deployment prints no
   code. **Existing deployments change nothing:** they set the authority, so setup counts as completed at the first start.
-  Step by step per deploy form: [upgrade guide](docs/upgrade-guide.md#unreleased).
+  Step by step per deploy form: [upgrade guide](docs/upgrade-guide.md#0110-setup-mode-and-integration-manifests-without-an-owner).
 - **An integration manifest may leave out the owner, and an integration can move to another team with its credential
   keys** (thekim1/llmgateway#101). No migration. **Rolling update: yes.** **Changed behaviour** for `PUT /api/integrations/{id}`.
   `integration.owner` is optional (schema version 1, an addition): a new integration from a manifest without one gets a

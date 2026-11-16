@@ -220,7 +220,7 @@ the authority, client id or client secret into its variables. The API is in [adm
 - **In the deploy forms** (the Portainer stack, `init-deployment.sh` with `compose.prod.yaml`, Kubernetes): without
   `UME_OIDC_AUTHORITY` (`Oidc__Authority`) a new deployment starts for the wizard; each form generates the setup secret
   and passes `UME_SETUP_REOPEN` (`Setup__Reopen`). Where the code is and what to check:
-  [runbook](runbook.md#first-start-without-an-authority-the-setup-wizard); upgrading: [upgrade guide](upgrade-guide.md#unreleased).
+  [runbook](runbook.md#first-start-without-an-authority-the-setup-wizard); upgrading: [upgrade guide](upgrade-guide.md#0110-setup-mode-and-integration-manifests-without-an-owner).
 - Security events `admin.setup.opened`, `admin.setup.code_refused`, `admin.setup.session`, `admin.setup.test` and
   `admin.setup.completed` (2008–2012, [data-access.md](data-access.md)) record each step with the address.
 
