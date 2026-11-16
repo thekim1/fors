@@ -19,8 +19,12 @@ configMapGenerator:
       - Gateway__Security__SourceAddress=Truncated
   - name: ume-adminapi-config
     literals:
-      - Oidc__ClientId=ume-admin
+      # No Oidc__* here: sign-in is set in the setup wizard unless the overlay declares it, and every Oidc__* an overlay
+      # sets is the deployment's value, locked in the wizard (docs/kubernetes.md, "Sign-in"; ../example shows both ways).
       - Gateway__OperationsUrl=https://gateway:8443
+      # Empty. A new value opens the setup wizard once more; the setup code's key is the file Setup__Secret in
+      # ume-adminapi-secrets (create-secrets.sh).
+      - Setup__Reopen=
   # Used only with ../components/dataapi; generated here because an overlay merges its values before components apply.
   - name: ume-dataapi-config
     literals:

@@ -39,3 +39,8 @@ for app in $apps; do
   if "${k[@]}" get deployment "$app" >/dev/null 2>&1; then "${k[@]}" rollout status "deployment/$app" --timeout=15m; fi
 done
 echo "==> Done"
+# Sign-in: while setup mode is open, the admin API prints the setup code at start (every pod the same code).
+if "${k[@]}" logs deploy/adminapi 2>/dev/null | grep 'setup mode is open until' >/dev/null; then
+  echo "Setup mode is open: read the setup code with  ${k[*]} logs deploy/adminapi | grep 'Setup code'"
+  echo "and enter it at https://<admin host>/setup (docs/kubernetes.md, \"Sign-in\")."
+fi

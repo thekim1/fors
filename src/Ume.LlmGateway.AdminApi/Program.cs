@@ -5,6 +5,7 @@ using Ume.LlmGateway.AdminApi;
 using Ume.LlmGateway.AdminApi.Integrations;
 using Ume.LlmGateway.AdminApi.Security;
 using Ume.LlmGateway.AdminApi.Settings;
+using Ume.LlmGateway.AdminApi.Setup;
 using Ume.LlmGateway.Infrastructure;
 
 if (await WebDefaults.ExitIfHealthProbeAsync(args))
@@ -42,12 +43,19 @@ app.UseApiReferencePolicy("/scalar", ScalarOptions.NonceHttpContextItemKey);
 app.UseProblemDetailsForEmptyErrors("The action could not be completed");
 // Outside authentication and authorization, so it sees their 403s and the signed-in user afterwards.
 app.UseMiddleware<AdminActivityMiddleware>();
+// Before authentication: a setup test's callback (state ume-setup-test.*) is taken here; every other request passes on.
+app.UseMiddleware<SetupCallbackMiddleware>();
+// Before authentication: the sign-in start, callback and sign-out read the current sign-in values (AdminSignIn).
+app.UseMiddleware<AdminSignInRefreshMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
+// Before antiforgery: /bff/setup answers 404 to everything while setup mode is closed.
+app.UseMiddleware<SetupGateMiddleware>();
 app.UseMiddleware<AdminAntiforgeryMiddleware>();
 app.MapDefaultEndpoints();
 app.MapAdminAuthentication();
+app.MapSetupMode();
 app.MapBranding();
 app.MapAdminApi();
 app.MapIntegrationApi();

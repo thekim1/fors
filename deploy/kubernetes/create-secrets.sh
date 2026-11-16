@@ -2,18 +2,19 @@
 # Creates (or updates) the Kubernetes secrets from the certificates and secrets that deploy/init-deployment.sh
 # generated, so Kubernetes and Compose installations are set up the same way (docs/kubernetes.md).
 #
-#   ./deploy/init-deployment.sh --no-chown --yes --oidc-authority https://idp.example.se/realms/ume \
-#       --gateway-host llm.example.se --admin-host llm-admin.example.se
+#   ./deploy/init-deployment.sh --no-chown --yes --gateway-host llm.example.se --admin-host llm-admin.example.se
 #   ./deploy/kubernetes/create-secrets.sh --namespace ume-gateway [--datastores]
 #
 #   --namespace NS     namespace of the overlay (created if missing)
 #   --datastores       also create the secrets for components/datastores (in-cluster Postgres and Redis)
 #   --certs-dir DIR / --secrets-dir DIR   if init-deployment.sh wrote them elsewhere
 #
-# Secrets: ume-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__gatewaydb) and
+# Secrets: ume-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__gatewaydb, the admin API's
+# setup secret Setup__Secret and, for a declared confidential client, Oidc__ClientSecret) and
 # ume-<service>-certs (TLS certificate, internal CA, Data Protection certificate) for gateway, adminapi, migrations
 # and dataapi. The connection strings point at the hosts "postgres" and "redis"; with your own databases, edit
-# deploy/secrets/<service>/ConnectionStrings__* first.
+# deploy/secrets/<service>/ConnectionStrings__* first. Sign-in is declared by the overlay's Oidc__Authority, or set in
+# the setup wizard after deploy.sh (docs/kubernetes.md, "Sign-in").
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 certs="$here/../certs"; secrets="$here/../secrets"; ns=""; datastores=0
@@ -23,7 +24,7 @@ while [ $# -gt 0 ]; do
     --datastores) datastores=1; shift;;
     --certs-dir) certs="$2"; shift 2;;
     --secrets-dir) secrets="$2"; shift 2;;
-    -h|--help) sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0;;
+    -h|--help) sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0;;
     *) echo "unknown option: $1" >&2; exit 1;;
   esac
 done
@@ -49,3 +50,5 @@ if [ "$datastores" = 1 ]; then
   done
 fi
 echo "Back up $secrets/.pepper and $certs/data-protection.pfx outside the cluster: without them a restored database is unusable."
+[ -s "$secrets/adminapi/Setup__Secret" ] ||
+  echo "No setup secret in $secrets/adminapi: run deploy/init-deployment.sh --no-chown again (it keeps every existing secret) before setup mode can open."

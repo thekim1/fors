@@ -5,8 +5,9 @@ and the reasons are in [data-access.md](data-access.md). What exists today:
 
 - **Security events for your SIEM.** The gateway and admin API log security events under the category
   `Ume.LlmGateway.Security` with stable event names: `gateway.auth.failed`, `gateway.pii.action`,
-  `gateway.content.flagged` (the [content guard](content-guard.md); categories only, never text), `gateway.request.refused`, `gateway.delegation.refused` ([integrations](integrations.md)), `admin.change`, `admin.signin`, `admin.signout`, `admin.session.extended`,
-  `admin.access.denied` and `admin.data.read` (the table is in [data-access.md](data-access.md)). Set
+  `gateway.content.flagged` (the [content guard](content-guard.md); categories only, never text), `gateway.request.refused`, `gateway.delegation.refused` ([integrations](integrations.md)), `admin.change`, `admin.signin`, `admin.signin.failed`, `admin.signout`, `admin.session.extended`,
+  `admin.access.denied`, `admin.data.read` and setup mode's `admin.setup.opened`, `admin.setup.code_refused`,
+  `admin.setup.session`, `admin.setup.test` and `admin.setup.completed` (the table is in [data-access.md](data-access.md)). Set
   `OTEL_EXPORTER_OTLP_ENDPOINT` on both services and route that category to your SIEM with an OpenTelemetry Collector.
   [`deploy/otel/collector-siem.example.yaml`](../deploy/otel/collector-siem.example.yaml) sends it to syslog (RFC 5424),
   with Splunk, Elastic and Sentinel alternatives.
@@ -31,7 +32,11 @@ and the reasons are in [data-access.md](data-access.md). What exists today:
   - `admin.change` with action `export`, or `admin.data.read` of `/api/audit`, outside office hours;
   - `admin.signin` from an address outside the municipal networks, or the same `Actor` from two addresses at once;
   - `admin.session.extended` many times for one `SessionId` (a session kept alive unattended);
-  - an audit entry (Data API `security/audit` feed) whose `sessionId` never had an `admin.signin`.
+  - an audit entry (Data API `security/audit` feed) whose `sessionId` never had an `admin.signin` (except a setup
+    completion, whose `sessionId` is the `setup-…` id of an `admin.setup.session`);
+  - any `admin.setup.opened` that no deployer asked for, bursts of `admin.setup.code_refused` (someone guessing the setup
+    code), and any `admin.setup.completed` (the sign-in provider or client changed). The audit entry of a completion names
+    whoever the chosen provider says signed in: the provider is the code holder's choice, so the code is what is trusted.
 - **Unknown keys are cached.** A key the gateway does not know is remembered for `Gateway:KeyCacheSeconds` (30 s), so a
   client retrying with a deleted or mistyped key costs no database query (0.12 ms per refused request in the `audit`
   benchmark). Creating a key in the admin API clears the cache at once.

@@ -524,7 +524,7 @@
               "string",
               "null"
             ],
-            "description": "Gateway:OidcAuthority: the address of the sign-in provider the admin console uses; null when not set. Feature oidc-authority."
+            "description": "The address of the sign-in provider the admin console uses: Gateway:OidcAuthority, else the authority stored in the admin console's sign-in settings (https only); null when neither is set. Feature oidc-authority."
           },
           "features": {
             "type": "array",

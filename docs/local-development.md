@@ -82,6 +82,25 @@ generated or prompted for by `deploy/init-deployment.sh` (see *Quick production 
 described in [the runbook](runbook.md). Other settings can be overridden
 with `Section__Key` environment variables (for example `Ollama__Enabled=true`, development only).
 
+## Trying setup mode
+
+`"Setup:Try": true` in the AppHost user secrets starts the admin API without `Oidc__Authority` and `Oidc__ClientSecret`
+and with a generated `Setup__Secret` (parameter `setup-secret`), so [setup mode](identity-and-roles.md#setup-mode) opens and
+the admin API prints the setup code in its console log in the dashboard. A database whose setup is already done (any
+earlier run with the AppHost's sign-in values marked it completed) stays closed: also set `"Setup:Reopen"` to a new value,
+which the AppHost passes on. In the wizard, the bundled Keycloak's realm (`http://localhost:<keycloak port>/realms/ume`,
+allowed over http in Development), the client `ume-admin` and the `oidc-client-secret` parameter are the values to test.
+Remove both settings to go back.
+
+The wizard's browser test is `tests/e2e/specs/setup.spec.ts`: on a stack in setup mode with a fresh database
+(`Setup__Try=true`, `Seed__Enabled=false`, `DevelopmentVolumes__Postgres=<a throwaway volume>`, then `aspire start` and
+`aspire wait admin-ui`), run `npx playwright test specs/setup.spec.ts` in `tests/e2e`. It reads the setup code with
+`aspire logs adminapi` and the provider's address with `aspire describe` (both need `aspire` on the `PATH`), enters the
+bundled Keycloak's values, tests as `viewer` and `gateway-admin`, saves and signs in, with the axe and target-size checks on
+every step. Saving closes setup, so each run needs a fresh database; on any other stack the file is skipped. When the admin
+UI is not on port 5173 (another program holds it), set `ADMIN_UI_URL` to its address and add that address's `/signin-oidc`
+to the `ume-admin` client's redirect URIs in the bundled Keycloak.
+
 ## Admin UI code
 
 `src/admin-ui` is Vue 3 + Pinia + Vue Router with Reka UI primitives and Tailwind CSS v4, built from the design prototype in
@@ -142,7 +161,7 @@ already verified on its merge with `main`; a merge followed by a tag therefore r
 | Workflow | Runs on | Not on |
 |---|---|---|
 | *Verify* (about 3 min) | ready pull requests (their merge with `main`), release tags | draft pull requests; pushes to `main`; changes to Markdown, `docs/`, `site/`, `benchmarks/compare/` or the design prototype only |
-| *Deploy end to end* (about 6 min) | ready pull requests that change `deploy/` or ServiceDefaults | drafts |
+| *Deploy end to end* (about 7 min) | ready pull requests that change `deploy/` or ServiceDefaults | drafts |
 | *Website* (1 min) | pull requests and pushes to `main` that change the site, `docs/`, the CHANGELOG or the design tokens (on `main` it builds and publishes in one job) | drafts |
 | *Release* | `v*.*.*` tags: verifies the tag again, then builds and publishes | |
 | *Flake hunt* | Mondays, or by hand (also scans the base image for new CVEs) | |

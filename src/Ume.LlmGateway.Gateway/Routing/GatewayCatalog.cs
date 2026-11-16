@@ -27,10 +27,13 @@ public sealed class CatalogSnapshot
         IReadOnlyList<RuleBuildError>? ruleErrors = null,
         ImmutableArray<IPNetwork> trustedProxies = default,
         DateTimeOffset? logAllRequestsUntil = null,
-        string? organisationName = null)
+        string? organisationName = null,
+        string? oidcAuthority = null)
     {
         Providers = providers;
         OrganisationName = string.IsNullOrWhiteSpace(organisationName) ? null : organisationName;
+        // Only a provider address a client can use; the admin API refuses to sign in through anything else outside Development.
+        OidcAuthority = Uri.TryCreate(oidcAuthority, UriKind.Absolute, out var authority) && authority.Scheme == Uri.UriSchemeHttps ? oidcAuthority : null;
         TrustedProxies = trustedProxies.IsDefault ? [] : trustedProxies;
         _logAllRequestsUntil = logAllRequestsUntil;
         var duplicates = new List<string>();
@@ -112,6 +115,13 @@ public sealed class CatalogSnapshot
     /// the name is empty. Only this column is loaded, never the logo.
     /// </summary>
     public string? OrganisationName { get; }
+
+    /// <summary>
+    /// The sign-in provider's address stored in the admin console's sign-in settings (set in setup mode), handed to integrations
+    /// on <c>/v1/ume/context</c> when <c>Gateway:OidcAuthority</c> is empty; null when none is stored or it is not an absolute
+    /// https URL. Only this column is loaded: the gateway's database role cannot read the rest of the row (the client secret).
+    /// </summary>
+    public string? OidcAuthority { get; }
 
     public DateTimeOffset LoadedAt { get; }
     public IReadOnlyDictionary<Guid, Guid> KeyReplacements { get; }
@@ -332,6 +342,7 @@ public sealed partial class GatewayCatalog : IDisposable
         var replacements = await db.KeyRotationMapAsync(cancellationToken);
         var settings = await db.Settings.AsNoTracking().SingleOrDefaultAsync(cancellationToken) ?? new GatewaySettings();
         var organisationName = await db.Branding.AsNoTracking().Select(b => b.OrganisationName).FirstOrDefaultAsync(cancellationToken);
+        var oidcAuthority = await db.SignInSettings.AsNoTracking().Select(s => s.Authority).FirstOrDefaultAsync(cancellationToken);
         var now = _time.GetUtcNow();
 
         // Wire navigation properties across the separately loaded graphs.
@@ -385,7 +396,8 @@ public sealed partial class GatewayCatalog : IDisposable
         var snapshot = new CatalogSnapshot(providers, routes, budgets, now, replacements, rules, ruleErrors,
             trustedProxies: [.. NetworkRanges.ParseValid(settings.TrustedProxies)],
             logAllRequestsUntil: settings.LogAllRequests ? settings.LogAllRequestsUntil ?? DateTimeOffset.MaxValue : null,
-            organisationName: organisationName);
+            organisationName: organisationName,
+            oidcAuthority: oidcAuthority);
         foreach (var name in snapshot.DuplicateNames)
         {
             LogDuplicateName(_logger, name);

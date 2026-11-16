@@ -37,7 +37,9 @@ public sealed class ContextEndpoint(RequestStages stages, GatewayCatalog catalog
         // With x-ume-on-behalf-of, the context of the assigned key: as if it had been presented.
         var snapshot = await catalog.GetAsync(ct);
         var current = options.CurrentValue;
-        await CacheableJson.WriteAsync(http, Build(authenticated.Key, now, new ContextGateway(current.AdminUrl, current.IntegrationApiUrl, snapshot.OrganisationName, current.OidcAuthority)), ct);
+        // The deployment's address wins; else the one stored in the admin console's sign-in settings, read with the catalogue.
+        var oidcAuthority = string.IsNullOrEmpty(current.OidcAuthority) ? snapshot.OidcAuthority : current.OidcAuthority;
+        await CacheableJson.WriteAsync(http, Build(authenticated.Key, now, new ContextGateway(current.AdminUrl, current.IntegrationApiUrl, snapshot.OrganisationName, oidcAuthority)), ct);
     }
 
     /// <summary>What the answer says about the gateway itself, besides its version and features.</summary>

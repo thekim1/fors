@@ -97,22 +97,45 @@ var adminApi = builder.AddProject<Projects.Ume_LlmGateway_AdminApi>("adminapi", 
     .WaitForCompletion(migrations)
     .WithHttpHealthCheck(HealthEndpoints.ReadyPath, endpointName: "https");
 
+// Setup:Try=true (AppHost user secrets) starts the admin API without a sign-in authority and client secret and with a setup
+// secret, so setup mode opens and the setup code is in the admin API's console log; Setup:Reopen is passed on for a database
+// whose setup is done (docs/local-development.md).
+var setupTry = builder.ExecutionContext.IsRunMode && builder.Configuration.GetValue<bool>("Setup:Try");
 if (keycloak is not null)
 {
-    adminApi.WithEnvironment("Oidc__Authority", ReferenceExpression.Create($"{keycloak.GetEndpoint("http")}/realms/ume"))
-        .WithEnvironment("Oidc__ClientSecret", oidcSecret)
-        .WaitFor(keycloak);
+    if (!setupTry)
+    {
+        adminApi.WithEnvironment("Oidc__Authority", ReferenceExpression.Create($"{keycloak.GetEndpoint("http")}/realms/ume"))
+            .WithEnvironment("Oidc__ClientSecret", oidcSecret);
+    }
+
+    adminApi.WaitFor(keycloak);
 }
 else
 {
     adminApi.WithExternalHttpEndpoints();
 }
 
+if (setupTry)
+{
+    adminApi.WithEnvironment("Setup__Secret", Secret("setup-secret", 64));
+    if (builder.Configuration["Setup:Reopen"] is { Length: > 0 } reopen)
+    {
+        adminApi.WithEnvironment("Setup__Reopen", reopen);
+    }
+}
+
 if (externalOidc)
 {
-    // Every Oidc:* setting (Authority, ClientId, ClientSecret, RoleClaim, RoleGroups:..., ...) is passed through.
+    // Every Oidc:* setting (Authority, ClientId, ClientSecret, RoleClaim, RoleGroups:..., ...) is passed through; with Setup:Try,
+    // all but the authority and the client secret.
     foreach (var (key, value) in builder.Configuration.GetSection("Oidc").AsEnumerable(makePathsRelative: true))
     {
+        if (setupTry && key is "Authority" or "ClientSecret")
+        {
+            continue;
+        }
+
         if (value is not null)
         {
             adminApi.WithEnvironment("Oidc__" + key.Replace(":", "__", StringComparison.Ordinal), value);

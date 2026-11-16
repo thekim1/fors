@@ -27,11 +27,23 @@ configMapGenerator:
   - name: ume-adminapi-config
     behavior: merge
     literals:
-      # change: your identity provider (docs/identity-and-roles.md) and the gateway's public address.
-      - Oidc__Authority=https://idp.example.se/realms/ume
+      # change: the gateway's public address.
       - Gateway__BaseUrl=https://llm.example.se
+      # Sign-in (docs/kubernetes.md, "Sign-in"), one of two ways:
+      # - the setup wizard: leave Oidc__Authority commented out. After the first deploy.sh, read the setup code with
+      #   kubectl -n ume-gateway logs deploy/adminapi | grep 'Setup code' and open https://<admin host>/setup; it shows the
+      #   redirect URIs, takes the provider, client and secret and tests a sign-in before saving;
+      # - declared: Oidc__Authority set (your identity provider, docs/identity-and-roles.md) keeps the wizard closed for
+      #   good. Every Oidc__ literal set is the deployment's value, locked in the wizard; a client secret goes in
+      #   ume-adminapi-secrets (init-deployment.sh --oidc-client-secret-file, which needs --oidc-authority).
+      # - Oidc__Authority=https://idp.example.se/realms/ume
+      # - Oidc__ClientId=ume-admin
       # - Oidc__RoleClaim=roles
+      # Groups that grant a role are always deployment values.
       # - Oidc__RoleGroups__gateway-admin=GG-Llm-Admins
+      # Any new value (for example today's date) opens the setup wizard again, once, for an hour; the new setup code is
+      # in kubectl logs deploy/adminapi. Empty it before restoring a database.
+      # - Setup__Reopen=2026-11-16
       # - DataApi__PublicUrl=https://llm-data.example.se
       # - Admin__IntegrationRequestsPerMinute=60
   - name: ume-gateway-config
@@ -40,11 +52,14 @@ configMapGenerator:
       # - OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.observability:4317
       # - Gateway__AdminUrl=https://llm-admin.example.se
       # - Gateway__IntegrationApiUrl=https://adminapi:8443/integration/v1
+      # The admin console's provider for /v1/ume/context; unset hands out the one saved in the setup wizard. Set it
+      # whenever ume-adminapi-config declares Oidc__Authority, to the same address.
       # - Gateway__OidcAuthority=https://idp.example.se/realms/ume
   # With ../components/dataapi:
   # - name: ume-dataapi-config
   #   behavior: merge
   #   literals:
+  #     # The issuer of the integrations' access tokens; never the setup wizard's. Unset, only Data API keys work.
   #     - DataApi__Authority=https://idp.example.se/realms/ume
 patches:
   # More gateway replicas for more traffic (each replica handles thousands of requests per second; docs/performance.md).

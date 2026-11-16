@@ -81,6 +81,14 @@ jobs:
           curl -fsS --cacert deploy/certs/ca.pem --resolve llm.smoke.test:9443:127.0.0.1 -o /dev/null https://llm.smoke.test:9443/
           status="$(curl -s -o /dev/null -w '%{http_code}' --cacert deploy/certs/ca.pem --resolve llm.smoke.test:8443:127.0.0.1 https://llm.smoke.test:8443/v1/models)"
           [ "$status" = 401 ] || { echo "::error::Gateway answered $status without a key, expected 401"; $compose logs gateway; exit 1; }
+          # A deployment that sets the authority is declared: setup counts as completed, no setup code is printed (#100).
+          declared='The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed'
+          for _ in $(seq 15); do
+            admin_log="$($compose logs --no-color adminapi)"; grep -q "$declared" <<< "$admin_log" && break; sleep 2
+          done
+          grep -q "$declared" <<< "$admin_log" \
+            || { echo "::error::The admin API did not count setup as completed for a declared deployment"; echo "$admin_log"; exit 1; }
+          if grep -q 'Setup code' <<< "$admin_log"; then echo "::error::A declared deployment printed a setup code"; exit 1; fi
           $compose down -v
       - uses: actions/download-artifact@v4
         with:

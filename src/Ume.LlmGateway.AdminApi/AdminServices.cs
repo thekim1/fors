@@ -11,6 +11,7 @@ using Ume.LlmGateway.AdminApi.Reports;
 using Ume.LlmGateway.AdminApi.RoutingRules;
 using Ume.LlmGateway.AdminApi.Security;
 using Ume.LlmGateway.AdminApi.Settings;
+using Ume.LlmGateway.AdminApi.Setup;
 using Ume.LlmGateway.Infrastructure.Provisioning;
 
 namespace Ume.LlmGateway.AdminApi;
@@ -26,8 +27,11 @@ public static class AdminServices
         services.AddValidatedOptions<AdminOptions>(AdminOptions.SectionName);
         services.AddValidatedOptions<GatewayLinkOptions>(GatewayLinkOptions.SectionName);
         services.AddValidatedOptions<DataApiLinkOptions>(DataApiLinkOptions.SectionName);
-        services.AddValidatedOptions<OidcOptions>(OidcOptions.SectionName);
+        // Only a set authority is checked: the admin API starts without one, and sign-in is then not configured.
+        services.AddValidatedOptions<OidcOptions>(OidcOptions.SectionName).Validate<IHostEnvironment>((o, environment) =>
+            string.IsNullOrWhiteSpace(o.Authority) || OidcOptions.IsUsableAuthority(o.Authority, !environment.IsDevelopment()), OidcOptions.AuthorityError);
         services.AddValidatedOptions<RetentionOptions>(RetentionOptions.SectionName);
+        services.AddValidatedOptions<SetupOptions>(SetupOptions.SectionName);
 
         services.AddHttpContextAccessor();
         services.AddScoped<AdminContext>();
@@ -67,6 +71,22 @@ public static class AdminServices
         services.AddHttpClient(GatewayOperationsClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
         services.AddScoped<GatewaySettingsService>();
+        // The admin console's sign-in values: the deployment's, else the database's (the client secret encrypted), else the defaults.
+        services.AddScoped<SignInSettingsService>();
+        services.AddSingleton<SignInSecretProtector>();
+        // Setup mode: the setup code, sessions and test sign-in; evaluated at start, which writes the code to standard output.
+        services.AddSingleton<SetupSecret>();
+        services.AddSingleton<SetupCodeThrottle>();
+        services.AddSingleton<SetupCallbackThrottle>();
+        services.AddSingleton<SetupEventSampler>();
+        services.AddSingleton<SetupCleanup>();
+        services.AddSingleton(new SetupConsole());
+        services.AddSingleton(_ => SetupProviderClient.Create());
+        services.AddScoped<SetupMode>();
+        services.AddScoped<SetupSessions>();
+        services.AddScoped<SetupTestSignIn>();
+        services.AddScoped<SetupService>();
+        services.AddHostedService<SetupStartup>();
         services.AddScoped<BrandingService>();
         services.AddSingleton<BrandingCache>();
         services.AddSingleton<ReleaseCheck>();

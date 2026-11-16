@@ -133,7 +133,8 @@ reservation). Counters are `ume:spend-tok:*`, seeded from usage records and mont
   rotation lineage and budget spend queries used by both the gateway and the admin API.
 - **Admin API.** One folder (and namespace) per feature: `Organisation`, `Keys`, `Integrations`, `DataAccess`, `Catalog` (providers,
   models, routes; `Catalog/Pricing` for the models.dev and Azure list prices), `Budgets`, `RoutingRules`, `Reports`,
-  `Operations` and `Settings`. A feature folder holds its `*Endpoints` (routes, roles, OpenAPI text only), its service
+  `Operations`, `Settings` and `Setup` (setup mode: the anonymous `/bff/setup` API, its middleware and the test sign-in,
+  mapped from `Program.cs` beside the other `/bff` routes). A feature folder holds its `*Endpoints` (routes, roles, OpenAPI text only), its service
   (the logic) and its `*Contracts` (request and response records). Shared pieces sit in `Common` (`AdminContext`,
   `AdminRequest` validation, `OwnerScopeResolver`, `AdminOptions`), `Auditing` (action and entity names, audit snapshots)
   and `Security` (sign-in, roles and policies, sessions, CSRF, admin activity, rate limiting). `AdminServices` registers

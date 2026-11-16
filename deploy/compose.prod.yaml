@@ -2,6 +2,9 @@
 #
 #   1. ./init-deployment.sh        generates certificates, secrets and deploy/.env
 #   2. docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait
+#   3. sign-in: with UME_OIDC_AUTHORITY in deploy/.env it is declared; without it, read the setup code with
+#      docker compose -f deploy/compose.prod.yaml --env-file deploy/.env logs adminapi | grep 'Setup code'
+#      and open https://<admin host>[:UME_ADMIN_PORT]/setup (docs/runbook.md, "Quick start")
 #
 # Secrets and certificates are mounted as files, never passed as environment variables.
 # This variant expects you to run init-deployment.sh on the host. If you cannot run scripts
@@ -108,7 +111,8 @@ services:
       # Integrations (docs/integrations.md): the admin console's address, for links in /v1/ume/context. Empty = none.
       Gateway__AdminUrl: ${UME_ADMIN_PUBLIC_URL:-}
       Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL:-}
-      # The admin console's sign-in provider, handed to integrations on /v1/ume/context (docs/integrations.md).
+      # The admin console's sign-in provider, handed to integrations on /v1/ume/context (docs/integrations.md). Empty
+      # hands out the authority saved in the setup wizard.
       Gateway__OidcAuthority: ${UME_OIDC_AUTHORITY:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: gateway
@@ -144,17 +148,22 @@ services:
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/adminapi.key
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: adminapi
-      Oidc__Authority: ${UME_OIDC_AUTHORITY:?Set HTTPS OIDC authority in deploy/.env}
-      Oidc__ClientId: ${UME_OIDC_CLIENT_ID:-ume-admin}
-      Oidc__RoleClaim: ${UME_OIDC_ROLE_CLAIM:-roles}
-      Oidc__DepartmentClaim: ${UME_OIDC_DEPARTMENT_CLAIM:-departmentCodes}
-      Oidc__TeamClaim: ${UME_OIDC_TEAM_CLAIM:-teamCodes}
-      Oidc__GroupClaim: ${UME_OIDC_GROUP_CLAIM:-groups}
-      Oidc__ExtraScopes__0: ${UME_OIDC_EXTRA_SCOPE:-email}
+      # Sign-in (docs/identity-and-roles.md, "Setup mode"): an empty value is unset, so the setup wizard's value applies,
+      # else the code's default (client ume-admin, claims roles, departmentCodes, teamCodes, groups, no extra scope). A
+      # set authority declares the sign-in and keeps the wizard closed.
+      Oidc__Authority: ${UME_OIDC_AUTHORITY:-}
+      Oidc__ClientId: ${UME_OIDC_CLIENT_ID:-}
+      Oidc__RoleClaim: ${UME_OIDC_ROLE_CLAIM:-}
+      Oidc__DepartmentClaim: ${UME_OIDC_DEPARTMENT_CLAIM:-}
+      Oidc__TeamClaim: ${UME_OIDC_TEAM_CLAIM:-}
+      Oidc__GroupClaim: ${UME_OIDC_GROUP_CLAIM:-}
+      Oidc__ExtraScopes__0: ${UME_OIDC_EXTRA_SCOPE:-}
       Oidc__RoleGroups__gateway-admin: ${UME_OIDC_GROUPS_GATEWAY_ADMIN:-}
       Oidc__RoleGroups__department-admin: ${UME_OIDC_GROUPS_DEPARTMENT_ADMIN:-}
       Oidc__RoleGroups__viewer: ${UME_OIDC_GROUPS_VIEWER:-}
       Oidc__RoleGroups__team-admin: ${UME_OIDC_GROUPS_TEAM_ADMIN:-}
+      # A new value opens the setup wizard once more (the setup code's key is secrets/adminapi/Setup__Secret).
+      Setup__Reopen: ${UME_SETUP_REOPEN:-}
       Gateway__BaseUrl: ${UME_GATEWAY_PUBLIC_URL:?Set HTTPS gateway URL in deploy/.env}
       DataApi__PublicUrl: ${UME_DATA_PUBLIC_URL:-}
       Gateway__OperationsUrl: ${UME_GATEWAY_OPERATIONS_URL:-https://gateway:8443}
@@ -191,7 +200,8 @@ services:
       Kestrel__Endpoints__Https__Url: https://+:8443
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/dataapi.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/dataapi.key
-      DataApi__Authority: ${UME_DATA_AUTHORITY:-${UME_OIDC_AUTHORITY}}
+      # Not the setup wizard's authority: without either variable the Data API accepts only Data API keys.
+      DataApi__Authority: ${UME_DATA_AUTHORITY:-${UME_OIDC_AUTHORITY:-}}
       DataApi__Audience: ${UME_DATA_AUDIENCE:-ume-data-api}
       DataApi__MinimumGroupSize: ${UME_DATA_MINIMUM_GROUP_SIZE:-5}
       DataApi__TimeZone: ${UME_DATA_TIME_ZONE:-Europe/Stockholm}

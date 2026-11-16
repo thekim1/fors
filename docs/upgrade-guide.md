@@ -13,14 +13,52 @@ See [runbook](runbook.md) for the actual deployment procedure.
 
 ## Unreleased
 
-- **Rolling update: yes.** No migration.
-- **Portainer:** `UME_DOMAIN` names the hosts (`llm.<domain>`, `llm-admin.<domain>`, the public URL
-  `https://llm.<domain>`). An existing stack changes nothing: `UME_GATEWAY_HOST`, `UME_ADMIN_HOST` and
-  `UME_GATEWAY_PUBLIC_URL` still win, and `UME_GATEWAY_HOST` alone is enough without the domain.
-- **The context names the sign-in provider:** the Compose files and the Portainer stack now pass `UME_OIDC_AUTHORITY` to
-  the gateway as `Gateway__OidcAuthority`, which `/v1/ume/context` hands out as `gateway.oidc_authority`. Kubernetes:
-  add `Gateway__OidcAuthority` to `ume-gateway-config` (the example lists it as a comment); unset leaves the field
-  `null`.
+The admin console's sign-in (authority, client id, client secret, claim names) can be set in a browser wizard, **setup
+mode**, instead of the deployment's variables ([identity and roles](identity-and-roles.md#setup-mode)); the Portainer
+stack names its hosts from `UME_DOMAIN`; `/v1/ume/context` names the sign-in provider. **An existing deployment keeps its
+variables, stays declared and never sees the wizard:** it sets `UME_OIDC_AUTHORITY` (every deploy form required it until
+now), and a deployment that sets the authority counts as set up at its first start. Nothing has to be added. The steps for
+each deploy form follow the list of changes.
+
+- **Rolling update: yes.** Migration `SignInSettings` adds the table `SignInSettings` (the stored sign-in values, all
+  unset); migration `SetupMode` adds four nullable setup columns to it, creates its single row and adds the tables
+  `SetupSessions` and `SetupTests`. `app-roles.sql` (and its copies: `compose.portainer.yaml`,
+  `deploy/kubernetes/base/app-roles.sql`) only adds grants: the admin role reads and updates the row and the two tables,
+  the gateway role reads only the `Authority` column, the Data API role nothing. The previous version reads none of them,
+  so it keeps running against the new schema while its instances are replaced. Use the release's files.
+- **The deploy files no longer require the authority.** `UME_OIDC_AUTHORITY` (Kubernetes: `Oidc__Authority`) is optional:
+  set, the sign-in is declared and setup never opens; unset, the admin API starts with sign-in not configured and opens
+  setup mode for an hour at its first start, with a setup code on its output. `init-deployment.sh` no longer requires
+  `--oidc-authority` (an interactive first run asks once; empty leaves it to the wizard), and a re-run without it keeps
+  the value in `deploy/.env`. `--oidc-client-secret-file` now needs the authority, and the Portainer bootstrap writes
+  `UME_OIDC_CLIENT_SECRET` only together with `UME_OIDC_AUTHORITY`: a deployment client secret goes only to the
+  deployment's own provider, so without one it would make every test sign-in of the wizard fail.
+- **Client id and claim names are passed only when set.** The Compose files and the Portainer stack used to pass
+  `UME_OIDC_CLIENT_ID`, `UME_OIDC_ROLE_CLAIM`, `_DEPARTMENT_CLAIM`, `_TEAM_CLAIM` and `_GROUP_CLAIM` with defaults, which
+  made them deployment values and would lock the wizard's fields. Now an unset variable reaches the admin API empty, which
+  counts as unset, and the code's default applies; the defaults are the old files' defaults (`ume-admin`, `roles`,
+  `departmentCodes`, `teamCodes`, `groups`), so the effective values do not change. `UME_OIDC_EXTRA_SCOPE` defaulted to
+  `email`, which the admin API requests anyway (`openid`, `profile` and `email` always): unset, no extra scope is passed
+  and the scopes requested are the same. *Settings* now shows such a value's source as the default instead of the
+  deployment. The Kubernetes base no longer sets `Oidc__ClientId=ume-admin` (the code's default is the same). The role
+  groups (`UME_OIDC_GROUPS_*`) stay deployment values.
+- **The setup secret.** Setup mode derives its code from a generated secret, the file `Setup__Secret` of the admin API
+  (at least 32 characters). The Portainer bootstrap and `init-deployment.sh` generate it once and never overwrite it;
+  `create-secrets.sh` puts it in `ume-adminapi-secrets` with the other files. It needs no backup (a new one only changes
+  the codes printed from then on). A declared deployment does not need it, except to re-open setup.
+- **New optional variables.** `UME_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`), empty by default: a new value opens setup
+  once more, for an hour, at the admin API's next start, and is consumed; `init-deployment.sh` writes the empty line and
+  keeps a value on a re-run. `UME_DOMAIN` (Portainer) and `--domain` (`init-deployment.sh`) name the hosts
+  (`llm.<domain>`, `llm-admin.<domain>`, the public URL `https://llm.<domain>`); `UME_GATEWAY_HOST`, `UME_ADMIN_HOST` and
+  `UME_GATEWAY_PUBLIC_URL` still win, and `UME_GATEWAY_HOST` alone is enough without the domain, so an existing stack
+  changes nothing.
+- **The context names the sign-in provider:** the Compose files and the Portainer stack pass `UME_OIDC_AUTHORITY` to the
+  gateway as `Gateway__OidcAuthority`, which `/v1/ume/context` hands out as `gateway.oidc_authority`; empty, it hands out
+  the authority saved in the wizard, else `null`. Kubernetes: add `Gateway__OidcAuthority` to `ume-gateway-config` (the
+  example lists it as a comment).
+- **The Data API does not follow the wizard.** Its token issuer is still `UME_DATA_AUTHORITY`, else `UME_OIDC_AUTHORITY`
+  (Kubernetes: `DataApi__Authority`). A deployment whose sign-in is set in the wizard sets `UME_DATA_AUTHORITY` for
+  access tokens; without it the Data API accepts only Data API keys.
 - **Manifests:** `integration.owner` may be left out. A manifest that names an owner behaves as before. Without one, a
   new integration is placed in a team and department made from its name (`My.Platform` → code `my-platform`), or in an
   existing team with that code; move it to your own team under *Integrations* afterwards. A platform's Portainer stack
@@ -30,6 +68,128 @@ See [runbook](runbook.md) for the actual deployment procedure.
   as a guard must check `credentialKeys` itself. During a rolling update an admin API of the previous version still
   answers 409.
 - **Ume.Rag preset:** `ume-rag.json` no longer declares an owner. An integration already created from it is not changed.
+
+### Portainer
+
+**Before the update**
+
+1. **Back up** the database and the two files a restore needs (`ume-secrets/.pepper`, `ume-certs/data-protection.pfx`;
+   [runbook](runbook.md#portainer-and-other-hosts-without-shell-access)).
+2. **Look at the stack's variables.** `UME_OIDC_AUTHORITY` holds your provider's address, as it must in a working stack;
+   that is what keeps the stack declared. Keep every `UME_OIDC_*` you set. Nothing is to be added.
+
+**The update**
+
+3. **Edit the stack:** paste the new `compose.portainer.yaml` (the one attached to the release pins its images) over the
+   old one, keep the stack name and the variables. Or redeploy from Git.
+4. **Update the stack** with *Re-pull image and redeploy* on. The `bootstrap` container now also writes
+   `adminapi/Setup__Secret`; then `migrations` runs `SignInSettings` and `SetupMode`, then the services start.
+
+**After the update**
+
+5. **The end of `bootstrap`'s log** says `bootstrap: sign-in to the admin console is declared by the stack's variables
+   (UME_OIDC_AUTHORITY), so the setup wizard stays closed: …`, and nothing after it. A line
+   `bootstrap: UME_OIDC_CLIENT_SECRET is left out: …` means the authority is empty (see *If a setup code is printed* below).
+6. **`adminapi`'s log** has, once, at its first start of the new version, the record
+   `The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed` (in the JSON line's `Message`),
+   and **no** line with `Setup code`.
+7. **`https://<admin host>/bff/user`** (no sign-in needed) shows `"signIn":{"configured":true}` and
+   `"setup":{"open":false}`. Sign in as before. *Settings* shows the authority's source as the deployment.
+
+### Compose (`init-deployment.sh`)
+
+**Before the update**
+
+1. **Back up** the database (`deploy/Backup-Database.ps1`, or `pg_dump` in the `postgres` container), `deploy/secrets/.pepper`
+   and `deploy/certs/data-protection.pfx`.
+2. `deploy/.env` already sets `UME_OIDC_AUTHORITY`; leave it. Nothing is to be added.
+
+**The update**
+
+3. **Extract the new bundle** next to the old one and move `deploy/.env`, `deploy/certs` and `deploy/secrets` across
+   ([runbook](runbook.md#releases-github)). There is no need to run `init-deployment.sh`. If you do run it again, give it
+   the options of the first run (`--proxy`, the host names, `--rolling`, ...): it writes `deploy/.env` again from them
+   (the old one is kept as `.env.bak`) and keeps only the sign-in lines and `UME_SETUP_REOPEN` from the old file.
+4. **Start it:** `docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait`, or with two slots
+   `./deploy/rolling-update.sh` ([Updates without downtime](zero-downtime-updates.md#update)).
+5. **Optional, to be able to re-open setup later:** the setup secret. A re-run of `init-deployment.sh` (step 3) generates
+   it; or by hand:
+
+   ```bash
+   openssl rand -hex 32 | tr -d '\n' | sudo tee deploy/secrets/adminapi/Setup__Secret > /dev/null
+   sudo chmod 600 deploy/secrets/adminapi/Setup__Secret && sudo chown 1654:1654 deploy/secrets/adminapi/Setup__Secret
+   ```
+
+   and add the line `UME_SETUP_REOPEN=` to `deploy/.env` (unset works the same; the line is where a value goes later).
+
+**After the update**
+
+6. `docker compose -f deploy/compose.prod.yaml --env-file deploy/.env logs adminapi` has, once, the record
+   `The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed` (with two slots, in `adminapi`
+   or `adminapi-b`), and **no** line with `Setup code`.
+7. `/bff/user` shows `"signIn":{"configured":true}` and `"setup":{"open":false}`; sign in as before.
+
+### Kubernetes
+
+**Before the update**
+
+1. **Back up** the database, `deploy/secrets/.pepper` and `deploy/certs/data-protection.pfx`.
+2. Your overlay sets `Oidc__Authority`, which keeps it declared; leave it. Nothing is to be added.
+
+**The update**
+
+3. **Take the new base** (the release bundle's `deploy/kubernetes`, which pins the images, or the repository's) and keep
+   your overlay. The base no longer sets `Oidc__ClientId=ume-admin` (same default) and sets an empty `Setup__Reopen`.
+4. **Deploy:** `./deploy/kubernetes/deploy.sh <overlay>`. It ends with `==> Done` and, for a declared deployment, no line
+   about setup mode.
+5. **Optional, to be able to re-open setup later:** create `deploy/secrets/adminapi/Setup__Secret` (the `openssl` line of
+   the Compose steps, without `sudo` and `chown`, or a re-run of `init-deployment.sh --no-chown` with the first run's
+   options), run `./deploy/kubernetes/create-secrets.sh --namespace <ns>` again and
+   `kubectl -n <ns> rollout restart deployment/adminapi`.
+
+**After the update**
+
+6. `kubectl -n <ns> logs -l app.kubernetes.io/component=adminapi --tail=-1` has, once (in the first new pod), the record
+   `The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed`, and no line with `Setup code`.
+7. `/bff/user` shows `"signIn":{"configured":true}` and `"setup":{"open":false}`; sign in as before.
+
+### If a setup code is printed after all
+
+The admin API found no authority in its configuration: `UME_OIDC_AUTHORITY` (Kubernetes: `Oidc__Authority`) is missing or
+empty. Until it is fixed, sign-in is not configured (`/bff/user` shows `"configured":false`). Either set the variable and
+update again (setup then counts as completed at the next start and the code is void), or use the wizard with the printed
+code ([runbook](runbook.md#first-start-without-an-authority-the-setup-wizard)). Both end in a working sign-in.
+
+### Optional, afterwards: move sign-in into the wizard
+
+Values saved in the wizard are stored in the database, the client secret encrypted with the Data Protection certificate.
+Do each change in one go: between removing a value and saving it in the wizard, sign-in is incomplete.
+
+- **Only the client secret** (the provider stays declared and locked in the wizard): remove `UME_OIDC_CLIENT_SECRET`
+  (Compose: delete `deploy/secrets/adminapi/Oidc__ClientSecret`; Kubernetes: the file, then `create-secrets.sh`), set
+  `UME_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) to a new value, for example today's date, and update. Open
+  `https://<admin host>/setup` with the code from the admin API's log, type the secret, test the sign-in and finish.
+- **Everything:** as above, and also remove `UME_OIDC_AUTHORITY` (Kubernetes: `Oidc__Authority`) and any `UME_OIDC_*`
+  except the role groups. In this gateway the authority alone declares the sign-in: removing it is what hands the provider
+  to the wizard, and the client secret file must go with it. The wizard needs the setup secret (the bootstrap writes it;
+  Compose and Kubernetes: step 5 above). Two things follow the authority: the gateway's `Gateway__OidcAuthority` is then
+  empty, so `/v1/ume/context` hands out the authority saved in the wizard (`null` until it is saved); and the Data API,
+  which took `UME_OIDC_AUTHORITY` as its token issuer, accepts only Data API keys unless you set `UME_DATA_AUTHORITY` to
+  the old address (Kubernetes sets `DataApi__Authority` on its own already).
+
+### Restoring a database
+
+- **Empty `UME_SETUP_REOPEN` first** (Kubernetes: `Setup__Reopen`). A backup taken before its last re-open, restored
+  while the variable still holds that newer value, opens setup once more.
+- A declared deployment needs nothing else: a backup from before this release, or from before setup counted as completed,
+  is completed again at the first start.
+- On a deployment whose sign-in was set in the wizard, a backup from before setup was completed opens setup again at the
+  next start (a new code); finish it again, or declare the authority.
+- **Restore with the same `data-protection.pfx`** (and pepper). A client secret saved in the wizard is encrypted with the
+  key ring in the database, which that certificate protects. With another certificate the secret is unreadable: the admin
+  API logs `The stored sign-in client secret cannot be unprotected and is treated as unreadable: …` and, on a sign-in,
+  `Sign-in refused: sign-in is not configured (unreadable_client_secret)`; `/bff/user` shows `"configured":false`, and setup does not open by itself: set `UME_SETUP_REOPEN` to a new value and
+  type the secret again in the wizard.
 
 ## 0.10.3: Ume.Rag preset keys limited to OnPrem and Eu
 

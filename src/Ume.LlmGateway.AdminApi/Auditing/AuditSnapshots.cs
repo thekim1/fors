@@ -33,6 +33,18 @@ public sealed record BrandingAudit(string OrganisationName, string? LogoContentT
         b.Logo is { } logo ? Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(logo)) : null);
 }
 
+/// <summary>The stored sign-in values before and after a change; of the client secret only whether it is set, when, and its expiry.</summary>
+public sealed record SignInSettingsAudit(
+    string? Authority, string? ClientId, string? RoleClaim, string? DepartmentClaim, string? TeamClaim, string? GroupClaim, IReadOnlyList<string> ExtraScopes,
+    SignInCredentialAudit ClientSecret)
+{
+    public static SignInSettingsAudit Of(SignInSettings s) => new(s.Authority, s.ClientId, s.RoleClaim, s.DepartmentClaim, s.TeamClaim, s.GroupClaim,
+        [.. s.ExtraScopes], new SignInCredentialAudit(!string.IsNullOrEmpty(s.EncryptedClientSecret), s.ClientSecretSetAt, s.ClientSecretExpiresOn));
+}
+
+/// <summary>The client secret in <see cref="SignInSettingsAudit"/>: set, when, and the expiry entered with it; never the value or its ciphertext.</summary>
+public sealed record SignInCredentialAudit(bool Set, DateTimeOffset? SetAt, DateOnly? ExpiresOn);
+
 public sealed record KeyRotationAudit(KeyAudit PreviousKey, KeyAudit Key);
 
 /// <summary>A reveal or copy of a key's secret: which key, never the secret.</summary>

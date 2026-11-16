@@ -1,4 +1,4 @@
-import { buildUrl, http, postLogout } from './client'
+import { buildUrl, http, postLogout, request } from './client'
 import type {
   AuditEntry,
   AuditQuery,
@@ -57,6 +57,12 @@ import type {
   RoutingRuleTestRequest,
   RoutingRuleTestResult,
   RoutingRulesChoice,
+  SetupCompleteRequest,
+  SetupSessionStarted,
+  SetupState,
+  SetupTestStarted,
+  SetupValuesRequest,
+  SignInSettings,
   Team,
   UpdateDepartmentRequest,
   UpdateKeyRequest,
@@ -81,6 +87,16 @@ export const api = {
     extendSession: () => http.post<{ sessionExpiresAt: string; sessionLimitAt: string | null }>('/bff/session/extend'),
     loginUrl: (returnUrl: string) => buildUrl('/bff/login', { returnUrl }),
     branding: () => http.get<Branding>('/bff/branding'),
+  },
+  /**
+   * Setup mode (docs/admin-api.md, "Setup mode"): anonymous, 404 while setup is closed. A 401 is the setup session's
+   * (`setup_session_required`), never the admin session's. The code and a typed client secret go only in these bodies.
+   */
+  setup: {
+    session: (code: string) => request<SetupSessionStarted>('POST', '/bff/setup/session', { body: { code }, ownSession: true }),
+    state: () => request<SetupState>('GET', '/bff/setup/state', { ownSession: true }),
+    test: (body: SetupValuesRequest) => request<SetupTestStarted>('POST', '/bff/setup/test', { body, ownSession: true }),
+    complete: (body: SetupCompleteRequest) => request<{ signInUrl: string }>('POST', '/bff/setup/complete', { body, ownSession: true }),
   },
   departments: {
     list: () => http.get<Department[]>('/api/departments'),
@@ -197,6 +213,8 @@ export const api = {
       http.put<RetentionSettings>('/api/settings/retention', { usageRetentionDays, auditRetentionDays }),
     runRetention: () => http.post<RetentionSettings>('/api/settings/retention/run'),
     version: () => http.get<VersionInfo>('/api/settings/version'),
+    /** Read only: the sign-in values change only in setup mode. */
+    signIn: () => http.get<SignInSettings>('/api/settings/sign-in'),
     modelPrices: () => http.get<ModelPriceSync>('/api/settings/model-prices'),
     runModelPrices: () => http.post<ModelPriceSync>('/api/settings/model-prices/run'),
     updateBranding: (organisationName: string) => http.put<Branding>('/api/settings/branding', { organisationName }),

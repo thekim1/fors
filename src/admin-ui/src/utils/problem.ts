@@ -35,9 +35,10 @@ export function mapFieldErrors(error: unknown, fields: readonly string[]): Recor
   return result
 }
 
-/** Seconds from a 429 Retry-After value stored in the problem extensions, if any. */
+/** Seconds to wait after a 429: the response's Retry-After header, else a `retryAfter` problem extension, if any. */
 export function retryAfterSeconds(error: unknown): number | null {
   if (!isApiError(error) || error.status !== 429) return null
+  if (error.retryAfter !== null) return error.retryAfter
   const value = error.problem?.retryAfter
   return typeof value === 'number' ? value : null
 }

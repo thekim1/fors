@@ -1,10 +1,11 @@
 #!/bin/sh
 # One-shot bootstrap for compose.portainer.yaml: creates the internal CA, service certificates,
-# Data Protection certificate, passwords, key pepper and Redis ACL in the ume-certs / ume-secrets
-# volumes. Idempotent: existing secrets are never overwritten (a new pepper or Data Protection
+# Data Protection certificate, passwords, key pepper, the admin API's setup secret and Redis ACL in the ume-certs /
+# ume-secrets volumes. Idempotent: existing secrets are never overwritten (a new pepper or Data Protection
 # certificate would break existing data); service certificates are re-issued when they expire
 # within 30 days or the hostnames change. Inputs come from environment variables; the host names arrive resolved from
-# the stack file (UME_DOMAIN's defaults unless a UME_*_HOST is set).
+# the stack file (UME_DOMAIN's defaults unless a UME_*_HOST is set). Its last lines say how sign-in is set up: declared
+# by the stack's UME_OIDC_AUTHORITY, or in the setup wizard.
 set -eu
 umask 077
 C=/certs
@@ -77,12 +78,29 @@ done
 # Data API (optional, profile "data"): read-only role, no pepper, no Redis.
 printf 'Host=postgres;Database=gatewaydb;Username=ume_data;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
   "$(cat "$S/postgres/data_password")" > "$S/dataapi/ConnectionStrings__gatewaydb"
-# Confidential OIDC client (optional); the file follows the variable, so removing it clears the secret.
-if [ -n "${UME_OIDC_CLIENT_SECRET:-}" ]; then
+# The admin API's setup secret: the setup code is derived from it (docs/identity-and-roles.md, "Setup mode"). Kept, but
+# not worth backing up: a new one only changes the setup codes printed from then on.
+[ -f "$S/adminapi/Setup__Secret" ] || rand | tr -d '\n' > "$S/adminapi/Setup__Secret"
+# Confidential OIDC client (optional); the file follows the variable, so removing it clears the secret. Only with the
+# stack's authority: a deployment client secret goes only to the deployment's own provider, so without one it would make
+# every test sign-in of the setup wizard fail (deployment_secret_without_authority).
+notes=""
+note() { notes="$notes
+bootstrap: $*"; }
+if [ -n "${UME_OIDC_CLIENT_SECRET:-}" ] && [ -n "${UME_OIDC_AUTHORITY:-}" ]; then
   printf '%s' "$UME_OIDC_CLIENT_SECRET" > "$S/adminapi/Oidc__ClientSecret"
 else
   rm -f "$S/adminapi/Oidc__ClientSecret"
+  [ -z "${UME_OIDC_CLIENT_SECRET:-}" ] || note "UME_OIDC_CLIENT_SECRET is left out: it is used only with UME_OIDC_AUTHORITY. Set the authority too, or remove the secret and enter it in the setup wizard"
 fi
+# An example value left in a sign-in variable declares a wrong provider or secret, and the wizard stays closed.
+case "${UME_OIDC_AUTHORITY:-}" in
+  "" | https://*) ;;
+  *) note "UME_OIDC_AUTHORITY must be the https URL of your OIDC provider (the admin API refuses to start with it)" ;;
+esac
+case "${UME_OIDC_AUTHORITY:-}${UME_OIDC_CLIENT_SECRET:-}" in
+  *example.se* | *example.com* | *CHANGE*) note "UME_OIDC_AUTHORITY or UME_OIDC_CLIENT_SECRET still holds an example value: set the real one, or remove both for the setup wizard" ;;
+esac
 
 # Static configuration files (services run read-only, so they get them from a volume).
 F=/conf
@@ -105,3 +123,15 @@ chmod 755 "$C" "$S"
 # Secrets of credential keys created from the manifest: the migration service writes them, a platform's bootstrap reads them.
 chown 1654:1654 /integration-secrets && chmod 700 /integration-secrets
 echo "bootstrap: certificates and secrets ready"
+# How sign-in is set up. The bootstrap has no network and cannot see whether setup was finished, so this is printed on
+# every run.
+if [ -n "${UME_OIDC_AUTHORITY:-}" ]; then
+  echo "bootstrap: sign-in to the admin console is declared by the stack's variables (UME_OIDC_AUTHORITY), so the setup wizard stays closed: sign in at https://$ADMIN_HOST:${UME_ADMIN_PORT:-9443}/ (behind a reverse proxy https://$ADMIN_HOST/)"
+else
+  echo "bootstrap: sign-in to the admin console is set in the setup wizard: https://$ADMIN_HOST:${UME_ADMIN_PORT:-9443}/setup (behind a reverse proxy https://$ADMIN_HOST/setup), with the setup code from the adminapi container's log (printed at its first start, and after a new UME_SETUP_REOPEN); skip this if you can already sign in"
+fi
+case ",${COMPOSE_PROFILES:-}," in
+  *,data,*) [ -n "${UME_DATA_AUTHORITY:-}${UME_OIDC_AUTHORITY:-}" ] ||
+    note "the Data API has no token issuer (UME_DATA_AUTHORITY, else UME_OIDC_AUTHORITY), so it accepts only Data API keys; the setup wizard's provider does not apply to it" ;;
+esac
+[ -z "$notes" ] || printf '%s\n' "${notes#?}"

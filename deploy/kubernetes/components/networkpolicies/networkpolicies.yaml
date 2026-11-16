@@ -81,7 +81,8 @@ spec:
         - podSelector:
             matchLabels: {app.kubernetes.io/name: ume-llm-gateway, app.kubernetes.io/component: redis}
       ports: [{protocol: TCP, port: 6379}]
-    # The IdP (back channel), model discovery at the providers, models.dev, prices.azure.com, api.github.com.
+    # The IdP (back channel, also the provider tested in the setup wizard), model discovery at the providers, models.dev,
+    # prices.azure.com, api.github.com.
     # change: add the port of an IdP or on-prem provider that is not on 443, and the OTLP collector (4317).
     - ports: [{protocol: TCP, port: 443}]
 ---

@@ -260,8 +260,11 @@ chatbot's model picker and the check on save.
   `null` when not set.
 - `oidc_authority` (feature `oidc-authority`) is `Gateway:OidcAuthority` (optional): the address of the sign-in
   provider the admin console uses. A platform that signs its users in through the same provider takes it from here
-  instead of a setting of its own. It is the provider's public address, never a client id or secret; `null` when not
-  set. The Compose files and the Portainer stack pass `UME_OIDC_AUTHORITY` to the gateway for it.
+  instead of a setting of its own. It is the provider's public address, never a client id or secret. The Compose files
+  and the Portainer stack pass `UME_OIDC_AUTHORITY` to the gateway for it. When the option is empty, it is the authority
+  stored in the admin console's sign-in settings (setup mode), read with the catalogue like `organisation_name` (only an
+  absolute https address; the gateway's database role can read that column of the sign-in settings and no other).
+  `null` when neither is set.
 - `organisation_name` (feature `organisation-name`) is the organisation's name from the admin console's branding
   (*Settings*), so a platform can show it without keeping a copy; `null` when the name is empty. The gateway reads only
   that column with its catalogue (never the logo), and a change reaches it at once through the `Config` invalidation.

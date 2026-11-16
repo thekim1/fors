@@ -12,6 +12,74 @@
   the address of the provider the admin console signs in through, so a platform that uses the same provider keeps no
   copy. The Compose files and the Portainer stack set it from `UME_OIDC_AUTHORITY`. Contract:
   `docs/openapi/integrations.json` (an addition).
+- **Sign-in values can be stored in the database** (thekim1/llmgateway#100, first step of setup mode). The admin
+  console's authority, client id, client secret, claim names and extra scopes each come from the deployment's `Oidc:*`
+  (an empty value counts as unset), else from the new table `SignInSettings`, else the defaults; `GET
+  /api/settings/sign-in` (gateway admins) shows every value with its source and of the client secret only whether it is
+  set and when. A stored secret is encrypted with Data Protection under a purpose of its own; one the key ring cannot read
+  is reported as `unreadable` and makes sign-in not configured. Nothing writes the table yet (setup mode will); the role
+  groups stay deployment values. The admin API now builds its OpenID Connect options from these values and rebuilds them
+  at the next sign-in when they change, in the database or the configuration, on every instance without a restart. It
+  starts without an authority: `/bff/user` then reports `signIn.configured: false` and `/bff/login` answers `409`
+  `sign_in_not_configured`; a set `Oidc:Authority` that is not an absolute https URL (http in Development) stops the start.
+  Every challenge outside `/api` is now sent to `/bff/login`. A sign-in callback that cannot be completed redirects to
+  `/?signin=failed` instead of failing with 500, with the new security event `admin.signin.failed` (2007).
+  `/v1/ume/context`'s `gateway.oidc_authority` falls back to the stored authority when `Gateway:OidcAuthority` is empty;
+  the gateway's database role may read only that column of `SignInSettings`. Migration `SignInSettings`; `app-roles.sql`
+  creates the row and grants the roles. Existing deployments, which set `Oidc:*`, sign in as before.
+- **The sign-in paths are bounded for anonymous callers** (thekim1/llmgateway#100, review of #103). The sign-in start,
+  the callback and the sign-out read the sign-in values at most once every 2 seconds per instance (requests arriving
+  together share one read), instead of once per request. A callback with a setup test's state answers 404 without a
+  read while setup is closed, and is limited to 20 a minute per client address while it is open (429). Completing
+  setup also compares the claim mapping the test ran with (claim names, role groups) with the one in force
+  (`values_changed`). On Kubernetes, a deployment that declares `Oidc__Authority` sets `Gateway__OidcAuthority` too.
+- **Setup mode in the admin API** (thekim1/llmgateway#100, second step; the wizard's pages follow). The admin console's
+  sign-in can be set in a browser wizard under `/bff/setup` ([admin-api.md](docs/admin-api.md#setup-mode-bffsetup),
+  [identity and roles](docs/identity-and-roles.md#setup-mode)): a setup code printed on the admin API's standard output
+  (never through the logger) gives a 30-minute setup session; `POST /bff/setup/test` runs a real sign-in at the candidate
+  provider with the candidate client in the same browser; `POST /bff/setup/complete` saves the values only after a passed
+  test, with exactly those values, by a person who comes out as `gateway-admin`, and closes setup. Setup is an explicit
+  state (migration `SetupMode`: setup columns on `SignInSettings`, which the migration now creates, and the tables
+  `SetupSessions` and `SetupTests`), open only before its first completion and after a re-open (`Setup:Reopen`, consumed when
+  setup opens), for one hour; a fault never opens it. **A deployment that sets `Oidc:Authority` counts as completed**: it
+  never prints a code and `/bff/setup` answers 404, so existing deployments are unchanged and need no new setting. Setup mode
+  needs the new optional setup secret (`Setup:Secret`, a generated file or variable of at least 32 characters). Wrong codes
+  are throttled (20 a minute per instance), never counted towards a lock, and the right code is never refused. A stored or deployment client secret is sent only to
+  the provider it belongs to. `/bff/user` gains `setup.open`; `GET /api/settings/sign-in` gains `locked` per value. New
+  security events `admin.setup.opened`, `admin.setup.code_refused`, `admin.setup.session`, `admin.setup.test` and
+  `admin.setup.completed` (2008–2012). `app-roles.sql` grants the admin role the new columns and tables; the gateway role
+  reads none of them. The AppHost's `Setup:Try` opens setup locally ([local development](docs/local-development.md#trying-setup-mode)).
+- **The setup wizard in the admin console** (thekim1/llmgateway#100, third step). `/setup` opens without a session,
+  outside the menu ([admin UI](docs/admin-ui.md#setup-wizard)): the setup code (with where to find it, and the attempt
+  limit's countdown), the redirect URIs to register at the provider (with copy buttons) and who can save, the sign-in values
+  (a value the deployment sets is read-only, each says where it comes from; the client secret is write-only: keep the stored
+  one, a public client, or type a new one, with an optional expiry date), the test sign-in in a window of its own (a link
+  when pop-ups are blocked; it ends on `/setup?test=done`, which tells the wizard and closes), its result (who signed in,
+  roles, groups, and whether they are a gateway admin, with what to change if not) and Save, offered only for a passed
+  test by a gateway admin with the values unchanged since. The code and a typed secret live only in the page's memory.
+  The sign-in page offers the wizard while setup is open, says how to set sign-in up instead of offering a sign-in that
+  would be refused, and explains `/?signin=failed`. **Settings › Sign-in** shows the values with their sources, read only.
+  The API client reads `Retry-After` and keeps a setup session's 401 apart from the admin session.
+- **Deployment: setup mode in every deploy form** (thekim1/llmgateway#100). `UME_OIDC_AUTHORITY` is optional in
+  `compose.prod.yaml`, `compose.hardening.yaml` and the Portainer stack, and `Oidc__Authority` in the Kubernetes example:
+  set, the sign-in is declared and setup never opens; unset, a new deployment starts for the wizard. A new Portainer stack
+  needs only `UME_DOMAIN` (the release asset pins the images), and its bootstrap's last line names the wizard's address
+  or says sign-in is declared. The Portainer bootstrap and `init-deployment.sh` generate the admin API's setup secret
+  (`Setup__Secret`) once; `create-secrets.sh` carries it to Kubernetes. The new optional `UME_SETUP_REOPEN`
+  (`Setup__Reopen`) re-opens setup. `init-deployment.sh` no longer requires `--oidc-authority` (an interactive first run
+  asks once), keeps the authority, the client id and `UME_SETUP_REOPEN` from `deploy/.env` on a re-run, refuses
+  `--oidc-client-secret-file` without the authority, and its closing notes say where the setup code is; `deploy.sh` says
+  when setup mode is open. A deployment client
+  secret is written only with the authority (`deployment_secret_without_authority`). The client id and claim names are
+  passed only when set, so they no longer lock the wizard's fields; the code's defaults are the old files' defaults, and
+  the old `email` default of `UME_OIDC_EXTRA_SCOPE` is requested anyway. The Data API's token issuer stays
+  `UME_DATA_AUTHORITY`, else `UME_OIDC_AUTHORITY`, never the wizard's. The Portainer stack no longer puts a
+  required-variable form inside a default (`UME_GATEWAY_HOST`, `Gateway__BaseUrl`), which some Compose versions evaluated
+  even with the outer variable set. CI renders every Compose file with and without the authority and runs the bootstrap
+  and `init-deployment.sh` twice (`deploy/tests/setup-mode-deploy.sh`); *Deploy end to end* boots a new Portainer stack
+  into setup mode (`deploy/tests/setup-mode-boot.sh`); the release smoke test checks that a declared deployment prints no
+  code. **Existing deployments change nothing:** they set the authority, so setup counts as completed at the first start.
+  Step by step per deploy form: [upgrade guide](docs/upgrade-guide.md#unreleased).
 - **An integration manifest may leave out the owner, and an integration can move to another team with its credential
   keys** (thekim1/llmgateway#101). No migration. **Rolling update: yes.** **Changed behaviour** for `PUT /api/integrations/{id}`.
   `integration.owner` is optional (schema version 1, an addition): a new integration from a manifest without one gets a

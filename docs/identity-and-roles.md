@@ -111,11 +111,13 @@ out ends the session, also for a copied cookie.
 
 Register one client (in the examples called `ume-admin`):
 
-- **Flow**: authorization code with PKCE (S256). A client secret is optional; with one, pass it to `init-deployment.sh`
-  with `--oidc-client-secret-file`, where it becomes the `Oidc__ClientSecret` secret file.
+- **Flow**: authorization code with PKCE (S256). A client secret is optional; with one, enter it in the
+  [setup wizard](#setup-mode), or declare it with the authority: `init-deployment.sh --oidc-authority ...
+  --oidc-client-secret-file`, where it becomes the `Oidc__ClientSecret` secret file (Portainer: `UME_OIDC_CLIENT_SECRET`).
 - **Redirect URI**: `https://<admin host>/signin-oidc`
 - **Post-logout redirect URI**: `https://<admin host>/signout-callback-oidc`
-- **Scopes**: `openid`, `profile` and `email` are always requested; add one more with `UME_OIDC_EXTRA_SCOPE`.
+- **Scopes**: `openid`, `profile` and `email` are always requested; add one more with `UME_OIDC_EXTRA_SCOPE` (or the
+  wizard's extra scopes).
 - **Sign-out**: the provider's discovery document must have an `end_session_endpoint`.
 
 And these claims **in the ID token** (not only in the access token):
@@ -131,7 +133,9 @@ And these claims **in the ID token** (not only in the access token):
 ### Claim mapping
 
 If the provider cannot issue claims with exactly those names and values, map them in the gateway instead of changing the
-provider. Set them in `deploy/.env` (for local runs, the same keys as `Oidc:<Setting>` in AppHost user secrets):
+provider: in the setup wizard (it takes the claim names and extra scope too), or in `deploy/.env` (the Portainer stack's variables; for local runs,
+the same keys as `Oidc:<Setting>` in AppHost user secrets), which wins and locks the wizard's field. The role groups are
+deployment values only:
 
 | Env variable | Setting | Default | Purpose |
 |---|---|---|---|
@@ -143,7 +147,7 @@ provider. Set them in `deploy/.env` (for local runs, the same keys as `Oidc:<Set
 | `UME_OIDC_GROUPS_DEPARTMENT_ADMIN` | `Oidc:RoleGroups:department-admin` | | As above |
 | `UME_OIDC_GROUPS_VIEWER` | `Oidc:RoleGroups:viewer` | | As above |
 | `UME_OIDC_GROUPS_TEAM_ADMIN` | `Oidc:RoleGroups:team-admin` | | As above |
-| `UME_OIDC_EXTRA_SCOPE` | `Oidc:ExtraScopes:0` | `email` | One more scope to request, for example `groups` or `allatclaims` |
+| `UME_OIDC_EXTRA_SCOPE` | `Oidc:ExtraScopes:0` | none | One more scope to request, for example `groups` or `allatclaims` |
 
 Group mapping means you do not need roles in the identity provider at all: put people in AD groups and list the groups.
 For example, `UME_OIDC_GROUPS_GATEWAY_ADMIN=GG-Llm-Admins` and `UME_OIDC_GROUPS_VIEWER=GG-Llm-Readers;GG-Economy`.
@@ -156,6 +160,93 @@ The admin API reads the group claim only to derive roles and team codes and does
 `GG-Llm-Team-Kontaktcenter`) and list the groups whose members are team admins in `UME_OIDC_GROUPS_TEAM_ADMIN`, or
 list the team groups themselves there to make every member a team admin. Every group then counts as a team code, but
 only codes that a team has grant anything.
+
+### Sign-in values in the database
+
+The authority, client id, client secret, claim names and extra scope can also be stored in the database instead of the
+deployment ([setup mode](#setup-mode) in the admin console sets them). Each value comes from the deployment's
+`Oidc:*` setting when that is set (an empty value, as Compose passes an unset variable, counts as unset), else from the
+database, else from the defaults in the table above; *Settings* shows each value's source (`GET /api/settings/sign-in`).
+The role groups (`Oidc:RoleGroups:*`) are always deployment values. A stored client secret is encrypted with the shared
+Data Protection key ring and never shown; if the key ring cannot read it (a replaced certificate without the old one), the
+admin API logs why and refuses sign-in as not configured rather than signing in without it. A change, stored or in the
+deployment, applies to the next sign-in on every admin API instance without a restart; sessions already open stay valid.
+Without any authority the admin API still starts, and a sign-in answers `409 sign_in_not_configured`.
+
+### Setup mode
+
+Setup mode sets the sign-in values above in a browser wizard (the admin console's `/setup`), so a deployment need not type
+the authority, client id or client secret into its variables. The API is in [admin-api.md](admin-api.md#setup-mode-bffsetup).
+
+- **Setup is an explicit state** in the database, open only before its first completion and after a re-open, for one hour
+  from its opening. Nothing else opens it: a missing settings row, a stored secret the key ring cannot read, a deployment
+  value that was removed or a restored database leaves it closed, the admin API logs why, and sign-in is refused as not
+  configured until it is fixed (by the deployment's values, or by re-opening). The one exception: a database restored from
+  before the last re-open, while `Setup:Reopen` still holds the newer value, opens setup once more for an hour. Empty the
+  variable before a restore.
+- **A declared deployment never sees the wizard.** A deployment that sets `Oidc:Authority` (`UME_OIDC_AUTHORITY`) declares
+  its sign-in: at its start setup counts as completed, no setup code is printed and `/bff/setup` answers 404. The default
+  client `ume-admin` is public, so a client secret cannot tell; every deployment before setup mode sets the authority, so an
+  upgrade changes nothing. A deployment that should use the wizard leaves the authority unset.
+- **The setup code** is printed on the admin API's standard output while setup is open, with the wizard's address and when
+  it expires: `adminapi: setup mode is open until … Setup code: XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX`. Read it in the container's log
+  (`docker compose logs adminapi`, Portainer's log view, `kubectl logs`); every instance prints the same code, because it is
+  an HMAC of the setup secret (`Setup__Secret`, generated by the deployment) over a nonce in the database. It never goes
+  through the logger, so it is not in the OTLP export (a collector that ships container output would carry it; it is void
+  once setup closes). Without a setup secret there is no setup mode: the admin API logs an error and setup stays closed. The
+  code is worth a gateway admin while setup is open, since its holder chooses the identity provider.
+- **Wrong codes are throttled, never counted**: after 20 wrong codes in a minute an instance answers further wrong ones
+  `429`, on top of the per-address limit. The code is compared first, so the right code always gives a session at once: a
+  flood of wrong codes cannot keep the deployer out, and nothing is stored. 128 bits need no hard stop. Wrong codes are a
+  sampled security event.
+- **A test sign-in before saving.** The wizard sends the candidate values; the admin API checks the provider's discovery
+  document and keys (`https` only outside Development, no redirects, nothing of the answer returned) and starts a real
+  authorization-code sign-in with PKCE at the candidate provider with the candidate client and the admin API's own redirect
+  URI (`/signin-oidc`, so nothing extra is registered). The callback must come from the browser that started the test (a
+  cookie binds it). It exchanges the code, validates the id token and runs the same claim mapping as a real sign-in, with
+  the candidate's claim names and the deployment's role groups. The wizard shows who signed in, the roles, groups and
+  departments, and whether the person comes out as a `gateway-admin`. A failure names the step, never the provider's answer.
+- **Whose secret goes where.** A stored client secret is sent only to the provider and client it was stored for; for another
+  authority or client id the secret is typed again (or an empty one given, for a public client). A deployment's
+  `Oidc:ClientSecret` goes only to the deployment's own authority. Both are checked again before the token request.
+- **Saving** needs a passed test with exactly the saved values by a person who came out as a gateway admin. Values the
+  deployment sets are not stored, so a stale stored authority never sits beside a deployment one. Setup is then completed
+  and closed; the audit entry names the tested person (whoever the chosen provider says signed in), with the setup session
+  as its session.
+- **Afterwards** the provider, client and secret change only in setup mode, never from an admin session: there is no write
+  route under `/api`. To re-open, give `Setup:Reopen` (`UME_SETUP_REOPEN`) a new value, for example today's date, and restart
+  the admin API: setup opens once, for an hour, with a new code; the value is consumed then, so a restart with the same value
+  opens nothing. While it is open the existing sign-in keeps working. Or set the value in the deployment, which always wins.
+- **In the deploy forms** (the Portainer stack, `init-deployment.sh` with `compose.prod.yaml`, Kubernetes): without
+  `UME_OIDC_AUTHORITY` (`Oidc__Authority`) a new deployment starts for the wizard; each form generates the setup secret
+  and passes `UME_SETUP_REOPEN` (`Setup__Reopen`). Where the code is and what to check:
+  [runbook](runbook.md#first-start-without-an-authority-the-setup-wizard); upgrading: [upgrade guide](upgrade-guide.md#unreleased).
+- Security events `admin.setup.opened`, `admin.setup.code_refused`, `admin.setup.session`, `admin.setup.test` and
+  `admin.setup.completed` (2008–2012, [data-access.md](data-access.md)) record each step with the address.
+
+**What the setup code is worth, and what is accepted** (an independent security review of the implementation, 2026-11-16):
+
+- **The code is a gateway-admin credential for the hour.** Its holder chooses the identity provider, and on a re-open with
+  a provider the deployment sets, the claim names it does not set; either can make the holder a gateway admin. That is the
+  design: the code is read from the container's output, which only someone with access to the host or its logs has. Treat
+  that output as you treat the deployment's secrets, finish setup soon after the admin API starts, and watch for
+  `admin.setup.session` events you did not cause. A deployment that sets `Oidc:Authority` never opens setup unless `Setup:Reopen` is used. Sessions
+  signed in before a change of provider stay valid until they end (`Admin:MaxSessionHours`).
+- **A code holder can make the admin API call an `https` address of their choice** (the candidate's discovery document, keys
+  and token endpoint) and learn whether it answered, from the failure's step. Nothing of an answer comes back, no redirect is
+  followed, and only hosts with a certificate the admin API trusts get past the TLS step.
+- **Anyone can send requests to the sign-in paths** (`/bff/login`, the callback `/signin-oidc`, `/bff/logout`), so they
+  are bounded before anything is signed in. The admin API reads the sign-in values for them at most once every 2
+  seconds per instance, however many requests arrive; an instance other than the one that completed setup therefore
+  follows a change of the values within 2 seconds. A callback that claims to be a setup test's answers 404 with nothing
+  more read while setup is closed, and while it is open at most 20 a minute per client address reach the database
+  (`429` beyond that).
+- **A passed test stands for the claim mapping it ran with** (the claim names and the deployment's role groups, besides
+  the values): if those differ when setup is completed, for example during a rolling change of `Oidc:RoleGroups`, the
+  answer is `values_changed` and the test is run again.
+- **A restored or emptied database can open setup again** on a deployment that does not set the authority: a backup from
+  before setup was completed, an emptied database, or a backup older than the `Setup:Reopen` value still in the deployment.
+  Only a new code is printed. Empty `Setup:Reopen` before a restore, and complete setup or set the authority afterwards.
 
 ## Keycloak
 
@@ -180,7 +271,9 @@ development realm `dev/keycloak/ume-realm.json` is a working example too.
    `departmentCodes`, multivalued, *Add to ID token* on.
    **Team codes** work the same way: a user attribute `teamCodes` (declared in the user profile) and a *User Attribute*
    mapper to the claim `teamCodes`. Or use groups, see [Claim mapping](#claim-mapping).
-5. **Gateway.**
+5. **Gateway.** Enter the authority `https://keycloak.example.se/realms/<realm>`, the client id and, for a
+   confidential client, the secret in the [setup wizard](#setup-mode), which shows the redirect URIs of step 1 and tests
+   the sign-in. Or declare them:
    ```bash
    UME_OIDC_AUTHORITY=https://keycloak.example.se/realms/<realm>
    UME_OIDC_CLIENT_ID=ume-admin
@@ -203,12 +296,14 @@ development realm `dev/keycloak/ume-realm.json` is a working example too.
    sign-on → Attributes & Claims* add a claim named `departmentCodes` with that attribute as source. For the claim to be
    issued without a custom signing key, set `"acceptMappedClaims": true` in the app registration's *Manifest*. If the
    claim gets another name, set `UME_OIDC_DEPARTMENT_CLAIM` to it.
-5. **Gateway.**
+5. **Gateway.** Enter the authority `https://login.microsoftonline.com/<tenant id>/v2.0`, the application (client) id
+   and the client secret in the [setup wizard](#setup-mode). Or declare them:
    ```bash
    UME_OIDC_AUTHORITY=https://login.microsoftonline.com/<tenant id>/v2.0
    UME_OIDC_CLIENT_ID=<application (client) id>
    ```
-   and the secret with `init-deployment.sh --oidc-client-secret-file <file>`.
+   and the secret with `init-deployment.sh --oidc-client-secret-file <file>` (Portainer: `UME_OIDC_CLIENT_SECRET`). The
+   secret's expiry date can be noted in the wizard as a reminder.
 
 Prefer app roles to the `groups` claim: Entra puts group object ids (not names) in it, and replaces the list with a link
 when a user is in more than 200 groups. If you use groups anyway, list the object ids in `UME_OIDC_GROUPS_*`.
@@ -230,7 +325,8 @@ AD FS 2016 or later.
      cost-centre code (for example `departmentNumber`) → outgoing type `departmentCodes` (typed in by hand).
    - Or, instead of groups: *Send Group Membership as a Claim*, one rule per role: the AD group, outgoing type `Role`,
      value `gateway-admin` (and so on). Then set `UME_OIDC_ROLE_CLAIM=role` and leave the group settings empty.
-4. **Gateway.**
+4. **Gateway.** Enter the authority, client identifier, shared secret, the scope `allatclaims` and the group claim in the
+   [setup wizard](#setup-mode); the role groups are always deployment values. Or declare them all:
    ```bash
    UME_OIDC_AUTHORITY=https://adfs.example.se/adfs
    UME_OIDC_CLIENT_ID=ume-admin

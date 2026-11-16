@@ -155,7 +155,8 @@ an instance metadata service for providers (`ProviderAuthMode` in `src/Ume.LlmGa
 
 | Destination | Port / protocol | Purpose | When | Configured in |
 |---|---|---|---|---|
-| OIDC provider (`Oidc:Authority`) | 443 HTTPS | **Back-channel:** discovery document, signing keys (JWKS), the token endpoint (authorization code with PKCE is redeemed by the admin API, not the browser) | Always | `UME_OIDC_AUTHORITY` → `Oidc__Authority` |
+| OIDC provider (`Oidc:Authority`, or the one saved in setup mode) | 443 HTTPS, or the port in the authority | **Back-channel:** discovery document, signing keys (JWKS), the token endpoint (authorization code with PKCE is redeemed by the admin API, not the browser) | Always | `UME_OIDC_AUTHORITY` → `Oidc__Authority`, else the setup wizard (stored in the database) |
+| The provider being tested in setup mode | 443 HTTPS, or the port in the candidate authority | The wizard's test sign-in: the candidate's discovery document, keys and token endpoint (no redirect followed, nothing returned) | While setup mode is open and someone runs a test | Typed in the wizard: allow the provider you intend to use **before** running the wizard |
 | Gateway operations endpoint | 8443 HTTPS, `https://gateway:8443` on the internal `edge` network | Health, version and usage-writer state for *Operations* (signed request) | Always | `Gateway__OperationsUrl` (`UME_GATEWAY_OPERATIONS_URL`; with PKI certificates the gateway's public URL, so the admin API must reach the proxy) |
 | Each configured provider's host | 443 or the base URL's port | **Discover models** (lists the provider's models with its credential) | When an admin uses discovery | Admin UI, *Providers* |
 | `models.dev` | 443 HTTPS | Model list prices, once a day | On by default; empty `Admin:PriceListUrl` turns it off, or point it at an internal copy | `Admin:PriceListUrl` (default `https://models.dev/api.json`) |
@@ -171,7 +172,7 @@ and add Foundry prices by hand ([providers and models](providers-and-models.md#l
 
 | Destination | Port / protocol | Purpose | When | Configured in |
 |---|---|---|---|---|
-| Token issuer (`DataApi:Authority`) | 443 HTTPS | **Back-channel:** discovery and JWKS to validate client-credentials tokens | When an authority is set (defaults to `UME_OIDC_AUTHORITY`); not needed with Data API keys only | `UME_DATA_AUTHORITY` → `DataApi__Authority` |
+| Token issuer (`DataApi:Authority`) | 443 HTTPS | **Back-channel:** discovery and JWKS to validate client-credentials tokens | When an authority is set (defaults to `UME_OIDC_AUTHORITY`, never to the provider saved in the setup wizard); not needed with Data API keys only | `UME_DATA_AUTHORITY` → `DataApi__Authority` |
 | Postgres | 5432 | Read-only role `ume_data` | Always | Secret file |
 | OpenTelemetry Collector | As above | Telemetry, `data.read` events | Only if set | `UME_OTEL_ENDPOINT` |
 
@@ -292,8 +293,11 @@ NetworkPolicy (the component's `ume-postgres`) is what keeps other pods out.
 ### (d) The Keycloak project on the same host, or an external OIDC provider
 
 **External OIDC provider** (Keycloak elsewhere, Entra ID, AD FS): nothing listens for it on the gateway host. The admin API
-needs back-channel egress to `UME_OIDC_AUTHORITY` on 443, the admins' browsers need to reach it, and the Data API needs
-egress to `UME_DATA_AUTHORITY` when it takes tokens. Authority URLs: `https://<keycloak>/realms/<realm>`,
+needs back-channel egress to `UME_OIDC_AUTHORITY` (or the provider entered in the setup wizard) on 443, the admins'
+browsers need to reach it, and the Data API needs egress to `UME_DATA_AUTHORITY` when it takes tokens. No deploy file
+pins the provider's host: the Compose `edge` network and the Kubernetes NetworkPolicies allow outbound 443 to any address,
+so an egress firewall or proxy is where the provider's host is allowed; with setup mode, allow it before the wizard's test,
+or the test fails with `authority_unreachable`. Authority URLs: `https://<keycloak>/realms/<realm>`,
 `https://<adfs>/adfs`, `https://login.microsoftonline.com/<tenant>/v2.0`
 ([runbook](runbook.md#identity-provider-existing-keycloak-ad-fs-entra-id-active-directory)).
 
@@ -376,7 +380,8 @@ DENY   any                      -> <gateway host>:8443-8444,9443-9444,10443,1144
 ALLOW  <gateway host> -> <provider host>:443                TCP  HTTPS/WSS   each configured provider, incl. all three
                                                                              Foundry host names of a resource
 ALLOW  <gateway host> -> <on-prem model server>:<port>      TCP  HTTPS/WSS   on-prem providers, guard model
-ALLOW  <gateway host> -> <OIDC authority host>:443          TCP  HTTPS       admin API and Data API back-channel
+ALLOW  <gateway host> -> <OIDC authority host>:443          TCP  HTTPS       admin API and Data API back-channel (also the
+                                                                             provider tested in the setup wizard)
 ALLOW  <gateway host> -> models.dev:443                     TCP  HTTPS       list prices (or Admin__PriceListUrl=)
 ALLOW  <gateway host> -> prices.azure.com:443               TCP  HTTPS       Foundry price suggestions
 ALLOW  <gateway host> -> api.github.com:443                 TCP  HTTPS       release check (or Admin__CheckForReleases=false)

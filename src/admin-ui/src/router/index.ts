@@ -12,6 +12,8 @@ declare module 'vue-router' {
     roles?: Role[]
     /** Shows usage data: closed to a team admin without a reading role. */
     readsUsage?: boolean
+    /** Open without a session, outside the shell (the setup wizard). */
+    public?: boolean
   }
 }
 
@@ -39,6 +41,8 @@ export const routes: RouteRecordRaw[] = [
   { path: '/budgets', name: 'budgets', component: () => import('@/views/BudgetsView.vue'), meta: { title: 'Budgets & alerts', roles: ADMIN_ROLES } },
   { path: '/audit', name: 'audit', component: () => import('@/views/AuditView.vue'), meta: { title: 'Audit log', roles: GATEWAY_ADMIN } },
   { path: '/settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: 'Settings', roles: GATEWAY_ADMIN } },
+  // Setup mode (docs/admin-ui.md, "Setup wizard"): before sign-in, outside the shell. `?test=done` is where the test sign-in's window ends.
+  { path: '/setup', name: 'setup', component: () => import('@/views/SetupView.vue'), meta: { title: 'Set up sign-in', public: true } },
   { path: '/forbidden', name: 'forbidden', component: () => import('@/views/ForbiddenView.vue'), meta: { title: 'No access' } },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue'), meta: { title: 'Page not found' } },
 ]
@@ -88,6 +92,7 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
   router.beforeEach(async (to) => {
     const auth = useAuthStore()
     await auth.ensureLoaded()
+    if (to.meta.public) return true
     // Signed-out users see the sign-in page rendered by App.vue regardless of route.
     if (!auth.isAuthenticated) return true
     // A team admin's start page is their keys.
