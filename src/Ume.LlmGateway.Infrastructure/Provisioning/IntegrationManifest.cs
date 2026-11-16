@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -85,7 +86,11 @@ public sealed record IntegrationManifest
             Length(errors, "integration.description", integration.Description, 1000);
             if (integration.Owner is not { } owner)
             {
-                errors.Add("'integration.owner' is required.");
+                // Without an owner a new integration gets a default one, whose codes are made from the name.
+                if (ManifestNames.IsValid(integration.Name, 100) && ManifestOwner.DefaultCode(integration.Name!) is { Length: 0 or > ManifestOwner.MaxDefaultCodeLength } code)
+                {
+                    errors.Add($"'integration.owner' is required for this name: the default owner's code made from 'integration.name' ('{code}') must be 1-{ManifestOwner.MaxDefaultCodeLength} characters.");
+                }
             }
             else
             {
@@ -162,6 +167,8 @@ public sealed record ManifestIntegration
 {
     public string? Name { get; init; }
     public string? Description { get; init; }
+
+    /// <summary>Optional: without it a new integration gets <see cref="ManifestOwner.Default"/>, and an existing one keeps its owner.</summary>
     public ManifestOwner? Owner { get; init; }
 }
 
@@ -171,10 +178,46 @@ public sealed record ManifestIntegration
 /// </summary>
 public sealed record ManifestOwner
 {
+    /// <summary>The longest default code: a department's cost centre code holds 50 characters.</summary>
+    public const int MaxDefaultCodeLength = 50;
+
     public string? TeamCode { get; init; }
     public string? TeamName { get; init; }
     public string? DepartmentCode { get; init; }
     public string? DepartmentName { get; init; }
+
+    /// <summary>
+    /// The owner of an integration whose manifest names none: a team and a department of its own, both with the code
+    /// <see cref="DefaultCode"/> and the integration's name, which a gateway admin can move to the organisation's own team.
+    /// </summary>
+    public static ManifestOwner Default(string integrationName) => new()
+    {
+        TeamCode = DefaultCode(integrationName), TeamName = integrationName,
+        DepartmentCode = DefaultCode(integrationName), DepartmentName = integrationName,
+    };
+
+    /// <summary>
+    /// The name in lower case with its ASCII letters and digits kept and every other run of characters one <c>-</c>, trimmed
+    /// of <c>-</c>: "My.Platform" gives "my-platform", "My__Platform-2" gives "my-platform-2".
+    /// </summary>
+    public static string DefaultCode(string integrationName)
+    {
+        ArgumentNullException.ThrowIfNull(integrationName);
+        var code = new StringBuilder(integrationName.Length);
+        foreach (var c in integrationName.Trim())
+        {
+            if (char.IsAsciiLetterOrDigit(c))
+            {
+                code.Append(char.ToLowerInvariant(c));
+            }
+            else if (code.Length > 0 && code[^1] != '-')
+            {
+                code.Append('-');
+            }
+        }
+
+        return code.ToString().TrimEnd('-');
+    }
 }
 
 /// <summary>A credential key of the integration and the settings it is created with.</summary>

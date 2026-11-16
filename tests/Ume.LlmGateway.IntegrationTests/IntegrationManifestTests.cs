@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Migration::Ume.LlmGateway.MigrationService;
 using Testcontainers.PostgreSql;
 using Ume.LlmGateway.Domain;
+using Ume.LlmGateway.Domain.Entities;
 using Ume.LlmGateway.Domain.Keys;
 using Ume.LlmGateway.Infrastructure.Auditing;
 using Ume.LlmGateway.Infrastructure.Persistence;
@@ -60,6 +61,11 @@ public sealed class IntegrationManifestTests(ManifestDatabase database) : IClass
         }
         """;
 
+    /// <summary>The shortest manifest that works: no owner, so a new integration gets one made from its name.</summary>
+    private static string Ownerless(string integration) => $$"""
+        { "schemaVersion": 1, "integration": { "name": "{{integration}}" }, "credentialKeys": [{ "name": "api" }] }
+        """;
+
     private static string Unique(string prefix) => prefix + "-" + Guid.NewGuid().ToString("N")[..8];
 
     [Theory]
@@ -72,8 +78,27 @@ public sealed class IntegrationManifestTests(ManifestDatabase database) : IClass
     [InlineData("""{ "schemaVersion": 1, "integration": { "name": "x", "owner": { "teamCode": "t" } }, "credentialKeys": [{ "name": "a", "allowedIpRanges": ["nope"] }] }""", "allowedIpRanges")]
     [InlineData("""{ "schemaVersion": 1, "integration": { "name": "x", "owner": { "teamCode": "t" } }, "credentialKeys": [{ "name": "a", "allowedResidencies": ["Mars"] }] }""", "not valid")]
     [InlineData("""{ "schemaVersion": 1, "integration": { "name": "x", "owner": { "teamCode": "t" } }, "credentialKeys": [{ "name": "a", "scopes": [] }] }""", "not valid")]
+    // A name whose default owner code would not fit a department's cost centre code (50 characters) needs an owner.
+    [InlineData("""{ "schemaVersion": 1, "integration": { "name": "Platform-with-a-name-far-too-long-for-a-department-code" } }""", "'integration.owner' is required for this name")]
     public void A_manifest_that_cannot_be_applied_names_the_problem(string json, string expected) =>
         Should.Throw<ManifestException>(() => IntegrationManifest.Parse(json)).Message.ShouldContain(expected);
+
+    [Theory]
+    [InlineData("Ume.Rag", "ume-rag")]
+    [InlineData("My__Platform-2", "my-platform-2")]
+    [InlineData("A.-_b", "a-b")]
+    [InlineData("x-", "x")]
+    [InlineData("RAG", "rag")]
+    public void The_default_owner_code_is_the_name_in_lower_case_with_one_dash_between_letters_and_digits(string name, string code)
+    {
+        ManifestOwner.DefaultCode(name).ShouldBe(code);
+        var owner = ManifestOwner.Default(name);
+        (owner.TeamCode, owner.TeamName, owner.DepartmentCode, owner.DepartmentName).ShouldBe((code, name, code, name));
+    }
+
+    [Fact]
+    public void A_manifest_without_an_owner_is_valid() =>
+        IntegrationManifest.Parse(Ownerless("Ume.Rag")).Integration!.Owner.ShouldBeNull();
 
     [Fact]
     public async Task The_first_apply_creates_owner_integration_and_keys_with_an_audit_entry_each()
@@ -173,6 +198,97 @@ public sealed class IntegrationManifestTests(ManifestDatabase database) : IClass
         error.Message.ShouldContain("teamName");
         await using var read = database.Context();
         (await read.Integrations.AnyAsync(i => i.Name == name, Ct)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Without_an_owner_a_new_integration_gets_a_team_and_department_made_from_its_name_and_the_result_says_so()
+    {
+        var name = Unique("Ume.Rag");
+        var code = "ume-rag-" + name[^8..];
+        await using var db = database.Context();
+
+        var result = await database.Provisioner().ApplyAsync(db, IntegrationManifest.Parse(Ownerless(name)), "manifest:ownerless.json", Ct);
+
+        result.CreatedIntegration.ShouldBeTrue();
+        (result.DefaultOwner, result.CreatedTeam, result.CreatedDepartment).ShouldBe((true, true, true));
+        var note = result.Warnings.ShouldHaveSingleItem();
+        note.ShouldContain($"'{name}' names no owner in the manifest");
+        note.ShouldContain($"the team '{name}' (code '{code}') in the department '{name}' (code '{code}'), both created for it");
+        note.ShouldContain("A gateway admin can move it to the organisation's own team under Integrations");
+        await using var read = database.Context();
+        var integration = await read.Integrations.AsNoTracking().Include(i => i.OwnerTeam!).ThenInclude(t => t.Department).SingleAsync(i => i.Id == result.IntegrationId, Ct);
+        (integration.OwnerTeam!.Code, integration.OwnerTeam.Name).ShouldBe((code, name));
+        (integration.OwnerTeam.Department!.CostCenterCode, integration.OwnerTeam.Department.Name).ShouldBe((code, name));
+        (await read.VirtualKeys.AsNoTracking().SingleAsync(k => k.IntegrationId == integration.Id, Ct)).TeamId.ShouldBe(integration.OwnerTeamId);
+        var audit = await read.AuditLog.AsNoTracking().Where(a => a.Actor == "manifest:ownerless.json" && a.Action == AuditActions.Create).ToListAsync(Ct);
+        audit.ShouldContain(a => a.EntityType == AuditEntities.Team && a.EntityId == integration.OwnerTeamId.ToString());
+        audit.ShouldContain(a => a.EntityType == AuditEntities.Department && a.EntityId == integration.OwnerTeam.DepartmentId.ToString());
+
+        // Applied again, and after an admin moved it: no owner to compare, no warning, nothing changed.
+        await using (var again = database.Context())
+        {
+            var second = await database.Provisioner().ApplyAsync(again, IntegrationManifest.Parse(Ownerless(name)), "manifest:ownerless.json", Ct);
+            (second.CreatedIntegration, second.DefaultOwner).ShouldBe((false, false));
+            second.Warnings.ShouldBeEmpty();
+        }
+
+        var elsewhere = new Team { Name = "Elsewhere", Code = Unique("elsewhere"), DepartmentId = integration.OwnerTeam.DepartmentId, CreatedAt = DateTimeOffset.UtcNow };
+        await using (var move = database.Context())
+        {
+            move.Teams.Add(elsewhere);
+            (await move.Integrations.SingleAsync(i => i.Id == integration.Id, Ct)).OwnerTeamId = elsewhere.Id;
+            await move.SaveChangesAsync(Ct);
+        }
+
+        await using var third = database.Context();
+        var moved = await database.Provisioner().ApplyAsync(third, IntegrationManifest.Parse(Ownerless(name)), "manifest:ownerless.json", Ct);
+        moved.Warnings.ShouldBeEmpty();
+        moved.Keys.ShouldHaveSingleItem().State.ShouldBe(ProvisionedKeyState.Existing);
+        (await third.Integrations.AsNoTracking().SingleAsync(i => i.Id == integration.Id, Ct)).OwnerTeamId.ShouldBe(elsewhere.Id);
+    }
+
+    [Fact]
+    public async Task Without_an_owner_an_existing_team_with_the_default_code_is_used()
+    {
+        var name = Unique("Platform");
+        var code = ManifestOwner.DefaultCode(name);
+        Guid teamId;
+        await using (var setup = database.Context())
+        {
+            var department = new Department { Name = "IT", CostCenterCode = Unique("it"), CreatedAt = DateTimeOffset.UtcNow };
+            var team = new Team { Name = "Our platform team", Code = code, Department = department, CreatedAt = DateTimeOffset.UtcNow };
+            setup.Teams.Add(team);
+            await setup.SaveChangesAsync(Ct);
+            teamId = team.Id;
+        }
+
+        await using var db = database.Context();
+        var result = await database.Provisioner().ApplyAsync(db, IntegrationManifest.Parse(Ownerless(name)), "manifest:a", Ct);
+
+        (result.DefaultOwner, result.CreatedTeam, result.CreatedDepartment).ShouldBe((true, false, false));
+        result.Warnings.ShouldHaveSingleItem().ShouldContain($"it is placed in the existing team 'Our platform team' (code '{code}')");
+        await using var read = database.Context();
+        (await read.Integrations.AsNoTracking().SingleAsync(i => i.Id == result.IntegrationId, Ct)).OwnerTeamId.ShouldBe(teamId);
+        (await read.Departments.AnyAsync(d => d.CostCenterCode == code, Ct)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_preview_without_an_owner_says_so_and_saves_nothing()
+    {
+        var name = Unique("Platform");
+        var code = ManifestOwner.DefaultCode(name);
+        await using var db = database.Context();
+
+        var result = await database.Provisioner().ApplyAsync(db, IntegrationManifest.Parse(Ownerless(name)), "manifest:a", Ct, preview: true);
+
+        (result.IntegrationId, result.DefaultOwner, result.CreatedTeam, result.CreatedDepartment).ShouldBe((null, true, true, true));
+        result.Warnings.ShouldHaveSingleItem().ShouldContain("names no owner");
+        result.Keys.ShouldHaveSingleItem().Secret.ShouldBeNull();
+        await using var read = database.Context();
+        (await read.Integrations.AnyAsync(i => i.Name == name, Ct)).ShouldBeFalse();
+        (await read.Teams.AnyAsync(t => t.Code == code, Ct)).ShouldBeFalse();
+        (await read.Departments.AnyAsync(d => d.CostCenterCode == code, Ct)).ShouldBeFalse();
+        (await read.AuditLog.AnyAsync(a => a.Actor == "manifest:a" && a.Details != null && a.Details.Contains(code), Ct)).ShouldBeFalse();
     }
 
     [Fact]

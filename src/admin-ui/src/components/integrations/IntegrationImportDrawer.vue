@@ -42,6 +42,8 @@ const outcome = computed(() => {
   const p = preview.value
   if (!p) return ''
   if (!p.createdIntegration) return 'exists; only missing keys are created.'
+  // The warnings below say which team and how to move it.
+  if (p.defaultOwner) return p.createdTeam ? 'will be created in a new team named after it, as the manifest names no owner.' : 'will be created in the existing team with the code made from its name, as the manifest names no owner.'
   if (p.createdDepartment) return 'will be created, with a new owner team in a new department.'
   return p.createdTeam ? 'will be created, with a new owner team.' : 'will be created.'
 })

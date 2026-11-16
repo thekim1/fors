@@ -428,8 +428,10 @@ export interface IntegrationImportResult {
   createdIntegration: boolean
   createdTeam: boolean
   createdDepartment: boolean
+  /** The manifest names no owner, so the new integration gets a team (and department) made from its name; a warning says which. */
+  defaultOwner: boolean
   keys: ImportedKey[]
-  /** Existing settings that differ from the manifest, which were not changed. */
+  /** Existing settings that differ from the manifest, which were not changed, and where a default owner placed the integration. */
   warnings: string[]
 }
 
