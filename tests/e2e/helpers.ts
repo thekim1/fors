@@ -1,7 +1,8 @@
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { expect, type BrowserContext, type Page } from '@playwright/test'
+import { expect, type BrowserContext, type Locator, type Page } from '@playwright/test'
 
 type Role = 'gateway-admin' | 'department-admin' | 'viewer'
 const sessions = new Map<Role, Awaited<ReturnType<BrowserContext['cookies']>>>()
@@ -14,15 +15,56 @@ async function paceAdminRequest(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, Math.max(0, slot - Date.now())))
 }
 
-function developmentPassword(): string {
-  if (process.env.E2E_PASSWORD) return process.env.E2E_PASSWORD
+/** A generated parameter of the AppHost (its user secrets), or the environment variable that replaces it. Never log the value. */
+export function appHostSecret(parameter: string, variable: string): string {
+  if (process.env[variable]) return process.env[variable]!
   const directory = process.env.APPDATA
     ? join(process.env.APPDATA, 'Microsoft', 'UserSecrets')
     : join(homedir(), '.microsoft', 'usersecrets')
   const secrets = JSON.parse(readFileSync(join(directory, 'ume-llm-gateway-apphost-dev', 'secrets.json'), 'utf8').replace(/^\uFEFF/, ''))
-  const password: unknown = secrets['Parameters:dev-user-password']
-  if (typeof password !== 'string' || !password) throw new Error('Start the AppHost to generate development credentials, or set E2E_PASSWORD.')
-  return password
+  const value: unknown = secrets[`Parameters:${parameter}`]
+  if (typeof value !== 'string' || !value) throw new Error(`Start the AppHost to generate development credentials, or set ${variable}.`)
+  return value
+}
+
+function developmentPassword(): string {
+  return appHostSecret('dev-user-password', 'E2E_PASSWORD')
+}
+
+const appHost = join(import.meta.dirname, '..', '..', 'src', 'Ume.LlmGateway.AppHost', 'Ume.LlmGateway.AppHost.csproj')
+
+function aspire(...args: string[]): string {
+  return execFileSync('aspire', [...args, '--apphost', appHost, '--non-interactive'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 60_000 })
+}
+
+/**
+ * The setup code the admin API last wrote to its output (`… Setup code: XXXXX-…`), read with `aspire logs adminapi`, or
+ * E2E_SETUP_CODE; null when there is none. Never log it or put it in an assertion message.
+ */
+export function setupCode(): string | null {
+  if (process.env.E2E_SETUP_CODE) return process.env.E2E_SETUP_CODE
+  const codes = [...aspire('logs', 'adminapi').matchAll(/Setup code: ([0-9A-Z]{5}(?:-[0-9A-Z]{5,6}){4})/g)]
+  return codes.length ? codes[codes.length - 1][1] : null
+}
+
+/** The bundled Keycloak's realm as the AppHost publishes it (`aspire describe`), or E2E_OIDC_AUTHORITY. */
+export function keycloakAuthority(): string {
+  if (process.env.E2E_OIDC_AUTHORITY) return process.env.E2E_OIDC_AUTHORITY
+  const described = JSON.parse(aspire('describe', '--format', 'json'))
+  const resources: { name?: string; urls?: { url?: string; isInternal?: boolean }[] }[] = Array.isArray(described) ? described : described.resources
+  // Not the management endpoint (internal): the one the realm is served on.
+  const url = resources.find(resource => resource.name?.startsWith('keycloak'))?.urls?.find(candidate => !candidate.isInternal)?.url
+  if (!url) throw new Error('No keycloak resource in the running AppHost: set E2E_OIDC_AUTHORITY.')
+  return `${url.replace(/\/$/, '')}/realms/ume`
+}
+
+/** Sets a secret field's value without a locator fill, which a failed assertion would show in its call log. */
+export async function typeSecret(field: Locator, value: string): Promise<void> {
+  await field.evaluate((element, text) => {
+    const input = element as HTMLInputElement
+    input.value = text
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }, value)
 }
 
 export async function login(page: Page, role: Role = 'gateway-admin'): Promise<void> {

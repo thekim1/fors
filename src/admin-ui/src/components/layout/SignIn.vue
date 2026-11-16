@@ -55,8 +55,9 @@ function openSetup(event: MouseEvent): void {
           <AppIcon name="info" />
           <span>{{ configured ? 'Setup mode is open: the sign-in can be changed with the setup code from the admin API’s log.' : 'Sign-in is not set up yet. Set it up with the setup code from the admin API’s log.' }}</span>
         </p>
-        <UiButton variant="primary" size="lg" icon="settings" :href="setupHref" data-test="set-up" @click="openSetup">Set up sign-in</UiButton>
-        <UiButton v-if="configured" size="lg" icon="login" :href="href" data-test="sign-in">Sign in</UiButton>
+        <!-- With a working sign-in (setup opened again) most people come to sign in: that is the main action then. -->
+        <UiButton v-if="configured" variant="primary" size="lg" icon="login" :href="href" data-test="sign-in">Sign in</UiButton>
+        <UiButton :variant="configured ? 'secondary' : 'primary'" size="lg" icon="settings" :href="setupHref" data-test="set-up" @click="openSetup">Set up sign-in</UiButton>
       </template>
       <p v-else-if="!configured" role="status" class="flex gap-2 text-small text-fg-2" data-test="not-configured">
         <AppIcon name="info" />

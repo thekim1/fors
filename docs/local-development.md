@@ -92,6 +92,15 @@ which the AppHost passes on. In the wizard, the bundled Keycloak's realm (`http:
 allowed over http in Development), the client `ume-admin` and the `oidc-client-secret` parameter are the values to test.
 Remove both settings to go back.
 
+The wizard's browser test is `tests/e2e/specs/setup.spec.ts`: on a stack in setup mode with a fresh database
+(`Setup__Try=true`, `Seed__Enabled=false`, `DevelopmentVolumes__Postgres=<a throwaway volume>`, then `aspire start` and
+`aspire wait admin-ui`), run `npx playwright test specs/setup.spec.ts` in `tests/e2e`. It reads the setup code with
+`aspire logs adminapi` and the provider's address with `aspire describe` (both need `aspire` on the `PATH`), enters the
+bundled Keycloak's values, tests as `viewer` and `gateway-admin`, saves and signs in, with the axe and target-size checks on
+every step. Saving closes setup, so each run needs a fresh database; on any other stack the file is skipped. When the admin
+UI is not on port 5173 (another program holds it), set `ADMIN_UI_URL` to its address and add that address's `/signin-oidc`
+to the `ume-admin` client's redirect URIs in the bundled Keycloak.
+
 ## Admin UI code
 
 `src/admin-ui` is Vue 3 + Pinia + Vue Router with Reka UI primitives and Tailwind CSS v4, built from the design prototype in
