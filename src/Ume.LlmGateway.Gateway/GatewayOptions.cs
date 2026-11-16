@@ -116,6 +116,14 @@ public sealed class GatewayOptions
     [RegularExpression("^$|^https?://\\S+$", ErrorMessage = "Gateway:IntegrationApiUrl must be empty or an absolute http(s) URL.")]
     public string? IntegrationApiUrl { get; set; }
 
+    /// <summary>
+    /// The address of the sign-in provider the admin console uses (the admin API's <c>Oidc:Authority</c>), handed out on
+    /// <c>/v1/ume/context</c> so a platform that signs its users in through the same provider needs no copy of it
+    /// (docs/integrations.md). A public address, never a client id or secret. Empty leaves it out.
+    /// </summary>
+    [RegularExpression("^$|^https://\\S+$", ErrorMessage = "Gateway:OidcAuthority must be empty or an absolute https URL.")]
+    public string? OidcAuthority { get; set; }
+
     /// <summary>Optional webhook that receives budget threshold alerts (metadata only).</summary>
     public Uri? AlertWebhookUrl { get; set; }
 

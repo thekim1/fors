@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **`UME_DOMAIN` names the hosts** (thekim1/llmgateway#98, requested by the Ume.Rag platform). In
+  `compose.portainer.yaml`, `UME_GATEWAY_HOST` defaults to `llm.<UME_DOMAIN>`, `UME_ADMIN_HOST` to
+  `llm-admin.<UME_DOMAIN>` and `UME_GATEWAY_PUBLIC_URL` to `https://<gateway host>`; each variable still overrides its
+  default. A stack that sets `UME_GATEWAY_HOST` works as before without `UME_DOMAIN`, and no longer has to set
+  `UME_GATEWAY_PUBLIC_URL` when the gateway is on port 443. `init-deployment.sh` takes `--domain` the same way.
+- **`/v1/ume/context` names the sign-in provider** (thekim1/llmgateway#99, requested by the Ume.Rag platform).
+  `gateway.oidc_authority` is the new optional `Gateway:OidcAuthority` (feature `oidc-authority`; `null` when not set):
+  the address of the provider the admin console signs in through, so a platform that uses the same provider keeps no
+  copy. The Compose files and the Portainer stack set it from `UME_OIDC_AUTHORITY`. Contract:
+  `docs/openapi/integrations.json` (an addition).
+
 ## 0.10.3 - 2026-11-15
 
 Patch release: preset data only, no code change. No migration. **Rolling update: yes.**

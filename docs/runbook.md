@@ -34,8 +34,10 @@ and the Aspire-generated base plus `compose.hardening.yaml`.
 `deploy/compose.portainer.yaml` is the same hardened stack configured **only through environment
 variables**, for operators who cannot run `init-deployment.sh` (Portainer, managed Docker hosts).
 Paste it into a Portainer stack (Web editor) or deploy the repository's file via Git, and set the
-variables listed at the top of the file (images, `UME_OIDC_AUTHORITY`, `UME_GATEWAY_HOST`,
-`UME_GATEWAY_PUBLIC_URL`; optional claim mapping and ports). The images must be in a registry the
+variables listed at the top of the file (images, `UME_OIDC_AUTHORITY`, `UME_DOMAIN`; optional host names, claim
+mapping and ports). With `UME_DOMAIN=example.se` the gateway API is `llm.example.se`, the admin UI
+`llm-admin.example.se` and the gateway's public URL `https://llm.example.se`; `UME_GATEWAY_HOST`, `UME_ADMIN_HOST` and
+`UME_GATEWAY_PUBLIC_URL` each override their default, and a stack that sets `UME_GATEWAY_HOST` needs no `UME_DOMAIN`. The images must be in a registry the
 host can pull from. The `compose.portainer.yaml` attached to a GitHub release already points at that
 release's images (by digest), so the image variables are optional there.
 
@@ -292,7 +294,8 @@ For [integrations](integrations.md): `UME_ADMIN_PUBLIC_URL` (gateway `Gateway__A
 handed to platforms on `/v1/ume/context`; `init-deployment.sh` writes it, empty leaves it out) and
 `UME_INTEGRATION_REQUESTS_PER_MINUTE` (admin API `Admin__IntegrationRequestsPerMinute`, default 60, per credential key
 on `/integration/v1`), and `UME_INTEGRATION_API_URL` (gateway `Gateway__IntegrationApiUrl`, the Integration API's address
-as platforms reach it, for example `https://adminapi:8443/integration/v1`; empty leaves it out), and
+as platforms reach it, for example `https://adminapi:8443/integration/v1`; empty leaves it out), the gateway's
+`Gateway__OidcAuthority` (set from `UME_OIDC_AUTHORITY`: the sign-in provider's address as `oidc_authority`), and
 `UME_INTEGRATION_MANIFESTS_DIR` / `UME_INTEGRATION_SECRETS_DIR` (migration service; integration manifests to provision
 on every deploy and where the new credential keys' secrets are written, see
 [Provisioning from a manifest](integrations.md#provisioning-from-a-manifest); `UME_INTEGRATION_MANIFEST` in the

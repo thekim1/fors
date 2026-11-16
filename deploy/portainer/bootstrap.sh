@@ -3,12 +3,13 @@
 # Data Protection certificate, passwords, key pepper and Redis ACL in the ume-certs / ume-secrets
 # volumes. Idempotent: existing secrets are never overwritten (a new pepper or Data Protection
 # certificate would break existing data); service certificates are re-issued when they expire
-# within 30 days or the hostnames change. Inputs come from environment variables.
+# within 30 days or the hostnames change. Inputs come from environment variables; the host names arrive resolved from
+# the stack file (UME_DOMAIN's defaults unless a UME_*_HOST is set).
 set -eu
 umask 077
 C=/certs
 S=/secrets
-: "${UME_GATEWAY_HOST:?Set UME_GATEWAY_HOST (public hostname of the gateway API)}"
+: "${UME_GATEWAY_HOST:?Set UME_DOMAIN or UME_GATEWAY_HOST (public hostname of the gateway API)}"
 ADMIN_HOST="${UME_ADMIN_HOST:-$UME_GATEWAY_HOST}"
 DATA_HOST="${UME_DATA_HOST:-$UME_GATEWAY_HOST}"
 for d in postgres redis gateway adminapi dataapi migrations; do mkdir -p "$C/$d" "$S/$d"; done

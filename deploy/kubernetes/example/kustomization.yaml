@@ -40,6 +40,7 @@ configMapGenerator:
       # - OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.observability:4317
       # - Gateway__AdminUrl=https://llm-admin.example.se
       # - Gateway__IntegrationApiUrl=https://adminapi:8443/integration/v1
+      # - Gateway__OidcAuthority=https://idp.example.se/realms/ume
   # With ../components/dataapi:
   # - name: ume-dataapi-config
   #   behavior: merge
