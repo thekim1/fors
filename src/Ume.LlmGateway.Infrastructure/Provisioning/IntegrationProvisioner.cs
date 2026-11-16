@@ -11,11 +11,12 @@ using Ume.LlmGateway.Infrastructure.Security;
 namespace Ume.LlmGateway.Infrastructure.Provisioning;
 
 /// <summary>
-/// Applies an <see cref="IntegrationManifest"/> (ADR 022): creates the owner team (and its department), the integration and
-/// its credential keys where they do not exist, in one transaction with an audit entry for each. It never changes,
-/// rotates or re-creates anything that exists: a key is found by its integration and name, a revoked key stays revoked,
-/// and a setting that differs from the manifest is reported in <see cref="ProvisioningResult.Warnings"/>, not applied,
-/// so whoever can edit the file cannot widen an existing key's rights.
+/// Applies an <see cref="IntegrationManifest"/> (ADR 022): creates the owner team and its department (without an owner in
+/// the manifest, <see cref="ManifestOwner.Default"/>), the integration and its credential keys where they do not exist,
+/// in one transaction with an audit entry for each. It never changes, rotates or re-creates anything that exists: a key
+/// is found by its integration and name, a revoked key stays revoked, and a setting that differs from the manifest is
+/// reported in <see cref="ProvisioningResult.Warnings"/>, not applied, so whoever can edit the file cannot widen an
+/// existing key's rights.
 /// </summary>
 public sealed class IntegrationProvisioner(VirtualKeyHasher hasher, CredentialProtector protector, TimeProvider time)
 {
@@ -47,9 +48,11 @@ public sealed class IntegrationProvisioner(VirtualKeyHasher hasher, CredentialPr
         var integration = await db.Integrations.Include(i => i.OwnerTeam).SingleOrDefaultAsync(i => i.Name == declared.Name, ct);
         var createdIntegration = integration is null;
         var createdOwner = (Team: false, Department: false);
+        var defaultOwner = false;
         if (integration is null)
         {
-            var owner = await OwnerTeamAsync(db, declared.Owner!, now, Audit, ct);
+            defaultOwner = declared.Owner is null;
+            var owner = await OwnerTeamAsync(db, declared.Owner ?? ManifestOwner.Default(declared.Name!), now, Audit, ct);
             createdOwner = (db.Entry(owner).State == EntityState.Added, owner.Department is { } d && db.Entry(d).State == EntityState.Added);
             integration = new Integration
             {
@@ -58,10 +61,15 @@ public sealed class IntegrationProvisioner(VirtualKeyHasher hasher, CredentialPr
             };
             db.Integrations.Add(integration);
             Audit(AuditEntities.Integration, integration.Id, IntegrationAudit.Of(integration));
+            if (defaultOwner)
+            {
+                warnings.Add(DefaultOwnerNote(integration.Name, owner, createdOwner.Team, createdOwner.Department));
+            }
         }
-        else if (!string.Equals(integration.OwnerTeam?.Code, declared.Owner!.TeamCode!.Trim(), StringComparison.Ordinal))
+        else if (declared.Owner is { } declaredOwner && !string.Equals(integration.OwnerTeam?.Code, declaredOwner.TeamCode!.Trim(), StringComparison.Ordinal))
         {
-            warnings.Add($"Integration '{integration.Name}' is owned by team '{integration.OwnerTeam?.Code ?? integration.OwnerTeam?.Name}', not '{declared.Owner.TeamCode.Trim()}' as the manifest says; it was not changed.");
+            // Without an owner in the manifest there is nothing to compare: the owner is whatever the admin console says.
+            warnings.Add($"Integration '{integration.Name}' is owned by team '{integration.OwnerTeam?.Code ?? integration.OwnerTeam?.Name}', not '{declaredOwner.TeamCode.Trim()}' as the manifest says; it was not changed.");
         }
 
         var existing = createdIntegration ? [] : await db.VirtualKeys.AsNoTracking()
@@ -106,13 +114,13 @@ public sealed class IntegrationProvisioner(VirtualKeyHasher hasher, CredentialPr
         if (preview)
         {
             db.ChangeTracker.Clear();
-            return new ProvisioningResult(createdIntegration ? null : integration.Id, integration.Name, createdIntegration, createdOwner.Team, createdOwner.Department,
+            return new ProvisioningResult(createdIntegration ? null : integration.Id, integration.Name, createdIntegration, createdOwner.Team, createdOwner.Department, defaultOwner,
                 [.. keys.Select(k => k.State == ProvisionedKeyState.Created ? k with { Id = null, Prefix = null, Secret = null } : k)], warnings);
         }
 
         db.AuditLog.AddRange(audit);
         await db.SaveChangesAsync(ct);
-        return new ProvisioningResult(integration.Id, integration.Name, createdIntegration, createdOwner.Team, createdOwner.Department, keys, warnings);
+        return new ProvisioningResult(integration.Id, integration.Name, createdIntegration, createdOwner.Team, createdOwner.Department, defaultOwner, keys, warnings);
     }
 
     /// <summary>The team with the manifest's code, or a new one in the department with its code (also new if absent).</summary>
@@ -147,6 +155,15 @@ public sealed class IntegrationProvisioner(VirtualKeyHasher hasher, CredentialPr
         db.Teams.Add(team);
         audit(AuditEntities.Team, team.Id, TeamAudit.Of(team));
         return team;
+    }
+
+    /// <summary>What the operator is told when a new integration got <see cref="ManifestOwner.Default"/>, and what to do about it.</summary>
+    private static string DefaultOwnerNote(string integration, Team owner, bool createdTeam, bool createdDepartment)
+    {
+        var placed = !createdTeam ? $"the existing team '{owner.Name}' (code '{owner.Code}')"
+            : createdDepartment ? $"the team '{owner.Name}' (code '{owner.Code}') in the department '{owner.Department!.Name}' (code '{owner.Department.CostCenterCode}'), both created for it"
+            : $"the team '{owner.Name}' (code '{owner.Code}'), created for it in the existing department '{owner.Department!.Name}' (code '{owner.Department.CostCenterCode}')";
+        return $"Integration '{integration}' names no owner in the manifest, so it is placed in {placed}. A gateway admin can move it to the organisation's own team under Integrations; its credential keys move with it.";
     }
 
     /// <summary>The settings in which an existing key differs from the manifest (names only, never values).</summary>
@@ -193,9 +210,13 @@ public sealed class IntegrationProvisioner(VirtualKeyHasher hasher, CredentialPr
 }
 
 /// <summary>What <see cref="IntegrationProvisioner.ApplyAsync"/> did.</summary>
-/// <remarks><see cref="IntegrationId"/> is null in a preview that would create the integration.</remarks>
+/// <remarks>
+/// <see cref="IntegrationId"/> is null in a preview that would create the integration. <see cref="DefaultOwner"/> is set when
+/// the integration is created now with <see cref="ManifestOwner.Default"/> because the manifest names no owner;
+/// <see cref="Warnings"/> then says where it was placed and that a gateway admin can move it.
+/// </remarks>
 public sealed record ProvisioningResult(
-    Guid? IntegrationId, string IntegrationName, bool CreatedIntegration, bool CreatedTeam, bool CreatedDepartment,
+    Guid? IntegrationId, string IntegrationName, bool CreatedIntegration, bool CreatedTeam, bool CreatedDepartment, bool DefaultOwner,
     IReadOnlyList<ProvisionedKey> Keys, IReadOnlyList<string> Warnings);
 
 /// <summary>A manifest's credential key: its id, prefix and state, and its secret only when it was created now (no id in a preview).</summary>

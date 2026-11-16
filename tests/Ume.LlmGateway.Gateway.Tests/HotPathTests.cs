@@ -384,6 +384,33 @@ public sealed class HotPathTests(GatewayFixture fixture)
     }
 
     [Fact]
+    public async Task A_cached_key_moved_to_another_team_carries_the_new_team_and_department_after_a_key_invalidation()
+    {
+        var key = await fixture.CreateKeyAsync();
+        var bus = new InMemoryInvalidationBus();
+        using var keys = new KeyAuthenticator(fixture.Services.GetRequiredService<VirtualKeyHasher>(), fixture.Services.GetRequiredService<IServiceScopeFactory>(),
+            new StaticOptions(new GatewayOptions { KeyCacheSeconds = 30 }), bus, new FakeTimeProvider(DateTimeOffset.UtcNow));
+        (await keys.FindAsync(key.Secret, Ct))!.TeamId.ShouldBe(key.TeamId);
+
+        // Moving an integration moves its credential keys (admin API) and publishes Keys.
+        var department = new Department { Name = "Moved to", CostCenterCode = Guid.NewGuid().ToString("N")[..8], CreatedAt = DateTimeOffset.UtcNow };
+        var team = new Team { Name = "Moved to", Department = department, CreatedAt = DateTimeOffset.UtcNow };
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+            db.Teams.Add(team);
+            await db.SaveChangesAsync(Ct);
+            await db.VirtualKeys.Where(k => k.Id == key.Id).ExecuteUpdateAsync(s => s.SetProperty(k => k.TeamId, team.Id), Ct);
+        }
+
+        (await keys.FindAsync(key.Secret, Ct))!.TeamId.ShouldBe(key.TeamId); // cached
+        await bus.PublishAsync(InvalidationKind.Keys, Ct);
+        var moved = (await keys.FindAsync(key.Secret, Ct))!;
+        moved.TeamId.ShouldBe(team.Id);
+        moved.Team!.DepartmentId.ShouldBe(department.Id); // what RequestAccounting and the budgets read
+    }
+
+    [Fact]
     public async Task A_lookup_running_before_an_invalidation_is_not_shared_after_it()
     {
         var key = await fixture.CreateKeyAsync();

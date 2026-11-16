@@ -19,7 +19,13 @@ vi.mock('@/api', () => ({
       update: (...a: unknown[]) => update(...a),
       remove: (...a: unknown[]) => remove(...a),
     },
-    teams: { list: () => Promise.resolve([{ id: 't1', name: 'Platform', departmentName: 'IT' }]) },
+    teams: {
+      list: () =>
+        Promise.resolve([
+          { id: 't1', name: 'Platform', departmentName: 'IT' },
+          { id: 't2', name: 'Owners', departmentName: 'Culture' },
+        ]),
+    },
   },
 }))
 
@@ -78,6 +84,29 @@ describe('IntegrationsView', () => {
     await flushPromises()
     expect(create).toHaveBeenCalledWith({ name: 'Agent platform', description: null, ownerTeamId: 't1', isActive: true })
     expect(wrapper.text()).toContain('Agent platform')
+  })
+
+  it('moves an integration with credential keys to another team and says that its keys move with it', async () => {
+    update.mockResolvedValue(integration({ ownerTeamId: 't2', ownerTeamName: 'Owners', ownerDepartmentName: 'Culture' }))
+    const wrapper = await mountView([integration()])
+    await button(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    const owner = wrapper.find('#integration-owner')
+    expect(owner.attributes('disabled')).toBeUndefined()
+    expect(wrapper.text()).toContain('Its 2 credential keys move with it to another team; usage so far stays with the previous team and department.')
+    await owner.setValue('t2')
+    await wrapper.find('form#integration-form').trigger('submit')
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith('i1', { name: 'Ume.Rag', description: 'RAG platform', ownerTeamId: 't2', isActive: true })
+    expect(wrapper.text()).toContain('Owners')
+  })
+
+  it('does not mention moving keys for an integration without credential keys', async () => {
+    const wrapper = await mountView([integration({ credentialKeys: 0 })])
+    await button(wrapper, 'Edit').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('The team that runs the integration.')
+    expect(wrapper.text()).not.toContain('move with it')
   })
 
   it('asks for a name and an owner team before sending', async () => {

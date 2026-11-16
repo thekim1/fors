@@ -1,7 +1,9 @@
 {
   // Owned by the Ume.Rag platform (github.com/thekim1/ume-rag-platform): change its keys and scopes here, not in gateway code.
   // A preset is an integration manifest (docs/integrations.md, "Provisioning from a manifest") with a title; the admin
-  // console lets you edit it, for example the owner team or an address list, before anything is created.
+  // console lets you edit it, for example an address list, before anything is created. It names no owner, so Ume.Rag is
+  // placed in a team and department of its own (code "ume-rag"), which a gateway admin can move to the organisation's
+  // own team under Integrations; add an "owner" to place it in an existing team at once.
   "schemaVersion": 1,
   "preset": {
     "title": "Ume.Rag",
@@ -9,8 +11,7 @@
   },
   "integration": {
     "name": "Ume.Rag",
-    "description": "Ume.Rag retrieval platform",
-    "owner": { "teamCode": "ume-rag", "teamName": "Ume.Rag", "departmentCode": "", "departmentName": "" }
+    "description": "Ume.Rag retrieval platform"
   },
   "credentialKeys": [
     { "name": "rag-api", "allowedResidencies": ["OnPrem", "Eu"], "requireMaxResidency": true, "piiPolicy": "Off", "allowedIpRanges": [] },

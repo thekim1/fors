@@ -11,6 +11,19 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
+## Unreleased: integration manifests without an owner, moving an integration with its credential keys
+
+- **Rolling update: yes.** No migration, no configuration change.
+- **Manifests:** `integration.owner` may be left out. A manifest that names an owner behaves as before. Without one, a
+  new integration is placed in a team and department made from its name (`Ume.Rag` → code `ume-rag`), or in an
+  existing team with that code; move it to your own team under *Integrations* afterwards. A platform's Portainer stack
+  can then carry its manifest as a default instead of asking for a department code.
+- **Changed behaviour:** `PUT /api/integrations/{id}` with another `ownerTeamId` no longer answers 409 while the
+  integration has credential keys; it moves them (those not revoked) to the new team. A script that relied on the 409
+  as a guard must check `credentialKeys` itself. During a rolling update an admin API of the previous version still
+  answers 409.
+- **Ume.Rag preset:** `ume-rag.json` no longer declares an owner. An integration already created from it is not changed.
+
 ## 0.10.3: Ume.Rag preset keys limited to OnPrem and Eu
 
 - **Rolling update: yes.** No migration, no configuration change.

@@ -60,10 +60,56 @@ public sealed class IntegrationImportTests(AdminFixture fixture)
             }
         }
 
-        // The department is left for the admin to fill in, so a preview asks for it instead of creating a placeholder.
-        using var preview = await admin.PostAsJsonAsync("/api/integrations/import/preview", new { manifest = manifest.Replace("\"ume-rag\"", $"\"{Unique("rag")}\"", StringComparison.Ordinal) }, Ct);
-        var problem = await AdminFixture.ReadAsync(preview, HttpStatusCode.BadRequest);
-        problem["errors"]!["manifest"]![0]!.GetValue<string>().ShouldContain("departmentCode");
+        // It names no owner, so it can be imported unedited: Ume.Rag gets a team and department of its own, to move later.
+        using (var parsed = JsonDocument.Parse(manifest, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }))
+        {
+            var integration = parsed.RootElement.GetProperty("integration");
+            integration.TryGetProperty("owner", out _).ShouldBeFalse();
+            integration.GetProperty("name").GetString().ShouldBe("Ume.Rag");
+        }
+
+        var name = Unique("Ume.Rag");
+        using var preview = await admin.PostAsJsonAsync("/api/integrations/import/preview",
+            new { manifest = manifest.Replace("\"name\": \"Ume.Rag\"", $"\"name\": \"{name}\"", StringComparison.Ordinal) }, Ct);
+        var result = await AdminFixture.ReadAsync(preview);
+        result["integrationName"]!.GetValue<string>().ShouldBe(name);
+        result["defaultOwner"]!.GetValue<bool>().ShouldBeTrue();
+        result["warnings"]!.AsArray().ShouldHaveSingleItem()!.GetValue<string>().ShouldContain($"(code 'ume-rag-{name[^8..]}')");
+        Keys(result).Select(k => k["name"]!.GetValue<string>()).ShouldBe(["rag-api", "rag-admin", "rag-worker"]);
+    }
+
+    [Fact]
+    public async Task An_import_without_an_owner_places_the_integration_in_a_team_and_department_made_from_its_name()
+    {
+        using var admin = await fixture.ClientAsync();
+        var name = Unique("Platform");
+        var code = "platform-" + name[^8..];
+        var body = new { manifest = $$"""{ "schemaVersion": 1, "integration": { "name": "{{name}}" }, "credentialKeys": [{ "name": "api" }] }""" };
+
+        using var import = await admin.PostAsJsonAsync("/api/integrations/import", body, Ct);
+        var created = await AdminFixture.ReadAsync(import);
+        created["defaultOwner"]!.GetValue<bool>().ShouldBeTrue();
+        created["createdTeam"]!.GetValue<bool>().ShouldBeTrue();
+        created["createdDepartment"]!.GetValue<bool>().ShouldBeTrue();
+        created["warnings"]!.AsArray().ShouldHaveSingleItem()!.GetValue<string>().ShouldContain("move it to the organisation's own team under Integrations");
+
+        using var get = await admin.GetAsync($"/api/integrations/{created["integrationId"]!.GetValue<Guid>()}", Ct);
+        var integration = await AdminFixture.ReadAsync(get);
+        integration["ownerTeamName"]!.GetValue<string>().ShouldBe(name);
+        integration["ownerDepartmentName"]!.GetValue<string>().ShouldBe(name);
+        var ownerTeamId = integration["ownerTeamId"]!.GetValue<Guid>();
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var team = await scope.ServiceProvider.GetRequiredService<GatewayDbContext>().Teams.AsNoTracking().Include(t => t.Department)
+                .SingleAsync(t => t.Id == ownerTeamId, Ct);
+            (team.Code, team.Department!.CostCenterCode).ShouldBe((code, code));
+        }
+
+        // Imported again: it exists, so there is no owner to report or compare.
+        using var again = await admin.PostAsJsonAsync("/api/integrations/import/preview", body, Ct);
+        var preview = await AdminFixture.ReadAsync(again);
+        preview["defaultOwner"]!.GetValue<bool>().ShouldBeFalse();
+        preview["warnings"]!.AsArray().ShouldBeEmpty();
     }
 
     [Fact]

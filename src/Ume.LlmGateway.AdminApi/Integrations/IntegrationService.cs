@@ -10,7 +10,7 @@ namespace Ume.LlmGateway.AdminApi.Integrations;
 /// <summary>
 /// Integrations (docs/integrations.md): other systems that call the gateway for the teams they serve. Gateway admins
 /// create, change and delete them; every key manager can list them to assign a key. A change publishes
-/// <see cref="InvalidationKind.Keys"/>, because cached keys carry their integration.
+/// <see cref="InvalidationKind.Keys"/>, because cached keys carry their integration and team.
 /// </summary>
 public sealed class IntegrationService(AdminContext ctx)
 {
@@ -45,8 +45,11 @@ public sealed class IntegrationService(AdminContext ctx)
     }
 
     /// <summary>
-    /// Changes name, description, owner team or state. The owner team can change only while the integration has no
-    /// credential keys, because those belong to the owner team.
+    /// Changes name, description, owner team or state. A credential key belongs to the owner team (<c>KeyService</c>),
+    /// so a new owner team takes every credential key that is not revoked, a rotated one in its grace period included, in
+    /// the same transaction, each audited. Revoked keys keep their history where they are, assigned keys belong to their
+    /// own teams, and usage already recorded keeps the team and department it was charged to. The new owner team must be
+    /// active, in an active department.
     /// </summary>
     public async Task<IntegrationDto> UpdateAsync(Guid id, IntegrationRequest input, CancellationToken ct)
     {
@@ -54,14 +57,27 @@ public sealed class IntegrationService(AdminContext ctx)
         var before = IntegrationAudit.Of(integration);
         if (input.OwnerTeamId != integration.OwnerTeamId)
         {
-            if (await ctx.Db.VirtualKeys.AnyAsync(k => k.IntegrationId == id && k.IntegrationRole == IntegrationRole.Credential && k.RevokedAt == null, ct))
+            var team = await OwnerTeamAsync(input.OwnerTeamId, ct);
+            // The gateway refuses the keys of an inactive team or department (owner_inactive): such a move would cut the
+            // platform off at its next request.
+            if (!team.IsActive || team.Department is { IsActive: false })
             {
-                throw new ApiFaultException(409, "The owner team cannot change while the integration has credential keys. Revoke them first.");
+                throw ApiFaultException.Validation(new Dictionary<string, string[]>
+                {
+                    ["ownerTeamId"] = ["Choose an active team in an active department: the gateway refuses the keys of an inactive one."],
+                });
             }
 
-            var team = await OwnerTeamAsync(input.OwnerTeamId, ct);
             integration.OwnerTeamId = team.Id;
             integration.OwnerTeam = team;
+            var credentialKeys = await ctx.Db.VirtualKeys
+                .Where(k => k.IntegrationId == id && k.IntegrationRole == IntegrationRole.Credential && k.RevokedAt == null).ToListAsync(ct);
+            foreach (var key in credentialKeys)
+            {
+                var keyBefore = KeyAudit.Of(key);
+                key.TeamId = team.Id;
+                ctx.StageAudit(AuditActions.Update, AuditEntities.VirtualKey, key.Id, keyBefore, KeyAudit.Of(key));
+            }
         }
 
         integration.Name = await UniqueNameAsync(input.Name, id, ct);

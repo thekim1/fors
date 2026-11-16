@@ -202,6 +202,46 @@ public sealed class IntegrationGatewayTests(GatewayFixture fixture)
     }
 
     [Fact]
+    public async Task A_credential_key_moved_with_its_integration_is_charged_to_the_new_team_and_department_and_earlier_usage_stays()
+    {
+        var integration = await CreateIntegrationAsync();
+        var credential = await fixture.CreateKeyAsync(k => Assign(k, integration, IntegrationRole.Credential));
+        using var before = await fixture.SendAsync(credential);
+        before.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var earlier = await fixture.UsageAsync(before);
+        earlier.TeamId.ShouldBe(credential.TeamId);
+        earlier.DepartmentId.ShouldBe(fixture.DepartmentId);
+
+        // What the admin API's integration update does when the owner team changes (it also publishes Keys, which drops a
+        // cached key: HotPathTests). This fixture caches no key, so the next request loads the key with its new team.
+        Guid newTeam, newDepartment;
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+            var department = new Department { Name = "Org " + Guid.NewGuid().ToString("N"), CostCenterCode = Guid.NewGuid().ToString("N")[..8], CreatedAt = DateTimeOffset.UtcNow };
+            var team = new Team { Name = "Platform owners", Department = department, CreatedAt = DateTimeOffset.UtcNow };
+            db.Teams.Add(team);
+            (await db.Integrations.SingleAsync(i => i.Id == integration, Ct)).OwnerTeamId = team.Id;
+            (await db.VirtualKeys.SingleAsync(k => k.Id == credential.Id, Ct)).TeamId = team.Id;
+            await db.SaveChangesAsync(Ct);
+            (newTeam, newDepartment) = (team.Id, department.Id);
+        }
+
+        using var after = await fixture.SendAsync(credential);
+        after.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var usage = await fixture.UsageAsync(after);
+        usage.VirtualKeyId.ShouldBe(credential.Id);
+        usage.TeamId.ShouldBe(newTeam);
+        usage.DepartmentId.ShouldBe(newDepartment);
+
+        // Usage recorded before the move keeps the team and department it was charged to.
+        using var read = fixture.Services.CreateScope();
+        var kept = await read.ServiceProvider.GetRequiredService<GatewayDbContext>().UsageRecords.AsNoTracking().SingleAsync(u => u.RequestId == earlier.RequestId, Ct);
+        kept.TeamId.ShouldBe(credential.TeamId);
+        kept.DepartmentId.ShouldBe(fixture.DepartmentId);
+    }
+
+    [Fact]
     public async Task The_assigned_keys_models_and_budget_apply_not_the_credential_keys()
     {
         var integration = await CreateIntegrationAsync();

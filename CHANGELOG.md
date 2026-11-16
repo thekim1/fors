@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+**An integration manifest may leave out the owner, and an integration can move to another team with its credential
+keys** (thekim1/llmgateway#101). No migration. **Rolling update: yes.** **Changed behaviour** for `PUT /api/integrations/{id}`.
+`integration.owner` is optional (schema version 1, an addition): a new integration from a manifest without one gets a
+default owner made from its name, a team and a department coded like `ume-rag` (lower case, letters and digits, `-`
+between) and named after the integration; an existing team with that code is used. The import result has a new
+`defaultOwner` field, and a warning (logged by the migration service, shown in the admin console's preview) names the
+team and says a gateway admin can move it. For an existing integration a manifest without an owner compares nothing.
+Changing an integration's owner team no longer answers 409 while it has credential keys: its credential keys that are
+not revoked (a rotated key in its grace period included) move to the new team in the same transaction, each audited;
+revoked and assigned keys stay, recorded usage keeps its team and department, and the previous team keeps the current
+period's spend while the new one counts from the move. A move to an inactive team, or to a team in an inactive
+department, is refused (400): the gateway refuses such a team's keys. The Ume.Rag preset no longer declares an owner, so
+it can be imported unedited. See [docs/integrations.md](docs/integrations.md#moving-an-integration-to-another-team).
+
 ## 0.10.3 - 2026-11-15
 
 Patch release: preset data only, no code change. No migration. **Rolling update: yes.**
