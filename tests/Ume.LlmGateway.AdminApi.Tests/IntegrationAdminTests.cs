@@ -1,8 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Ume.LlmGateway.Infrastructure.Auditing;
 using Ume.LlmGateway.Infrastructure.Persistence;
+using Ume.LlmGateway.Infrastructure.Stores;
 
 namespace Ume.LlmGateway.AdminApi.Tests;
 
@@ -109,7 +112,7 @@ public sealed class IntegrationAdminTests(AdminFixture fixture)
     }
 
     [Fact]
-    public async Task An_integration_with_live_keys_cannot_be_deleted_or_change_owner_and_a_deactivated_one_takes_no_keys()
+    public async Task An_integration_with_live_keys_cannot_be_deleted_and_a_deactivated_one_takes_no_keys()
     {
         using var admin = await fixture.ClientAsync();
         var platform = await fixture.OrganisationAsync(admin);
@@ -122,8 +125,6 @@ public sealed class IntegrationAdminTests(AdminFixture fixture)
             (await AdminFixture.ReadAsync(get))["credentialKeys"]!.GetValue<int>().ShouldBe(1);
         }
 
-        var other = await fixture.OrganisationAsync(admin);
-        (await admin.PutAsJsonAsync($"/api/integrations/{integration}", new { name = "Moved " + Guid.NewGuid(), ownerTeamId = other.Team }, Ct)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await admin.DeleteAsync($"/api/integrations/{integration}", Ct)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
         (await admin.DeleteAsync($"/api/teams/{platform.Team}", Ct)).StatusCode.ShouldBe(HttpStatusCode.Conflict);
 
@@ -140,6 +141,90 @@ public sealed class IntegrationAdminTests(AdminFixture fixture)
         using var audit = await admin.GetAsync("/api/audit?entityType=Integration&pageSize=200", Ct);
         (await AdminFixture.ReadAsync(audit))["items"]!.AsArray().Where(e => e!["entityId"]!.GetValue<string>() == integration.ToString())
             .Select(e => e!["action"]!.GetValue<string>()).ShouldBe(["delete", "update", "create"], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task Moving_an_integration_moves_its_credential_keys_that_are_not_revoked_and_audits_each()
+    {
+        using var admin = await fixture.ClientAsync();
+        var platform = await fixture.OrganisationAsync(admin);
+        var integration = await CreateIntegrationAsync(admin, platform.Team);
+        async Task<Guid> CreateKeyAsync(Guid team, string? role)
+        {
+            using var response = await admin.PostAsJsonAsync("/api/keys", Key(team, integration, role: role), Ct);
+            return (await AdminFixture.ReadAsync(response, HttpStatusCode.Created))["key"]!["id"]!.GetValue<Guid>();
+        }
+
+        var live = await CreateKeyAsync(platform.Team, "Credential");
+        var rotated = await CreateKeyAsync(platform.Team, "Credential");
+        Guid replacement;
+        using (var rotate = await admin.PostAsJsonAsync($"/api/keys/{rotated}/rotate", new { mode = "Grace24Hours" }, Ct))
+        {
+            replacement = (await AdminFixture.ReadAsync(rotate))["key"]!["id"]!.GetValue<Guid>(); // the old key is in its grace period
+        }
+
+        var revoked = await CreateKeyAsync(platform.Team, "Credential");
+        (await admin.PostAsync($"/api/keys/{revoked}/revoke", null, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        var department = await fixture.OrganisationAsync(admin);
+        var assigned = await CreateKeyAsync(department.Team, null);
+        var other = await fixture.OrganisationAsync(admin);
+        var changes = new List<InvalidationKind>();
+        using var subscription = fixture.Services.GetRequiredService<IInvalidationBus>().Subscribe(kind => { lock (changes) { changes.Add(kind); } });
+
+        // The new owner team must exist.
+        (await admin.PutAsJsonAsync($"/api/integrations/{integration}", new { name = "Moved " + Guid.NewGuid(), ownerTeamId = Guid.NewGuid() }, Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        // ... and be active, in an active department: the gateway refuses the keys of an inactive one.
+        var idle = await fixture.OrganisationAsync(admin);
+        using (var deactivated = await admin.PutAsJsonAsync($"/api/teams/{idle.Team}", new { departmentId = idle.Department, name = "Idle team", isActive = false }, Ct))
+        {
+            deactivated.StatusCode.ShouldBe(HttpStatusCode.OK, await deactivated.Content.ReadAsStringAsync(Ct));
+        }
+
+        using (var refused = await admin.PutAsJsonAsync($"/api/integrations/{integration}", new { name = "Moved " + Guid.NewGuid(), ownerTeamId = idle.Team }, Ct))
+        {
+            refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+            (await refused.Content.ReadAsStringAsync(Ct)).ShouldContain("ownerTeamId");
+        }
+
+        var name = "Moved " + Guid.NewGuid();
+        using (var move = await admin.PutAsJsonAsync($"/api/integrations/{integration}", new { name, ownerTeamId = other.Team }, Ct))
+        {
+            var moved = await AdminFixture.ReadAsync(move);
+            moved["ownerTeamId"]!.GetValue<Guid>().ShouldBe(other.Team);
+            moved["ownerDepartmentId"]!.GetValue<Guid>().ShouldBe(other.Department);
+            moved["credentialKeys"]!.GetValue<int>().ShouldBe(3); // live, the rotated one in its grace period and its replacement
+            moved["assignedKeys"]!.GetValue<int>().ShouldBe(1);
+        }
+
+        lock (changes) { changes.ShouldContain(InvalidationKind.Keys); }
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+            var teams = await db.VirtualKeys.AsNoTracking().Where(k => k.IntegrationId == integration).ToDictionaryAsync(k => k.Id, k => k.TeamId, Ct);
+            teams[live].ShouldBe(other.Team);
+            teams[rotated].ShouldBe(other.Team);
+            teams[replacement].ShouldBe(other.Team);
+            teams[revoked].ShouldBe(platform.Team); // its history stays where it was
+            teams[assigned].ShouldBe(department.Team); // belongs to its own team
+
+            var audit = await db.AuditLog.AsNoTracking().Where(a => a.EntityType == AuditEntities.VirtualKey && a.Action == AuditActions.Update).ToListAsync(Ct);
+            foreach (var id in new[] { live, rotated, replacement })
+            {
+                var details = JsonNode.Parse(audit.Single(a => a.EntityId == id.ToString()).Details!)!;
+                details["before"]!["teamId"]!.GetValue<Guid>().ShouldBe(platform.Team);
+                details["after"]!["teamId"]!.GetValue<Guid>().ShouldBe(other.Team);
+            }
+
+            audit.ShouldNotContain(a => a.EntityId == revoked.ToString() || a.EntityId == assigned.ToString());
+        }
+
+        // The keys stay in the owner team: a new credential key goes in the new one, not the old.
+        (await admin.PostAsJsonAsync("/api/keys", Key(platform.Team, integration, role: "Credential"), Ct)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await admin.PostAsJsonAsync("/api/keys", Key(other.Team, integration, role: "Credential"), Ct)).StatusCode.ShouldBe(HttpStatusCode.Created);
+        using var integrationAudit = await admin.GetAsync("/api/audit?entityType=Integration&pageSize=200", Ct);
+        (await AdminFixture.ReadAsync(integrationAudit))["items"]!.AsArray().Where(e => e!["entityId"]!.GetValue<string>() == integration.ToString())
+            .Select(e => e!["action"]!.GetValue<string>()).ShouldBe(["update", "create"], ignoreOrder: true);
     }
 
     [Fact]

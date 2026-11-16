@@ -82,6 +82,31 @@ all its keys with `key_disabled` (security event reason `integration_inactive`);
 all its keys are revoked, and a team that owns one cannot be deleted. The admin UI has *Access → Integrations*
 (gateway admins), an *Integration* section on the key form and detail, and the key list shows the integration.
 
+### Moving an integration to another team
+
+A gateway admin changes the owner team on the integration (*Integrations → Edit*, or `PUT /api/integrations/{id}`),
+also while it has credential keys. A credential key belongs to the owner team, so in the same transaction:
+
+- **Every credential key that is not revoked moves** to the new team, a rotated key still in its grace period and its
+  replacement included. Each move is audited as an `update` of the key (its team before and after), beside the
+  integration's own `update`.
+- **Revoked credential keys stay** in the previous team, with their history. **Assigned keys never move**: they
+  belong to the departments' own teams.
+- **The gateway charges the next request** of a moved key to the new team and its department: the change publishes a
+  key invalidation, the gateways drop their cached keys, and the next lookup loads the key with its new team.
+- **Usage already recorded stays** with the team and department it was charged to: each usage record stores both at
+  request time, and reports, exports and the Data API read them from the record.
+- **Budgets:** team and department budgets count the usage records (and monthly totals) of their own team or
+  department, and their shared counters are kept per budget scope. The previous team and department keep what the
+  moved keys spent in the current period; the new ones count those keys from the move on, so they see none of the
+  earlier spend (a department budget is unaffected when both teams are in the same department). A key budget follows
+  the key (it is kept per key and its rotations) and keeps counting as before.
+- **Settings of the new team apply** to the moved keys from the next request: its request policy, its routing rules
+  and those of its department, and its active state.
+
+The new owner team must exist (404 otherwise) and be active, in an active department (`400` on `ownerTeamId`
+otherwise): the gateway refuses the keys of an inactive one, which would cut the platform off.
+
 ## Acting as a key
 
 `x-ume-on-behalf-of: <key id>` on a request authenticated by a credential key.
@@ -327,7 +352,7 @@ file instead of having an admin create them (ADR 022). The migration service app
   "integration": {
     "name": "Ume.Rag",
     "description": "Retrieval platform",
-    // Found by code; created (and its department, by cost centre code) when absent.
+    // Optional. Found by code; created (and its department, by cost centre code) when absent.
     "owner": { "teamCode": "ume-rag", "teamName": "Ume.Rag", "departmentCode": "1000", "departmentName": "IT" }
   },
   "credentialKeys": [
@@ -344,6 +369,21 @@ file instead of having an admin create them (ADR 022). The migration service app
   (default) or `640`. Empty `Manifests` turns it off. A manifest that cannot be applied (unknown property or scope,
   invalid range, a team that does not exist and cannot be created) fails the migration with every reason, so the stack
   does not start half-configured.
+- **Owner (optional):** with `owner`, a new integration goes to the team with `teamCode`, created when absent in the
+  department with `departmentCode` (a cost centre code, so specific to each organisation). Without it, a new
+  integration gets a **default owner** made from its name: a team and a department whose code is the name in lower
+  case with its letters and digits kept and every other run of characters one `-` (`My.Platform` gives `my-platform`), and
+  whose name is the integration's name. An existing team with that code is used; otherwise the team is created, in the
+  department with that code, which is created when absent. So an ownerless integration named like one of the
+  organisation's own team codes (`IT` gives `it`) joins that team, with its budget, request policy and routing rules:
+  choose a name that is not a team's code, or name the `owner`; the preview says "the existing team" when it happens. A name whose code would be longer than 50 characters (a
+  cost centre code's limit) needs an `owner`. A manifest can be as short as
+  `{ "schemaVersion": 1, "integration": { "name": "My.Platform" }, "credentialKeys": [{ "name": "api" }] }`. When the
+  default owner is used, the migration logs, and the admin console's preview shows, a warning naming the team (and
+  department) the integration is placed in and saying that a gateway admin can move it to the organisation's own team
+  under *Integrations* ([moving an integration](#moving-an-integration-to-another-team)).
+  For an existing integration a manifest without an owner compares nothing and warns of nothing: its owner is
+  whatever the admin console says. With an owner, an owner that differs is reported and not changed, as before.
 - **Names:** integration and key names are letters, digits, `.`, `_` and `-` (they are directory and file names). A
   key is identified by its integration and name: renaming a key in the admin console makes the manifest create a new
   one with the old name.
@@ -368,8 +408,9 @@ new keys are shown together, once. Presets are manifests with a `preset` title (
 ignored when applied) in `Admin:IntegrationPresetsPath` (default: the `integration-presets` directory next to the admin
 API, which the image fills from [deploy/integration-presets](../deploy/integration-presets)). A preset is data, not
 code: the platform it is for owns its content, and an adopter points the setting at a directory of their own or sets
-it empty. The repository ships `ume-rag.json` for Ume.Rag, with the owner's department left empty so the preview asks
-for it.
+it empty. The repository ships `ume-rag.json` for Ume.Rag without an owner, so it can be imported unedited: Ume.Rag
+gets the default owner (team and department `ume-rag`), to be moved to the organisation's own team afterwards, or an
+`owner` can be added before the preview.
 
 **In the shipped stacks** (an empty manifest directory or variable provisions nothing):
 
@@ -377,7 +418,9 @@ for it.
   (`deploy/integration-manifests`, readable by uid 1654: `chmod 644` the files); the secrets appear in `UME_INTEGRATION_SECRETS_DIR` (`deploy/integration-secrets`,
   mode 700, owned by uid 1654). `init-deployment.sh` creates both and writes them to `.env`.
 - **Portainer** (`compose.portainer.yaml`): set `UME_INTEGRATION_MANIFEST` to the manifest's JSON; the bootstrap writes it
-  for the migration service on every start (clearing it provisions nothing more). The secrets are written to the stack's
+  for the migration service on every start (clearing it provisions nothing more). Without an owner the JSON holds
+  nothing specific to the organisation, so a platform's stack can carry it as a default value; the integration is moved
+  to the organisation's team in the admin console after the first sign-in. The secrets are written to the stack's
   `integration-secrets` volume, which the bootstrap gives to uid 1654; a platform in the same stack mounts that volume
   read-only in its own bootstrap.
 - **Kubernetes:** set `Provisioning__Manifests` and `Provisioning__SecretsPath` on the migrations Job, with the

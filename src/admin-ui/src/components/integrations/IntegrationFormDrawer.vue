@@ -29,6 +29,14 @@ const values = reactive({ name: '', description: '', ownerTeamId: '', isActive: 
 const busy = ref(false)
 const isEdit = computed(() => !!props.existing)
 const teamOptions = computed(() => teams.items.map((t) => ({ value: t.id, label: `${t.departmentName} · ${t.name}` })))
+const ownerHint = computed(() => {
+  const owner = 'The team that runs the integration. Its credential keys belong to this team and its own calls are charged to it.'
+  const keys = props.existing?.credentialKeys ?? 0
+  if (keys === 0) return owner
+  // The admin API moves every credential key that is not revoked with the integration; usage keeps its team and department.
+  const moved = keys === 1 ? 'Its credential key moves' : `Its ${keys} credential keys move`
+  return `${owner} ${moved} with it to another team; usage so far stays with the previous team and department.`
+})
 
 watch(
   () => props.open,
@@ -91,7 +99,7 @@ async function submit(): Promise<void> {
             placeholder="Select a team"
             :options="teamOptions"
             :error="errors.ownerTeamId"
-            hint="The team that runs the integration. Its credential keys belong to this team and its own calls are charged to it."
+            :hint="ownerHint"
           />
           <CheckField
             v-model="values.isActive"

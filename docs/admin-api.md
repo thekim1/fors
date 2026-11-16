@@ -154,11 +154,16 @@ Other systems that use gateway keys for the teams they serve, such as a RAG plat
 - `POST /api/integrations/import` `{ manifest }` → `IntegrationImportResult` (gateway-admin): creates the owner team (and
   department), the integration and each credential key that are missing, audited as the signed-in admin; never changes an
   existing key. `IntegrationImportResult = { integrationId, integrationName, createdIntegration, createdTeam,
-  createdDepartment, keys: { name, id, prefix, state: Created|Existing|Revoked, secret }[], warnings: string[] }`; `secret`
-  is set only for keys this call created, once. A manifest that cannot be applied is a 400 with every reason under
-  `errors.manifest`
+  createdDepartment, defaultOwner, keys: { name, id, prefix, state: Created|Existing|Revoked, secret }[], warnings: string[] }`; `secret`
+  is set only for keys this call created, once. `defaultOwner` is true when the manifest names no owner and the
+  integration is created now with the default owner made from its name (a team and department coded like `my-platform`);
+  `warnings` then holds a sentence naming the team and department and saying that a gateway admin can move it. A
+  manifest that cannot be applied is a 400 with every reason under `errors.manifest`
 - `PUT /api/integrations/{id}` (same body) → `Integration` (gateway-admin). Deactivating refuses all its keys at once
-  (`key_disabled`); the owner team changes only while it has no credential keys (409).
+  (`key_disabled`). A new `ownerTeamId` (404 when the team does not exist, 400 when it or its department is inactive) moves the integration with every credential
+  key of it that is not revoked, in one transaction, each key audited as an `update`; revoked and assigned keys stay
+  where they are, and recorded usage keeps its team and department
+  ([moving an integration](integrations.md#moving-an-integration-to-another-team)).
 - `DELETE /api/integrations/{id}` → 204 (gateway-admin); 409 while a key of it is not revoked. The revoked keys keep their
   history and lose the link.
 - Names are unique (400 on `name`). Every change is audited (entity type `Integration`) and drops the gateway's key cache.

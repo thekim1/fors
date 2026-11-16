@@ -14,6 +14,7 @@ const result = (state: 'Created' | 'Existing', secret: string | null = null): In
   createdIntegration: state === 'Created',
   createdTeam: false,
   createdDepartment: false,
+  defaultOwner: false,
   keys: [{ name: 'api', id: null, prefix: null, state, secret }],
   warnings: state === 'Existing' ? ["Credential key 'api' of 'Platform' differs from the manifest in integrationScopes"] : [],
 })
@@ -69,6 +70,26 @@ describe('IntegrationImportDrawer', () => {
     expect(wrapper.text()).toContain('Exists, unchanged')
     expect(wrapper.text()).toContain('differs from the manifest')
     expect(button(wrapper, 'Create').attributes('aria-disabled')).toBe('true')
+  })
+
+  it('says when the manifest names no owner and where the integration is placed', async () => {
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await wrapper.find('textarea').setValue('{ "schemaVersion": 1, "integration": { "name": "Platform" } }')
+    api.previewImport.mockResolvedValue({
+      ...result('Created'),
+      createdTeam: true,
+      createdDepartment: true,
+      defaultOwner: true,
+      warnings: [
+        "Integration 'Platform' names no owner in the manifest, so it is placed in the team 'Platform' (code 'platform') in the department 'Platform' (code 'platform'), both created for it. A gateway admin can move it to the organisation's own team under Integrations; its credential keys move with it.",
+      ],
+    })
+    await button(wrapper, 'Preview').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('will be created in a new team named after it, as the manifest names no owner.')
+    expect(wrapper.text()).toContain("A gateway admin can move it to the organisation's own team under Integrations")
+    expect(button(wrapper, 'Create').attributes('aria-disabled')).toBeUndefined()
   })
 
   it('lists every problem the server finds in the manifest', async () => {

@@ -32,14 +32,15 @@ public sealed record IntegrationImportRequest([property: Required, StringLength(
 
 /// <summary>
 /// What an import created or would create. <see cref="IntegrationId"/> is null in a preview that would create the
-/// integration; a key's secret is set only in the answer to the import that created it.
+/// integration; a key's secret is set only in the answer to the import that created it. <see cref="DefaultOwner"/>: the
+/// manifest names no owner and the integration is created with the default owner made from its name (a warning says which team).
 /// </summary>
 public sealed record IntegrationImportDto(
-    Guid? IntegrationId, string IntegrationName, bool CreatedIntegration, bool CreatedTeam, bool CreatedDepartment,
+    Guid? IntegrationId, string IntegrationName, bool CreatedIntegration, bool CreatedTeam, bool CreatedDepartment, bool DefaultOwner,
     IReadOnlyList<ImportedKeyDto> Keys, IReadOnlyList<string> Warnings)
 {
     public static IntegrationImportDto Of(ProvisioningResult r) => new(
-        r.IntegrationId, r.IntegrationName, r.CreatedIntegration, r.CreatedTeam, r.CreatedDepartment,
+        r.IntegrationId, r.IntegrationName, r.CreatedIntegration, r.CreatedTeam, r.CreatedDepartment, r.DefaultOwner,
         [.. r.Keys.Select(k => new ImportedKeyDto(k.Name, k.Id, k.Prefix, k.State, k.Secret))], r.Warnings);
 }
 

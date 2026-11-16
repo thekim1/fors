@@ -21,6 +21,15 @@ See [runbook](runbook.md) for the actual deployment procedure.
   the gateway as `Gateway__OidcAuthority`, which `/v1/ume/context` hands out as `gateway.oidc_authority`. Kubernetes:
   add `Gateway__OidcAuthority` to `ume-gateway-config` (the example lists it as a comment); unset leaves the field
   `null`.
+- **Manifests:** `integration.owner` may be left out. A manifest that names an owner behaves as before. Without one, a
+  new integration is placed in a team and department made from its name (`My.Platform` → code `my-platform`), or in an
+  existing team with that code; move it to your own team under *Integrations* afterwards. A platform's Portainer stack
+  can then carry its manifest as a default instead of asking for a department code.
+- **Changed behaviour:** `PUT /api/integrations/{id}` with another `ownerTeamId` no longer answers 409 while the
+  integration has credential keys; it moves them (those not revoked) to the new team. A script that relied on the 409
+  as a guard must check `credentialKeys` itself. During a rolling update an admin API of the previous version still
+  answers 409.
+- **Ume.Rag preset:** `ume-rag.json` no longer declares an owner. An integration already created from it is not changed.
 
 ## 0.10.3: Ume.Rag preset keys limited to OnPrem and Eu
 
