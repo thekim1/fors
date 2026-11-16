@@ -72,9 +72,11 @@ services:
     restart: "no"
     entrypoint: [/bin/sh, /config/bootstrap.sh]
     environment:
-      # Each host name, else its default under UME_DOMAIN (llm., llm-admin.). Without the domain the gateway's name is
-      # required and the admin's stays empty, which the script reads as "the gateway's name" (as before UME_DOMAIN).
-      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-llm.${UME_DOMAIN:?Set UME_DOMAIN or UME_GATEWAY_HOST}}
+      # Each host name, else its default under UME_DOMAIN (llm., llm-admin.). With neither, the gateway's name arrives
+      # empty and the script stops with "Set UME_DOMAIN or UME_GATEWAY_HOST" (no ":?" inside a default here: some
+      # Compose versions evaluate it even when the outer variable is set). Without the domain the admin's name stays
+      # empty, which the script reads as "the gateway's name" (as before UME_DOMAIN).
+      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-${UME_DOMAIN:+llm.}${UME_DOMAIN:-}}
       UME_ADMIN_HOST: ${UME_ADMIN_HOST:-${UME_DOMAIN:+llm-admin.}${UME_DOMAIN:-}}
       UME_DATA_HOST: ${UME_DATA_HOST:-}
       UME_OIDC_CLIENT_SECRET: ${UME_OIDC_CLIENT_SECRET:-}
@@ -226,7 +228,7 @@ services:
       Oidc__RoleGroups__department-admin: ${UME_OIDC_GROUPS_DEPARTMENT_ADMIN:-}
       Oidc__RoleGroups__viewer: ${UME_OIDC_GROUPS_VIEWER:-}
       Oidc__RoleGroups__team-admin: ${UME_OIDC_GROUPS_TEAM_ADMIN:-}
-      Gateway__BaseUrl: ${UME_GATEWAY_PUBLIC_URL:-https://${UME_GATEWAY_HOST:-llm.${UME_DOMAIN:?Set UME_DOMAIN or UME_GATEWAY_HOST}}}
+      Gateway__BaseUrl: ${UME_GATEWAY_PUBLIC_URL:-https://${UME_GATEWAY_HOST:-${UME_DOMAIN:+llm.}${UME_DOMAIN:-}}}
       DataApi__PublicUrl: ${UME_DATA_PUBLIC_URL:-}
       Gateway__OperationsUrl: https://gateway:8443
       # Integration API (/integration/v1): requests per minute per credential key.
