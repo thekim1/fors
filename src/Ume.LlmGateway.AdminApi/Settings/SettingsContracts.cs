@@ -85,6 +85,9 @@ public sealed record SignInSettingsDto(
 
 /// <summary>
 /// The client secret as the API shows it: never the value, encrypted or not. <c>Unreadable</c>: one is stored that the key
-/// ring cannot unprotect (sign-in is then not configured).
+/// ring cannot unprotect (sign-in is then not configured). <c>Locked</c>: the deployment sets it.
 /// </summary>
-public sealed record SignInSecretStatus(bool Set, string Source, DateTimeOffset? SetAt, DateOnly? ExpiresOn, bool Unreadable);
+public sealed record SignInSecretStatus(bool Set, string Source, DateTimeOffset? SetAt, DateOnly? ExpiresOn, bool Unreadable)
+{
+    public bool Locked => Source == SignInValueSources.Deployment;
+}

@@ -82,6 +82,16 @@ generated or prompted for by `deploy/init-deployment.sh` (see *Quick production 
 described in [the runbook](runbook.md). Other settings can be overridden
 with `Section__Key` environment variables (for example `Ollama__Enabled=true`, development only).
 
+## Trying setup mode
+
+`"Setup:Try": true` in the AppHost user secrets starts the admin API without `Oidc__Authority` and `Oidc__ClientSecret`
+and with a generated `Setup__Secret` (parameter `setup-secret`), so [setup mode](identity-and-roles.md#setup-mode) opens and
+the admin API prints the setup code in its console log in the dashboard. A database whose setup is already done (any
+earlier run with the AppHost's sign-in values marked it completed) stays closed: also set `"Setup:Reopen"` to a new value,
+which the AppHost passes on. In the wizard, the bundled Keycloak's realm (`http://localhost:<keycloak port>/realms/ume`,
+allowed over http in Development), the client `ume-admin` and the `oidc-client-secret` parameter are the values to test.
+Remove both settings to go back.
+
 ## Admin UI code
 
 `src/admin-ui` is Vue 3 + Pinia + Vue Router with Reka UI primitives and Tailwind CSS v4, built from the design prototype in

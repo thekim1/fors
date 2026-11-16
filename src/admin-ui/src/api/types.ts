@@ -118,6 +118,8 @@ export interface BffUser {
   sessionLimitAt?: IsoDateTime | null
   /** Whether the admin API has a usable identity provider; false: a sign-in is refused (409 sign_in_not_configured). */
   signIn?: { configured: boolean }
+  /** Whether setup mode is open (first run or re-open): the console then goes to the setup wizard at /setup. */
+  setup?: { open: boolean }
 }
 
 /** What the console shows as its owner (GET /bff/branding, readable before sign-in). */

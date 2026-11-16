@@ -13,6 +13,8 @@ public sealed class SignInSettings
     public const int MaxAuthorityLength = 500;
     public const int MaxValueLength = 200;
     public const int MaxEncryptedClientSecretLength = 2000;
+    public const int MaxSetupNonceLength = 64;
+    public const int MaxSetupReopenLength = 200;
 
     public int Id { get; set; } = SingletonId;
 
@@ -38,4 +40,19 @@ public sealed class SignInSettings
     public DateOnly? ClientSecretExpiresOn { get; set; }
 
     public DateTimeOffset? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// When setup mode was completed: by a saved, tested sign-in, or at a start whose deployment declares the sign-in. Null
+    /// before the first completion. The gateway's database role cannot read it.
+    /// </summary>
+    public DateTimeOffset? SetupCompletedAt { get; set; }
+
+    /// <summary>The running opening's random nonce, from which the setup code is derived; null while no opening runs.</summary>
+    public string? SetupNonce { get; set; }
+
+    /// <summary>When the opening of <see cref="SetupNonce"/> started; an opening lasts one hour.</summary>
+    public DateTimeOffset? SetupOpenedAt { get; set; }
+
+    /// <summary>The last <c>Setup:Reopen</c> value that opened setup; a restart with the same value opens nothing.</summary>
+    public string? SetupReopenConsumed { get; set; }
 }

@@ -88,7 +88,8 @@ public sealed class DatabaseRoleTests(DatabaseRolesFixture fixture) : IClassFixt
         string[] all = [.. await ListAsync(Connection(null), """
             SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY 1
             """)];
-        string[] notForGateway = ["AuditLog", "DataApiKeys", "Branding", "SignInSettings", "__EFMigrationsHistory"];
+        string[] notForGateway = ["AuditLog", "DataApiKeys", "Branding", "SignInSettings", "SetupSessions", "SetupTests", "__EFMigrationsHistory"];
+        string[] setup = ["SetupSessions", "SetupTests"];
 
         (await PrivilegesAsync("ume_gateway", "SELECT")).ShouldBe([.. all.Except(notForGateway)], ignoreOrder: true);
         (await PrivilegesAsync("ume_gateway", "INSERT")).ShouldBe(["AlertEvents", "AuthFailures", "UsageRecords"], ignoreOrder: true);
@@ -96,9 +97,9 @@ public sealed class DatabaseRoleTests(DatabaseRolesFixture fixture) : IClassFixt
         (await PrivilegesAsync("ume_gateway", "DELETE")).ShouldBeEmpty();
 
         (await PrivilegesAsync("ume_admin", "SELECT")).ShouldBe(all, ignoreOrder: true);
-        (await PrivilegesAsync("ume_admin", "INSERT")).ShouldBe([.. Configuration, "AuditLog", "DataProtectionKeys"], ignoreOrder: true);
-        (await PrivilegesAsync("ume_admin", "UPDATE")).ShouldBe(Configuration, ignoreOrder: true);
-        (await PrivilegesAsync("ume_admin", "DELETE")).ShouldBe(Configuration, ignoreOrder: true);
+        (await PrivilegesAsync("ume_admin", "INSERT")).ShouldBe([.. Configuration, .. setup, "AuditLog", "DataProtectionKeys"], ignoreOrder: true);
+        (await PrivilegesAsync("ume_admin", "UPDATE")).ShouldBe([.. Configuration, .. setup], ignoreOrder: true);
+        (await PrivilegesAsync("ume_admin", "DELETE")).ShouldBe([.. Configuration, .. setup], ignoreOrder: true);
     }
 
     [Fact]
@@ -148,8 +149,11 @@ public sealed class DatabaseRoleTests(DatabaseRolesFixture fixture) : IClassFixt
         await ExecuteAsync(admin, """
             UPDATE "SignInSettings" SET "Authority" = "Authority", "ClientId" = "ClientId", "RoleClaim" = "RoleClaim", "DepartmentClaim" = "DepartmentClaim",
                 "TeamClaim" = "TeamClaim", "GroupClaim" = "GroupClaim", "ExtraScopes" = "ExtraScopes", "EncryptedClientSecret" = "EncryptedClientSecret",
-                "ClientSecretSetAt" = "ClientSecretSetAt", "ClientSecretExpiresOn" = "ClientSecretExpiresOn", "UpdatedAt" = now()
+                "ClientSecretSetAt" = "ClientSecretSetAt", "ClientSecretExpiresOn" = "ClientSecretExpiresOn", "UpdatedAt" = now(),
+                "SetupCompletedAt" = "SetupCompletedAt", "SetupNonce" = "SetupNonce", "SetupOpenedAt" = "SetupOpenedAt", "SetupReopenConsumed" = "SetupReopenConsumed"
             """);
+        // Setup mode's lock (SetupLock) needs no grant: an advisory lock.
+        await ScalarAsync<long>(admin, "SELECT count(*) FROM (SELECT pg_advisory_xact_lock(1)) AS l");
         (await ScalarAsync<string?>(admin, """SELECT "EncryptedClientSecret" FROM "SignInSettings" """)).ShouldBeNull();
         await ShouldBeDeniedAsync(admin, """INSERT INTO "SignInSettings" ("Id", "ExtraScopes") VALUES (2, '{}')""");
         await ShouldBeDeniedAsync(admin, """DELETE FROM "SignInSettings" """);
@@ -159,9 +163,13 @@ public sealed class DatabaseRoleTests(DatabaseRolesFixture fixture) : IClassFixt
         await ScalarAsync<string?>(gateway, """SELECT "Authority" FROM "SignInSettings" """);
         await ShouldBeDeniedAsync(gateway, """SELECT "EncryptedClientSecret" FROM "SignInSettings" """);
         await ShouldBeDeniedAsync(gateway, """SELECT "ClientId" FROM "SignInSettings" """);
+        await ShouldBeDeniedAsync(gateway, """SELECT "SetupNonce" FROM "SignInSettings" """);
+        await ShouldBeDeniedAsync(gateway, """SELECT count(*) FROM "SetupSessions" """);
+        await ShouldBeDeniedAsync(gateway, """SELECT count(*) FROM "SetupTests" """);
         await ShouldBeDeniedAsync(gateway, """SELECT * FROM "SignInSettings" """);
         await ShouldBeDeniedAsync(gateway, """UPDATE "SignInSettings" SET "Authority" = NULL""");
         await ShouldBeDeniedAsync(Connection("ume_data"), """SELECT count(*) FROM "SignInSettings" """);
+        await ShouldBeDeniedAsync(Connection("ume_data"), """SELECT count(*) FROM "SetupSessions" """);
     }
 
     [Fact]

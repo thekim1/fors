@@ -33,7 +33,7 @@ GRANT SELECT ("Authority") ON "SignInSettings" TO ume_gateway;
 GRANT SELECT ON "Departments", "Teams", "VirtualKeys", "Integrations", "DataApiKeys", "ProviderAccounts", "ModelDeployments", "ModelPrices",
   "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets", "Budgets", "GatewaySettings",
   "UsageRecords", "UsageMonthlyTotals", "AuditLog", "AlertEvents", "AuthFailures", "DataProtectionKeys",
-  "Branding", "SignInSettings", "__EFMigrationsHistory" TO ume_admin;
+  "Branding", "SignInSettings", "SetupSessions", "SetupTests", "__EFMigrationsHistory" TO ume_admin;
 GRANT INSERT, UPDATE, DELETE ON "Departments", "Teams", "VirtualKeys", "Integrations", "ProviderAccounts",
   "ModelDeployments", "ModelPrices", "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets",
   "Budgets", "DataApiKeys" TO ume_admin;
@@ -41,7 +41,10 @@ GRANT UPDATE ("TrustedProxies", "LogAllRequests", "LogAllRequestsUntil", "Update
   "RetentionLastRunAt", "RetentionLastRunDeleted", "RetentionLastRunError") ON "GatewaySettings" TO ume_admin;
 GRANT UPDATE ("OrganisationName", "Logo", "LogoContentType", "UpdatedAt") ON "Branding" TO ume_admin;
 GRANT UPDATE ("Authority", "ClientId", "RoleClaim", "DepartmentClaim", "TeamClaim", "GroupClaim", "ExtraScopes", "EncryptedClientSecret",
-  "ClientSecretSetAt", "ClientSecretExpiresOn", "UpdatedAt") ON "SignInSettings" TO ume_admin;
+  "ClientSecretSetAt", "ClientSecretExpiresOn", "UpdatedAt", "SetupCompletedAt", "SetupNonce", "SetupOpenedAt", "SetupReopenConsumed")
+  ON "SignInSettings" TO ume_admin;
+-- Setup mode's short-lived sessions and test sign-ins (deleted when their opening ends).
+GRANT INSERT, UPDATE, DELETE ON "SetupSessions", "SetupTests" TO ume_admin;
 GRANT INSERT ON "AuditLog", "DataProtectionKeys" TO ume_admin;
 GRANT UPDATE ("Acknowledged") ON "AlertEvents" TO ume_admin;
 -- Data retention: old rows are removed only through this function (owner's rights, minimum 90 days); the admin role

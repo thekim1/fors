@@ -75,6 +75,11 @@ renamed or removed, within a major version.
 | 2004 | `admin.session.extended` | Admin API | A user chose *Stay signed in* | `Actor`, `SessionId`, `ExpiresAt`, `SourceAddress` |
 | 2005 | `admin.access.denied` | Admin API | A signed-in user was refused (403); at most once a minute per user, `Count` refusals since the last event | `Actor`, `Method`, `Path`, `Count`, `SourceAddress`, `Roles` |
 | 2006 | `admin.data.read` | Admin API | A user read the audit log, request list, PII incidents or Data API keys, or an integration read the Integration API (`Actor` `integration:<name>`, [integrations](integrations.md)) | `Actor`, `Path`, `Query`, `SourceAddress` |
+| 2008 | `admin.setup.opened` | Admin API | Setup mode opened at the admin API's start ([setup mode](identity-and-roles.md#setup-mode)): `Kind` `first_run` (never completed) or `reopen` (a new `Setup:Reopen` value). Never the setup code | `Kind`, `EndsAt` |
+| 2009 | `admin.setup.code_refused` | Admin API | Wrong setup codes, sampled: at most one event per 10 seconds per instance, `Count` wrong codes since the last event (code checks are limited to 20 a minute per instance; a wrong code never voids the code) | `SourceAddress` (of the latest), `Count` |
+| 2010 | `admin.setup.session` | Admin API | A setup session started for a correct setup code | `SessionId` (`setup-` and a random id, never the cookie), `SourceAddress`, `ExpiresAt` |
+| 2011 | `admin.setup.test` | Admin API | A setup test sign-in finished, or callbacks of an unknown, replayed or expired test (`Reason` `unknown_test`, sampled like 2009) | `Result` (`passed`, `failed`), `Reason` (`passed` or the step that failed), `Subject` (the tested person, as the chosen provider names them), `GatewayAdmin`, `SessionId`, `SourceAddress`, `Count` |
+| 2012 | `admin.setup.completed` | Admin API | Setup completed: the tested sign-in values are saved and setup is closed; the audit entry names the same person | `Actor` (the tested person), `SessionId`, `SourceAddress` |
 | 3001 | `data.read` | Data API | Every authenticated read | `Client`, `Path`, `Status`, `Cursor` |
 | 3002 | `data.auth.failed` | Data API | A revoked or expired Data API key was used (at most once a minute per key) | `Reason`, `KeyId`, `KeyPrefix` |
 

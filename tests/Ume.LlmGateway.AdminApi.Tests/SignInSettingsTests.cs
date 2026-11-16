@@ -204,7 +204,10 @@ public sealed class SignInSettingsTests(AdminFixture fixture)
             json.GetProperty("extraScopes").GetProperty("source").GetString().ShouldBe(SignInValueSources.Default);
             json.GetProperty("updatedAt").ValueKind.ShouldBe(JsonValueKind.String);
             var secret = json.GetProperty("clientSecret");
-            secret.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal).ShouldBe(["expiresOn", "set", "setAt", "source", "unreadable"]);
+            secret.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal).ShouldBe(["expiresOn", "locked", "set", "setAt", "source", "unreadable"]);
+            secret.GetProperty("locked").GetBoolean().ShouldBeFalse();
+            json.GetProperty("authority").GetProperty("locked").GetBoolean().ShouldBeTrue();
+            json.GetProperty("clientId").GetProperty("locked").GetBoolean().ShouldBeFalse();
             secret.GetProperty("set").GetBoolean().ShouldBeTrue();
             secret.GetProperty("source").GetString().ShouldBe(SignInValueSources.Wizard);
             secret.GetProperty("expiresOn").GetString().ShouldBe("2027-01-31");
@@ -218,7 +221,8 @@ public sealed class SignInSettingsTests(AdminFixture fixture)
             deployedText.ShouldNotContain("deploy-secret-7d2e");
             deployedText.ShouldNotContain(StoredSecret);
             var deployedSecret = JsonDocument.Parse(deployedText).RootElement.GetProperty("clientSecret");
-            (deployedSecret.GetProperty("source").GetString(), deployedSecret.GetProperty("set").GetBoolean()).ShouldBe((SignInValueSources.Deployment, true));
+            (deployedSecret.GetProperty("source").GetString(), deployedSecret.GetProperty("set").GetBoolean(), deployedSecret.GetProperty("locked").GetBoolean())
+                .ShouldBe((SignInValueSources.Deployment, true, true));
             deployedSecret.GetProperty("expiresOn").ValueKind.ShouldBe(JsonValueKind.Null);
             deployedSecret.GetProperty("setAt").ValueKind.ShouldBe(JsonValueKind.Null);
         }
@@ -281,7 +285,7 @@ public sealed class SignInSettingsTests(AdminFixture fixture)
         };
         try
         {
-            return await scope.ServiceProvider.GetRequiredService<SignInSettingsService>().SaveWizardValuesAsync(values, clientSecret, Ct);
+            return await scope.ServiceProvider.GetRequiredService<SignInSettingsService>().SaveWizardValuesAsync(values, clientSecret, null, null, Ct);
         }
         finally
         {

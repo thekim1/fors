@@ -25,6 +25,8 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
     public DbSet<GatewaySettings> Settings => Set<GatewaySettings>();
     public DbSet<Branding> Branding => Set<Branding>();
     public DbSet<SignInSettings> SignInSettings => Set<SignInSettings>();
+    public DbSet<SetupSession> SetupSessions => Set<SetupSession>();
+    public DbSet<SetupTest> SetupTests => Set<SetupTest>();
     public DbSet<UsageRecord> UsageRecords => Set<UsageRecord>();
     public DbSet<UsageMonthlyTotal> UsageMonthlyTotals => Set<UsageMonthlyTotal>();
     public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
@@ -223,6 +225,23 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             e.Property(x => x.TeamClaim).HasMaxLength(Domain.Entities.SignInSettings.MaxValueLength);
             e.Property(x => x.GroupClaim).HasMaxLength(Domain.Entities.SignInSettings.MaxValueLength);
             e.Property(x => x.EncryptedClientSecret).HasMaxLength(Domain.Entities.SignInSettings.MaxEncryptedClientSecretLength);
+            e.Property(x => x.SetupNonce).HasMaxLength(Domain.Entities.SignInSettings.MaxSetupNonceLength);
+            e.Property(x => x.SetupReopenConsumed).HasMaxLength(Domain.Entities.SignInSettings.MaxSetupReopenLength);
+        });
+
+        modelBuilder.Entity<SetupSession>(e =>
+        {
+            e.Property(x => x.OpeningNonce).HasMaxLength(Domain.Entities.SignInSettings.MaxSetupNonceLength);
+            e.HasIndex(x => x.TokenHash).IsUnique();
+        });
+
+        modelBuilder.Entity<SetupTest>(e =>
+        {
+            e.Property(x => x.Reason).HasMaxLength(SetupTest.MaxReasonLength);
+            e.Property(x => x.Result).HasColumnType("jsonb");
+            e.HasIndex(x => x.MarkerHash).IsUnique();
+            // A session's tests go with it, so no typed candidate secret outlives its opening.
+            e.HasOne<SetupSession>().WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<UsageRecord>(e =>

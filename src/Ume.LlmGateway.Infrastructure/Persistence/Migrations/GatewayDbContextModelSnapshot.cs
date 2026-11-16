@@ -827,6 +827,89 @@ namespace Ume.LlmGateway.Infrastructure.Persistence.Migrations
                     b.ToTable("RoutingRuleTargets");
                 });
 
+            modelBuilder.Entity("Ume.LlmGateway.Domain.Entities.SetupSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OpeningNonce")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<byte[]>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("SetupSessions");
+                });
+
+            modelBuilder.Entity("Ume.LlmGateway.Domain.Entities.SetupTest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("BrowserHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTimeOffset?>("CallbackAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("MarkerHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<bool?>("Passed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Protected")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Result")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("ValuesFingerprint")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MarkerHash")
+                        .IsUnique();
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("SetupTests");
+                });
+
             modelBuilder.Entity("Ume.LlmGateway.Domain.Entities.SignInSettings", b =>
                 {
                     b.Property<int>("Id")
@@ -863,6 +946,20 @@ namespace Ume.LlmGateway.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.Property<string>("RoleClaim")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("SetupCompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SetupNonce")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("SetupOpenedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SetupReopenConsumed")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
@@ -1341,6 +1438,15 @@ namespace Ume.LlmGateway.Infrastructure.Persistence.Migrations
                     b.HasOne("Ume.LlmGateway.Domain.Entities.RoutingRule", null)
                         .WithMany("Targets")
                         .HasForeignKey("RoutingRuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ume.LlmGateway.Domain.Entities.SetupTest", b =>
+                {
+                    b.HasOne("Ume.LlmGateway.Domain.Entities.SetupSession", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

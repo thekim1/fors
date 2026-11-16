@@ -32,6 +32,30 @@ public sealed record AdminActor(
             agent.Length == 0 ? null : Printable(agent.Length > MaxUserAgent ? agent[..MaxUserAgent] : agent));
     }
 
+    /// <summary>
+    /// The actor of a setup completion (thekim1/llmgateway#100): the person whose test sign-in passed, from the test's stored result,
+    /// on an anonymous request. No admin session exists, so <see cref="SessionId"/> is the setup session's id (security event
+    /// <c>admin.setup.session</c>). Only the admin roles are kept.
+    /// </summary>
+    public static AdminActor ForSetup(HttpContext http, string subject, string? name, IEnumerable<string> roles, IEnumerable<string> departments, string setupSessionId)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(roles);
+        ArgumentNullException.ThrowIfNull(departments);
+        string[] adminRoles = [AdminRoles.GatewayAdmin, AdminRoles.DepartmentAdmin, AdminRoles.Viewer, AdminRoles.TeamAdmin];
+        // Within the audit log's columns: the provider chose these values.
+        static string Capped(string value, int max) => value.Length > max ? value[..max] : value;
+        var agent = http.Request.Headers.UserAgent.ToString();
+        return new AdminActor(
+            Capped(Printable(subject) ?? "unknown", 200), Printable(name) is { } shown ? Capped(shown, 200) : null,
+            string.Join(',', roles.Where(adminRoles.Contains).Order(StringComparer.Ordinal)),
+            Capped(Printable(string.Join(',', departments.Order(StringComparer.Ordinal)))!, 1000),
+            http.Items[AdminClientAddresses.ItemKey] as string,
+            setupSessionId,
+            System.Diagnostics.Activity.Current?.TraceId.ToString() ?? http.TraceIdentifier,
+            agent.Length == 0 ? null : Printable(agent.Length > MaxUserAgent ? agent[..MaxUserAgent] : agent));
+    }
+
     /// <summary>Sets the fields of <paramref name="entry"/> that say who made it.</summary>
     public void Stamp(AuditLogEntry entry)
     {

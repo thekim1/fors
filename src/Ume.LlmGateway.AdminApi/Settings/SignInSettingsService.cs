@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Ume.LlmGateway.AdminApi.Auditing;
 using Ume.LlmGateway.AdminApi.Common;
 using Ume.LlmGateway.AdminApi.Security;
+using Ume.LlmGateway.AdminApi.Setup;
 using Ume.LlmGateway.Domain.Entities;
 using Ume.LlmGateway.Infrastructure.Stores;
 
@@ -61,8 +62,14 @@ public sealed record SignInWizardValues
     }
 }
 
-/// <summary>One effective sign-in value and its source (<see cref="SignInValueSources"/>).</summary>
-public sealed record SignInValue<T>(T Value, string Source);
+/// <summary>
+/// One effective sign-in value and its source (<see cref="SignInValueSources"/>). <see cref="Locked"/>: the deployment sets it, so
+/// setup mode shows it and cannot change it.
+/// </summary>
+public sealed record SignInValue<T>(T Value, string Source)
+{
+    public bool Locked => Source == SignInValueSources.Deployment;
+}
 
 /// <summary>
 /// The effective client secret, for server-side callers only: <see cref="ToString"/> leaves the value out, and the API answers
@@ -89,7 +96,17 @@ public sealed class SignInClientSecret(string source, string? value, DateTimeOff
 public sealed record EffectiveSignIn(
     SignInValue<string?> Authority, SignInValue<string> ClientId, SignInClientSecret ClientSecret, SignInValue<string> RoleClaim,
     SignInValue<string> DepartmentClaim, SignInValue<string> TeamClaim, SignInValue<string> GroupClaim, SignInValue<IReadOnlyList<string>> ExtraScopes,
-    DateOnly? ClientSecretExpiresOn, DateTimeOffset? UpdatedAt);
+    DateOnly? ClientSecretExpiresOn, DateTimeOffset? UpdatedAt)
+{
+    /// <summary>When setup mode was completed, read with the values; null before the first completion (<see cref="Setup.SetupMode.IsOpen(EffectiveSignIn, DateTimeOffset)"/>).</summary>
+    public DateTimeOffset? SetupCompletedAt { get; init; }
+
+    /// <summary>When the running setup opening started, read with the values; null while no opening has a nonce.</summary>
+    public DateTimeOffset? SetupOpenedAt { get; init; }
+
+    /// <summary>Whether the deployment declares the sign-in: it sets the authority (<see cref="SignInSettingsService.DeclaresSignIn"/>).</summary>
+    public bool DeclaredByDeployment => Authority.Source == SignInValueSources.Deployment;
+}
 
 /// <summary>
 /// The admin console's sign-in values (thekim1/llmgateway#100): each from the deployment (<c>Oidc:*</c> in the raw
@@ -112,55 +129,107 @@ public sealed class SignInSettingsService(AdminContext ctx, IConfiguration confi
     {
         var row = await ctx.Db.SignInSettings.AsNoTracking().SingleOrDefaultAsync(ct);
         return Resolve(configuration, row is null ? new SignInWizardValues() : SignInWizardValues.Of(row), () => secrets.Unprotect(row?.EncryptedClientSecret),
-            row?.ClientSecretSetAt, row?.UpdatedAt);
+            row?.ClientSecretSetAt, row?.UpdatedAt) with
+        {
+            SetupCompletedAt = row?.SetupCompletedAt, SetupOpenedAt = row?.SetupNonce is null ? null : row.SetupOpenedAt,
+        };
     }
 
     /// <summary>
     /// Stores the sign-in values (the row is created on the first save), with an audit entry that holds whether a client secret
     /// is stored and when, never the secret, and publishes <see cref="InvalidationKind.Config"/>: the gateways hand the
     /// authority out on <c>/v1/ume/context</c>. <paramref name="clientSecret"/>: null keeps the stored one, an empty or blank
-    /// value removes it. Only setup mode calls it; no route of an admin session does.
+    /// value removes it. <paramref name="actor"/> is the audit entry's actor (setup completion's tested person, on an anonymous
+    /// request); null takes the request's user. <paramref name="alsoApply"/> changes the same row in the same transaction (setup
+    /// completion closes setup). The write holds setup mode's lock (<see cref="SetupLock"/>), so it is serialised with every
+    /// opening and completion on every instance. Only setup mode calls it; no route of an admin session does.
     /// </summary>
-    internal async Task<EffectiveSignIn> SaveWizardValuesAsync(SignInWizardValues values, string? clientSecret, CancellationToken ct)
+    internal async Task<EffectiveSignIn> SaveWizardValuesAsync(SignInWizardValues values, string? clientSecret, AdminActor? actor,
+        Func<SignInSettings, CancellationToken, Task>? alsoApply, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(values);
         var stored = values.Normalized();
+        // Protected once, outside the retried write: the ciphertext does not depend on the row.
         var encrypted = string.IsNullOrWhiteSpace(clientSecret) ? null : secrets.Protect(clientSecret);
-        var row = await ctx.Db.SignInSettings.SingleOrDefaultAsync(ct);
-        if (row is null)
+        await ctx.Db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            // Production creates the row in app-roles.sql (the admin role may only update it); development databases may lack it.
-            row = new SignInSettings();
-            ctx.Db.SignInSettings.Add(row);
-        }
+            ctx.Db.ChangeTracker.Clear();
+            await using var transaction = await ctx.Db.Database.BeginTransactionAsync(ct);
+            await SetupLock.AcquireAsync(ctx.Db, ct);
+            var row = await ctx.Db.SignInSettings.SingleOrDefaultAsync(ct);
+            if (row is null)
+            {
+                // Created by the SetupMode migration and app-roles.sql (the admin role may only update it); a database without it is repaired here.
+                row = new SignInSettings();
+                ctx.Db.SignInSettings.Add(row);
+            }
 
-        var before = SignInSettingsAudit.Of(row);
-        row.Authority = stored.Authority;
-        row.ClientId = stored.ClientId;
-        row.RoleClaim = stored.RoleClaim;
-        row.DepartmentClaim = stored.DepartmentClaim;
-        row.TeamClaim = stored.TeamClaim;
-        row.GroupClaim = stored.GroupClaim;
-        row.ExtraScopes = [.. stored.ExtraScopes ?? []];
-        row.ClientSecretExpiresOn = stored.ClientSecretExpiresOn;
-        if (clientSecret is not null)
-        {
-            row.EncryptedClientSecret = encrypted;
-            row.ClientSecretSetAt = encrypted is null ? null : ctx.Now;
-        }
+            var before = SignInSettingsAudit.Of(row);
+            row.Authority = stored.Authority;
+            row.ClientId = stored.ClientId;
+            row.RoleClaim = stored.RoleClaim;
+            row.DepartmentClaim = stored.DepartmentClaim;
+            row.TeamClaim = stored.TeamClaim;
+            row.GroupClaim = stored.GroupClaim;
+            row.ExtraScopes = [.. stored.ExtraScopes ?? []];
+            row.ClientSecretExpiresOn = stored.ClientSecretExpiresOn;
+            if (clientSecret is not null)
+            {
+                row.EncryptedClientSecret = encrypted;
+                row.ClientSecretSetAt = encrypted is null ? null : ctx.Now;
+            }
 
-        row.UpdatedAt = ctx.Now;
-        try
-        {
-            await ctx.SaveAsync(AuditActions.Update, AuditEntities.Settings, AuditEntityId, before, SignInSettingsAudit.Of(row), [InvalidationKind.Config], ct);
-        }
-        catch (DbUpdateException)
-        {
-            // Two saves of the very first values at once: one insert wins.
-            throw new ApiFaultException(409, "Someone else changed the sign-in settings at the same time. Reload the page and try again.");
-        }
+            row.UpdatedAt = ctx.Now;
+            if (alsoApply is not null)
+            {
+                await alsoApply(row, ct);
+            }
 
+            var entry = ctx.Audit(AuditActions.Update, AuditEntities.Settings, AuditEntityId, before, SignInSettingsAudit.Of(row));
+            if (actor is not null)
+            {
+                entry.Actor = actor.Subject;
+                actor.Stamp(entry);
+            }
+
+            ctx.Db.AuditLog.Add(entry);
+            await ctx.Db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+        });
+        // After the commit, so a gateway that reloads reads the new values.
+        await ctx.PublishAsync([InvalidationKind.Config], ct);
         return await ReadAsync(ct);
+    }
+
+    /// <summary>
+    /// Whether the deployment declares the admin console's sign-in: it sets <c>Oidc:Authority</c> (non-blank) in the raw
+    /// configuration. The default client <c>ume-admin</c> is public, so a client secret cannot tell; every deployment before setup
+    /// mode sets the authority. Such a deployment counts as setup completed and never sees the wizard.
+    /// </summary>
+    public static bool DeclaresSignIn(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        return Deployed(configuration.GetSection(OidcOptions.SectionName), nameof(OidcOptions.Authority)) is not null;
+    }
+
+    /// <summary><paramref name="values"/> without what the deployment sets: a deployment value wins, so setup stores none of those.</summary>
+    public static SignInWizardValues WithoutDeployed(IConfiguration configuration, SignInWizardValues values)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(values);
+        var oidc = configuration.GetSection(OidcOptions.SectionName);
+        string? Keep(string key, string? value) => Deployed(oidc, key) is null ? value : null;
+        var deployedScopes = oidc.GetSection(nameof(OidcOptions.ExtraScopes)).GetChildren().Any(c => !string.IsNullOrWhiteSpace(c.Value));
+        var v = values.Normalized();
+        return v with
+        {
+            Authority = Keep(nameof(OidcOptions.Authority), v.Authority), ClientId = Keep(nameof(OidcOptions.ClientId), v.ClientId),
+            RoleClaim = Keep(nameof(OidcOptions.RoleClaim), v.RoleClaim), DepartmentClaim = Keep(nameof(OidcOptions.DepartmentClaim), v.DepartmentClaim),
+            TeamClaim = Keep(nameof(OidcOptions.TeamClaim), v.TeamClaim), GroupClaim = Keep(nameof(OidcOptions.GroupClaim), v.GroupClaim),
+            ExtraScopes = deployedScopes ? null : v.ExtraScopes,
+            // The expiry date belongs to a secret typed in the wizard.
+            ClientSecretExpiresOn = Deployed(oidc, nameof(OidcOptions.ClientSecret)) is null ? v.ClientSecretExpiresOn : null,
+        };
     }
 
     /// <summary>

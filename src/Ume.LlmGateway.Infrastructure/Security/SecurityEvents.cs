@@ -123,4 +123,34 @@ public static partial class SecurityEvents
     [LoggerMessage(2007, LogLevel.Warning,
         "Admin sign-in failed: {Reason} from {SourceAddress}", EventName = "admin.signin.failed")]
     public static partial void AdminSignInFailed(ILogger logger, string reason, string? sourceAddress);
+
+    /// <summary>Setup mode opened at the admin API's start: <c>first_run</c> or <c>reopen</c>. Never the setup code.</summary>
+    [LoggerMessage(2008, LogLevel.Warning,
+        "Setup mode opened ({Kind}) until {EndsAt}", EventName = "admin.setup.opened")]
+    public static partial void AdminSetupOpened(ILogger logger, string kind, DateTimeOffset endsAt);
+
+    /// <summary>Wrong setup codes, sampled: at most one event per 10 seconds per instance, <c>Count</c> the wrong codes since the last one.</summary>
+    [LoggerMessage(2009, LogLevel.Warning,
+        "Setup code refused from {SourceAddress}: {Count} wrong codes since the last event", EventName = "admin.setup.code_refused")]
+    public static partial void AdminSetupCodeRefused(ILogger logger, string? sourceAddress, int count);
+
+    /// <summary>A setup session started for a correct setup code; <c>SessionId</c> is <c>setup-</c> and the session's row id, never its cookie.</summary>
+    [LoggerMessage(2010, LogLevel.Warning,
+        "Setup session {SessionId} started from {SourceAddress} until {ExpiresAt}", EventName = "admin.setup.session")]
+    public static partial void AdminSetupSessionStarted(ILogger logger, string sessionId, string? sourceAddress, DateTimeOffset expiresAt);
+
+    /// <summary>
+    /// A setup test sign-in finished: <c>Result</c> <c>passed</c> or <c>failed</c> with the step that failed, the tested person's
+    /// subject. Callbacks of an unknown test are sampled like 2009, <c>Count</c> the number since the last event (1 otherwise).
+    /// </summary>
+    [LoggerMessage(2011, LogLevel.Warning,
+        "Setup test sign-in {Result} ({Reason}) for {Subject} as gateway admin {GatewayAdmin}; setup session {SessionId} from {SourceAddress}, x{Count}",
+        EventName = "admin.setup.test")]
+    public static partial void AdminSetupTest(ILogger logger, string result, string reason, string? subject, bool gatewayAdmin, string? sessionId,
+        string? sourceAddress, int count);
+
+    /// <summary>Setup completed: the values the tested person signed in with are saved and setup is closed.</summary>
+    [LoggerMessage(2012, LogLevel.Warning,
+        "Setup completed by {Actor} in setup session {SessionId} from {SourceAddress}", EventName = "admin.setup.completed")]
+    public static partial void AdminSetupCompleted(ILogger logger, string actor, string? sessionId, string? sourceAddress);
 }

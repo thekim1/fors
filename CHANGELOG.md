@@ -27,6 +27,23 @@
   `/v1/ume/context`'s `gateway.oidc_authority` falls back to the stored authority when `Gateway:OidcAuthority` is empty;
   the gateway's database role may read only that column of `SignInSettings`. Migration `SignInSettings`; `app-roles.sql`
   creates the row and grants the roles. Existing deployments, which set `Oidc:*`, sign in as before.
+- **Setup mode in the admin API** (thekim1/llmgateway#100, second step; the wizard's pages follow). The admin console's
+  sign-in can be set in a browser wizard under `/bff/setup` ([admin-api.md](docs/admin-api.md#setup-mode-bffsetup),
+  [identity and roles](docs/identity-and-roles.md#setup-mode)): a setup code printed on the admin API's standard output
+  (never through the logger) gives a 30-minute setup session; `POST /bff/setup/test` runs a real sign-in at the candidate
+  provider with the candidate client in the same browser; `POST /bff/setup/complete` saves the values only after a passed
+  test, with exactly those values, by a person who comes out as `gateway-admin`, and closes setup. Setup is an explicit
+  state (migration `SetupMode`: setup columns on `SignInSettings`, which the migration now creates, and the tables
+  `SetupSessions` and `SetupTests`), open only before its first completion and after a re-open (`Setup:Reopen`, consumed when
+  setup opens), for one hour; a fault never opens it. **A deployment that sets `Oidc:Authority` counts as completed**: it
+  never prints a code and `/bff/setup` answers 404, so existing deployments are unchanged and need no new setting. Setup mode
+  needs the new optional setup secret (`Setup:Secret`, a generated file or variable of at least 32 characters). Wrong codes
+  are throttled (20 a minute per instance), never counted towards a lock. A stored or deployment client secret is sent only to
+  the provider it belongs to. `/bff/user` gains `setup.open`; `GET /api/settings/sign-in` gains `locked` per value. New
+  security events `admin.setup.opened`, `admin.setup.code_refused`, `admin.setup.session`, `admin.setup.test` and
+  `admin.setup.completed` (2008–2012). `app-roles.sql` grants the admin role the new columns and tables; the gateway role
+  reads none of them. The AppHost's `Setup:Try` opens setup locally ([local development](docs/local-development.md#trying-setup-mode)).
+  The deploy files (the setup secret, `UME_SETUP_REOPEN`, an optional `UME_OIDC_AUTHORITY`) follow in a later step.
 
 ## 0.10.3 - 2026-11-15
 
