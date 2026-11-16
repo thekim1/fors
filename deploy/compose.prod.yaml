@@ -108,6 +108,8 @@ services:
       # Integrations (docs/integrations.md): the admin console's address, for links in /v1/ume/context. Empty = none.
       Gateway__AdminUrl: ${UME_ADMIN_PUBLIC_URL:-}
       Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL:-}
+      # The admin console's sign-in provider, handed to integrations on /v1/ume/context (docs/integrations.md).
+      Gateway__OidcAuthority: ${UME_OIDC_AUTHORITY:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: gateway
       SSL_CERT_FILE: /run/certs/ca.pem

@@ -2,19 +2,29 @@
 
 ## Unreleased
 
-**An integration manifest may leave out the owner, and an integration can move to another team with its credential
-keys** (thekim1/llmgateway#101). No migration. **Rolling update: yes.** **Changed behaviour** for `PUT /api/integrations/{id}`.
-`integration.owner` is optional (schema version 1, an addition): a new integration from a manifest without one gets a
-default owner made from its name, a team and a department coded like `my-platform` (lower case, letters and digits, `-`
-between) and named after the integration; an existing team with that code is used. The import result has a new
-`defaultOwner` field, and a warning (logged by the migration service, shown in the admin console's preview) names the
-team and says a gateway admin can move it. For an existing integration a manifest without an owner compares nothing.
-Changing an integration's owner team no longer answers 409 while it has credential keys: its credential keys that are
-not revoked (a rotated key in its grace period included) move to the new team in the same transaction, each audited;
-revoked and assigned keys stay, recorded usage keeps its team and department, and the previous team keeps the current
-period's spend while the new one counts from the move. A move to an inactive team, or to a team in an inactive
-department, is refused (400): the gateway refuses such a team's keys. The Ume.Rag preset no longer declares an owner, so
-it can be imported unedited. See [docs/integrations.md](docs/integrations.md#moving-an-integration-to-another-team).
+- **`UME_DOMAIN` names the hosts** (thekim1/llmgateway#98, requested by the Ume.Rag platform). In
+  `compose.portainer.yaml`, `UME_GATEWAY_HOST` defaults to `llm.<UME_DOMAIN>`, `UME_ADMIN_HOST` to
+  `llm-admin.<UME_DOMAIN>` and `UME_GATEWAY_PUBLIC_URL` to `https://<gateway host>`; each variable still overrides its
+  default. A stack that sets `UME_GATEWAY_HOST` works as before without `UME_DOMAIN`, and no longer has to set
+  `UME_GATEWAY_PUBLIC_URL` when the gateway is on port 443. `init-deployment.sh` takes `--domain` the same way.
+- **`/v1/ume/context` names the sign-in provider** (thekim1/llmgateway#99, requested by the Ume.Rag platform).
+  `gateway.oidc_authority` is the new optional `Gateway:OidcAuthority` (feature `oidc-authority`; `null` when not set):
+  the address of the provider the admin console signs in through, so a platform that uses the same provider keeps no
+  copy. The Compose files and the Portainer stack set it from `UME_OIDC_AUTHORITY`. Contract:
+  `docs/openapi/integrations.json` (an addition).
+- **An integration manifest may leave out the owner, and an integration can move to another team with its credential
+  keys** (thekim1/llmgateway#101). No migration. **Rolling update: yes.** **Changed behaviour** for `PUT /api/integrations/{id}`.
+  `integration.owner` is optional (schema version 1, an addition): a new integration from a manifest without one gets a
+  default owner made from its name, a team and a department coded like `my-platform` (lower case, letters and digits, `-`
+  between) and named after the integration; an existing team with that code is used. The import result has a new
+  `defaultOwner` field, and a warning (logged by the migration service, shown in the admin console's preview) names the
+  team and says a gateway admin can move it. For an existing integration a manifest without an owner compares nothing.
+  Changing an integration's owner team no longer answers 409 while it has credential keys: its credential keys that are
+  not revoked (a rotated key in its grace period included) move to the new team in the same transaction, each audited;
+  revoked and assigned keys stay, recorded usage keeps its team and department, and the previous team keeps the current
+  period's spend while the new one counts from the move. A move to an inactive team, or to a team in an inactive
+  department, is refused (400): the gateway refuses such a team's keys. The Ume.Rag preset no longer declares an owner, so
+  it can be imported unedited. See [docs/integrations.md](docs/integrations.md#moving-an-integration-to-another-team).
 
 ## 0.10.3 - 2026-11-15
 

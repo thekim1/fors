@@ -40,6 +40,9 @@ public sealed class GatewayFixture : IAsyncLifetime
 
     /// <summary>The configured <c>Gateway:IntegrationApiUrl</c>, as <c>/v1/ume/context</c> hands it out.</summary>
     public const string IntegrationApiUrl = "https://adminapi:8443/integration/v1";
+
+    /// <summary>The configured <c>Gateway:OidcAuthority</c>, as <c>/v1/ume/context</c> hands it out.</summary>
+    public const string OidcAuthority = "https://idp.example.se/realms/ume";
     public Guid DepartmentId { get; private set; }
     private readonly string _keyPepper = TestSecrets.RandomHex(); // fixed, so derived gateways accept the same keys
     public string ProviderSecret { get; } = TestSecrets.RandomHex();
@@ -69,6 +72,7 @@ public sealed class GatewayFixture : IAsyncLifetime
             // Tests flush refused-key counts themselves; a timed flush between a test's requests would split its row in two.
             builder.UseSetting("Gateway:Security:AuthFailureFlushSeconds", "3600");
             builder.UseSetting("Gateway:IntegrationApiUrl", IntegrationApiUrl);
+            builder.UseSetting("Gateway:OidcAuthority", OidcAuthority);
             builder.ConfigureLogging(logging =>
             {
                 logging.SetMinimumLevel(LogLevel.Trace);
