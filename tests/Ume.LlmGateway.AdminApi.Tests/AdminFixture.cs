@@ -45,17 +45,29 @@ public sealed class AdminFixture : IAsyncLifetime
             builder.UseSetting("Admin:PriceListUrl", "https://models.dev.test/api.json"); // nor models.dev: ModelListJson is served instead
             builder.ConfigureTestServices(services =>
             {
+                // A static OIDC configuration, so nothing is fetched from the placeholder authority. It follows the effective
+                // authority the options were built with, and none is set without one (sign-in is then not configured).
                 services.Configure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme, o =>
-                    o.Configuration = new OpenIdConnectConfiguration
+                {
+                    if (o.Authority is { } authority)
                     {
-                        Issuer = "https://identity.invalid", AuthorizationEndpoint = "https://identity.invalid/authorize",
-                        TokenEndpoint = "https://identity.invalid/token", EndSessionEndpoint = "https://identity.invalid/logout",
-                    });
+                        o.Configuration = StaticConfiguration(authority);
+                    }
+                });
                 services.AddHeaderAuthentication();
                 services.AddHttpClient(ModelListService.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new FakeModelList());
             });
         });
     }
+
+    /// <summary>The placeholder provider's metadata under <paramref name="authority"/>: its endpoints are the authority's paths.</summary>
+    public static OpenIdConnectConfiguration StaticConfiguration(string authority) => new()
+    {
+        Issuer = authority, AuthorizationEndpoint = authority + "/authorize", TokenEndpoint = authority + "/token", EndSessionEndpoint = authority + "/logout",
+    };
+
+    /// <summary>Another admin API instance on the same database, with <paramref name="configure"/> applied on top. Dispose it.</summary>
+    public WebApplicationFactory<Program> Derive(Action<IWebHostBuilder> configure) => _factory.WithWebHostBuilder(configure);
 
     /// <summary>The models.dev list the admin API downloads (see ModelListTests); empty by default.</summary>
     public static string ModelListJson { get; set; } = "{}";

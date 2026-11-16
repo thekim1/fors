@@ -62,3 +62,29 @@ public sealed record RequestLogSettingsRequest(bool LogAllRequests, bool NoTimeL
 /// <c>Until</c>: when it switches itself off; null with <c>Active</c> = no time limit.
 /// </summary>
 public sealed record RequestLogSettingsDto(bool Active, DateTimeOffset? Until, DateTimeOffset? UpdatedAt);
+
+/// <summary>
+/// The admin console's sign-in values (<c>GET /api/settings/sign-in</c>): each with its source (<see cref="SignInValueSources"/>),
+/// and of the client secret only whether it is set and when. <c>UpdatedAt</c>: when the stored values last changed.
+/// </summary>
+public sealed record SignInSettingsDto(
+    SignInValue<string?> Authority, SignInValue<string> ClientId, SignInSecretStatus ClientSecret, SignInValue<string> RoleClaim,
+    SignInValue<string> DepartmentClaim, SignInValue<string> TeamClaim, SignInValue<string> GroupClaim, SignInValue<IReadOnlyList<string>> ExtraScopes,
+    DateTimeOffset? UpdatedAt)
+{
+    public static SignInSettingsDto Of(EffectiveSignIn e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        var stored = e.ClientSecret.Source == SignInValueSources.Wizard;
+        return new(e.Authority, e.ClientId,
+            // The expiry date belongs to the stored secret, so it is shown only while that secret applies.
+            new SignInSecretStatus(e.ClientSecret.IsSet, e.ClientSecret.Source, e.ClientSecret.SetAt, stored ? e.ClientSecretExpiresOn : null, e.ClientSecret.Unreadable),
+            e.RoleClaim, e.DepartmentClaim, e.TeamClaim, e.GroupClaim, e.ExtraScopes, e.UpdatedAt);
+    }
+}
+
+/// <summary>
+/// The client secret as the API shows it: never the value, encrypted or not. <c>Unreadable</c>: one is stored that the key
+/// ring cannot unprotect (sign-in is then not configured).
+/// </summary>
+public sealed record SignInSecretStatus(bool Set, string Source, DateTimeOffset? SetAt, DateOnly? ExpiresOn, bool Unreadable);

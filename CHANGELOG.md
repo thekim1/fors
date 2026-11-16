@@ -12,6 +12,21 @@
   the address of the provider the admin console signs in through, so a platform that uses the same provider keeps no
   copy. The Compose files and the Portainer stack set it from `UME_OIDC_AUTHORITY`. Contract:
   `docs/openapi/integrations.json` (an addition).
+- **Sign-in values can be stored in the database** (thekim1/llmgateway#100, first step of setup mode). The admin
+  console's authority, client id, client secret, claim names and extra scopes each come from the deployment's `Oidc:*`
+  (an empty value counts as unset), else from the new table `SignInSettings`, else the defaults; `GET
+  /api/settings/sign-in` (gateway admins) shows every value with its source and of the client secret only whether it is
+  set and when. A stored secret is encrypted with Data Protection under a purpose of its own; one the key ring cannot read
+  is reported as `unreadable` and makes sign-in not configured. Nothing writes the table yet (setup mode will); the role
+  groups stay deployment values. The admin API now builds its OpenID Connect options from these values and rebuilds them
+  at the next sign-in when they change, in the database or the configuration, on every instance without a restart. It
+  starts without an authority: `/bff/user` then reports `signIn.configured: false` and `/bff/login` answers `409`
+  `sign_in_not_configured`; a set `Oidc:Authority` that is not an absolute https URL (http in Development) stops the start.
+  Every challenge outside `/api` is now sent to `/bff/login`. A sign-in callback that cannot be completed redirects to
+  `/?signin=failed` instead of failing with 500, with the new security event `admin.signin.failed` (2007).
+  `/v1/ume/context`'s `gateway.oidc_authority` falls back to the stored authority when `Gateway:OidcAuthority` is empty;
+  the gateway's database role may read only that column of `SignInSettings`. Migration `SignInSettings`; `app-roles.sql`
+  creates the row and grants the roles. Existing deployments, which set `Oidc:*`, sign in as before.
 
 ## 0.10.3 - 2026-11-15
 

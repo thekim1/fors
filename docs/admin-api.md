@@ -13,7 +13,12 @@ change when their cache expires (`Gateway:KeyCacheSeconds` / `Gateway:CatalogCac
 shows this as a notice.
 
 ## Authentication (BFF)
-- `GET /bff/login?returnUrl=/path` → 302 to OIDC provider (Keycloak in dev, Entra ID/AD FS in prod).
+- `GET /bff/login?returnUrl=/path` → 302 to OIDC provider (Keycloak in dev, Entra ID/AD FS in prod). Every sign-in starts
+  here: a challenge from any other page outside `/api` is redirected to it. While the admin API has no usable identity
+  provider (no effective authority, one that is not an absolute https URL, or a stored client secret the key ring cannot
+  read) it answers `409` with `code: "sign_in_not_configured"`. A callback to `/signin-oidc` that cannot be completed (a
+  sign-in started before the sign-in values changed, an expired, forged or replayed callback, the provider's error) gives no
+  session and redirects to `/?signin=failed` (security event `admin.signin.failed`).
 - `POST /bff/logout` → signs out (cookie + OIDC end-session).
 - Logout returns `{ redirectUrl }`; navigate to this URL to complete OIDC provider signout.
   The end-session request includes `client_id` and protected state for the local return to `/`.
@@ -22,7 +27,8 @@ shows this as a notice.
 - `POST /bff/session/extend` → `{ sessionExpiresAt, sessionLimitAt }`, renews an authenticated session for eight
   hours (but not past `sessionLimitAt`) without losing unsaved forms. At the limit it answers `409`: sign in again.
   Requires the same CSRF headers as other mutations.
-- `GET /bff/user` → `{ isAuthenticated, name, email, roles: string[], departmentCodes: string[], teamCodes: string[], departmentSources: [{ code, source: "claim" | "group" }], sessionExpiresAt, sessionLimitAt }`
+- `GET /bff/user` → `{ isAuthenticated, name, email, roles: string[], departmentCodes: string[], teamCodes: string[], departmentSources: [{ code, source: "claim" | "group" }], sessionExpiresAt, sessionLimitAt, signIn: { configured } }`
+  (`signIn.configured`: false while a sign-in would be refused with `sign_in_not_configured`; read again at most every 10 seconds)
   (`group`: the code came from a [member group](identity-and-roles.md#department-scope) of the department)
   (always 200; `isAuthenticated=false` when not signed in). `sessionLimitAt` is the absolute end of the session.
 - Session cookie: `__Host-ume-admin`, HttpOnly, Secure, SameSite=Lax (compatible with OIDC redirects).
@@ -35,7 +41,10 @@ shows this as a notice.
 - Local configuration: `Oidc:Authority`, `Oidc:ClientId` (default `ume-admin`), optional
   `Oidc:ClientSecret`, `ConnectionStrings:gatewaydb`, `Security:KeyPepper`, optional Redis and
   Data Protection certificate settings shared with the gateway. Production OIDC metadata requires HTTPS.
-  Settings are validated at startup: the API does not start without `Oidc:Authority`, with `Admin:RequestsPerMinute`
+  The sign-in values may instead be stored in the database (see `GET /api/settings/sign-in`); a value the configuration
+  sets wins, and an empty one counts as unset. A change, stored or configured, applies at the next sign-in without a restart.
+  Settings are validated at startup: the API starts without an authority (sign-in is then not configured), but not with an
+  `Oidc:Authority` that is not an absolute https URL (http in Development only), with `Admin:RequestsPerMinute`
   out of range, or with a `Gateway:BaseUrl` / `Gateway:OperationsUrl` that is not an absolute http(s) URL.
   `Gateway:BaseUrl` is the public gateway address shown in the catalogue (default `https://localhost:5140`).
 - API rate limit: 120 requests/minute per authenticated subject (`Admin:RequestsPerMinute`, 1–10000).
@@ -334,6 +343,15 @@ and invalidate the gateway catalogue.
   `PUT /api/settings/branding/logo` `{ data }` (base64; PNG, JPEG, WebP or SVG by content, at most 256 KB; SVG without
   scripts, event handlers, `javascript:` or `foreignObject`) · `DELETE /api/settings/branding/logo` *(gateway-admin)* →
   the branding as above. Audited (`Settings`; the logo by type, size and SHA-256).
+- `GET /api/settings/sign-in` *(gateway-admin)* → `{ authority, clientId, roleClaim, departmentClaim, teamClaim, groupClaim,
+  extraScopes, clientSecret: { set, source, setAt, expiresOn, unreadable }, updatedAt }`, where every value but the secret is
+  `{ value, source }` and `source` is `deployment` (the admin API's `Oidc:*` configuration; an empty value counts as unset),
+  `wizard` (stored in the database) or `default` (the code's default). The client secret is never answered: only whether one
+  is set, where from, when it was stored and the expiry date entered with it (`expiresOn`, for a stored secret only);
+  `unreadable` is true when one is stored that the key ring cannot unprotect (a replaced Data Protection certificate), and
+  sign-in is then not configured. Read-only: the stored values change only in setup mode (thekim1/llmgateway#100), which
+  audits each change (`Settings`, entity id `sign-in`, with whether a secret is set and when, never the secret) and publishes
+  a configuration change. `Oidc:RoleGroups` is always a deployment value. `updatedAt`: when the stored values last changed.
 - `GET /api/settings/request-log` *(gateway-admin)* → `{ active, until, updatedAt }` · `PUT /api/settings/request-log`
   `{ logAllRequests, noTimeLimit }` *(gateway-admin)*. Whether the gateways log successful requests too (normally only refused,
   failed and cancelled ones; every request is a usage record either way). Switched on, it lasts 24 hours unless `noTimeLimit` is

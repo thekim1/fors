@@ -116,6 +116,8 @@ export interface BffUser {
   sessionExpiresAt: IsoDateTime | null
   /** The session's absolute end (Admin:MaxSessionHours after sign-in); extending never goes past it. */
   sessionLimitAt?: IsoDateTime | null
+  /** Whether the admin API has a usable identity provider; false: a sign-in is refused (409 sign_in_not_configured). */
+  signIn?: { configured: boolean }
 }
 
 /** What the console shows as its owner (GET /bff/branding, readable before sign-in). */

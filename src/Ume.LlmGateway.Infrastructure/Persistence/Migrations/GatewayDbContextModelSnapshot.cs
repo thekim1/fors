@@ -827,6 +827,60 @@ namespace Ume.LlmGateway.Infrastructure.Persistence.Migrations
                     b.ToTable("RoutingRuleTargets");
                 });
 
+            modelBuilder.Entity("Ume.LlmGateway.Domain.Entities.SignInSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Authority")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ClientId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly?>("ClientSecretExpiresOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("ClientSecretSetAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DepartmentClaim")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("EncryptedClientSecret")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.PrimitiveCollection<List<string>>("ExtraScopes")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("GroupClaim")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("RoleClaim")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("TeamClaim")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SignInSettings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SignInSettings_Singleton", "\"Id\" = 1");
+                        });
+                });
+
             modelBuilder.Entity("Ume.LlmGateway.Domain.Entities.Team", b =>
                 {
                     b.Property<Guid>("Id")

@@ -157,6 +157,18 @@ The admin API reads the group claim only to derive roles and team codes and does
 list the team groups themselves there to make every member a team admin. Every group then counts as a team code, but
 only codes that a team has grant anything.
 
+### Sign-in values in the database
+
+The authority, client id, client secret, claim names and extra scope can also be stored in the database instead of the
+deployment (setup mode in the admin console, thekim1/llmgateway#100, sets them). Each value comes from the deployment's
+`Oidc:*` setting when that is set (an empty value, as Compose passes an unset variable, counts as unset), else from the
+database, else from the defaults in the table above; *Settings* shows each value's source (`GET /api/settings/sign-in`).
+The role groups (`Oidc:RoleGroups:*`) are always deployment values. A stored client secret is encrypted with the shared
+Data Protection key ring and never shown; if the key ring cannot read it (a replaced certificate without the old one), the
+admin API logs why and refuses sign-in as not configured rather than signing in without it. A change, stored or in the
+deployment, applies to the next sign-in on every admin API instance without a restart; sessions already open stay valid.
+Without any authority the admin API still starts, and a sign-in answers `409 sign_in_not_configured`.
+
 ## Keycloak
 
 Use a realm you already have (for example one federated to Active Directory), or the optional

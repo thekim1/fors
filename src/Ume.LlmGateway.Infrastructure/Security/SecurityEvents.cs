@@ -119,4 +119,8 @@ public static partial class SecurityEvents
     [LoggerMessage(2006, LogLevel.Information,
         "Admin {Actor} read {Path}{Query} from {SourceAddress}", EventName = "admin.data.read")]
     public static partial void AdminDataRead(ILogger logger, string actor, string path, string query, string? sourceAddress);
+
+    [LoggerMessage(2007, LogLevel.Warning,
+        "Admin sign-in failed: {Reason} from {SourceAddress}", EventName = "admin.signin.failed")]
+    public static partial void AdminSignInFailed(ILogger logger, string reason, string? sourceAddress);
 }

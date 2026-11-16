@@ -13,7 +13,11 @@ See [runbook](runbook.md) for the actual deployment procedure.
 
 ## Unreleased
 
-- **Rolling update: yes.** No migration.
+- **Rolling update: yes.** Migration `SignInSettings` adds the table `SignInSettings` (the admin console's stored sign-in
+  values, all unset); the migration service creates its single row and grants it with `app-roles.sql`, as on every start:
+  the admin API reads and updates it, the gateway reads only its `Authority` column, the Data API nothing. An older admin
+  API or gateway ignores it. The Compose and Kubernetes files change only in the roles file (`app-roles.sql` and its copies,
+  including `compose.portainer.yaml`). Nothing else changes for a deployment that sets `Oidc:*` (`UME_OIDC_*`).
 - **Portainer:** `UME_DOMAIN` names the hosts (`llm.<domain>`, `llm-admin.<domain>`, the public URL
   `https://llm.<domain>`). An existing stack changes nothing: `UME_GATEWAY_HOST`, `UME_ADMIN_HOST` and
   `UME_GATEWAY_PUBLIC_URL` still win, and `UME_GATEWAY_HOST` alone is enough without the domain.

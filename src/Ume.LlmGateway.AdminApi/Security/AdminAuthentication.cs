@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Ume.LlmGateway.AdminApi.Common;
@@ -12,8 +13,18 @@ using Ume.LlmGateway.Infrastructure.Security;
 
 namespace Ume.LlmGateway.AdminApi.Security;
 
-public static class AdminAuthentication
+public static partial class AdminAuthentication
 {
+    /// <summary>Where every sign-in starts; the effective sign-in values are read before it (<see cref="AdminSignIn.Refreshes"/>).</summary>
+    public const string LoginPath = "/bff/login";
+
+    public const string LogoutPath = "/bff/logout";
+
+    public const string UserPath = "/bff/user";
+
+    /// <summary>The <c>code</c> of the problem a sign-in answers while the admin API has no usable identity provider.</summary>
+    public const string SignInNotConfiguredCode = "sign_in_not_configured";
+
     /// <summary>
     /// Normalises identity-provider claims to the names the API authorises on ("roles", "departmentCodes", "teamCodes"):
     /// expands JSON-array claims, copies differently named claims, and derives roles from group membership. The group
@@ -92,7 +103,8 @@ public static class AdminAuthentication
 
     /// <summary>
     /// Cookie session (BFF) with OpenID Connect sign-in, antiforgery for the SPA and the authorization policies. The OIDC
-    /// authority and client are read from <see cref="OidcOptions"/> when the handler is first used.
+    /// authority, client, secret and extra scopes are the effective sign-in values (<see cref="AdminSignIn"/>), applied each
+    /// time the options are built.
     /// </summary>
     public static void AddAdminAuthentication(this WebApplicationBuilder builder)
     {
@@ -154,23 +166,66 @@ public static class AdminAuthentication
                     .Where(d => d.IsActive && d.MemberGroups.Count > 0)
                     .Select(d => new DepartmentGroups(d.CostCenterCode, d.MemberGroups))
                     .ToListAsync(ctx.HttpContext.RequestAborted);
-                var groupCodes = ApplyClaimMapping(ctx.Principal, services.GetRequiredService<IOptions<OidcOptions>>().Value, departments);
+                // The values this handler's options were built from, with the deployment's role groups.
+                var values = services.GetRequiredService<AdminSignIn>().For(ctx.Options)
+                    .ToOidcOptions(services.GetRequiredService<IOptions<OidcOptions>>().Value.RoleGroups);
+                var groupCodes = ApplyClaimMapping(ctx.Principal, values, departments);
                 // Kept with the session (and by an extension, which signs in with the same properties) for /bff/user.
                 DepartmentMembership.Store(ctx.Properties ??= new AuthenticationProperties(), groupCodes);
             };
             // An expired session on an API call must answer 401 so the UI can send the user to sign in; a redirect to the
-            // identity provider would be followed by fetch and fail on CORS. Only /bff/login starts a real sign-in.
+            // identity provider would be followed by fetch and fail on CORS. Only /bff/login starts a real sign-in: any other
+            // challenge is sent there, because the current sign-in values are read before /bff/login's handler is created.
             o.Events.OnRedirectToIdentityProvider = ctx =>
             {
                 if (ctx.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
                 {
                     ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     ctx.HandleResponse();
+                    return Task.CompletedTask;
                 }
+
+                if (!ctx.Request.Path.Equals(LoginPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    ctx.Response.Redirect(QueryHelpers.AddQueryString(LoginPath, "returnUrl", ctx.Properties.RedirectUri ?? "/"));
+                    ctx.HandleResponse();
+                    return Task.CompletedTask;
+                }
+
+                var services = ctx.HttpContext.RequestServices;
+                if (services.GetRequiredService<AdminSignIn>().For(ctx.Options).NotConfiguredReason is { } reason)
+                {
+                    // No identity provider to send the person to; the admin UI reads signIn.configured from /bff/user.
+                    LogSignInNotConfigured(services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(AdminAuthentication)), reason);
+                    throw new ApiFaultException(StatusCodes.Status409Conflict, "Sign-in is not set up yet.",
+                        new Dictionary<string, object?> { ["code"] = SignInNotConfiguredCode });
+                }
+
+                return Task.CompletedTask;
+            };
+            // A sign-in that cannot be completed gives no session and no 500: one started before the sign-in values changed (the
+            // new provider or client refuses its code), an expired, forged or replayed callback, or the provider's error. The
+            // person starts again from the sign-in page.
+            o.Events.OnRemoteFailure = ctx =>
+            {
+                var loggers = ctx.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>();
+                LogSignInFailed(loggers.CreateLogger(typeof(AdminAuthentication)), ctx.Failure?.GetType().Name ?? "unknown");
+                SecurityEvents.AdminSignInFailed(SecurityEvents.CreateLogger(loggers), "callback_failed",
+                    ctx.HttpContext.Items[AdminClientAddresses.ItemKey] as string);
+                ctx.HandleResponse();
+                ctx.Response.Redirect("/?signin=failed");
                 return Task.CompletedTask;
             };
             o.Events.OnRedirectToIdentityProviderForSignOut = async ctx =>
             {
+                if (!ctx.HttpContext.RequestServices.GetRequiredService<AdminSignIn>().For(ctx.Options).IsConfigured)
+                {
+                    // The session is already gone (the cookie scheme signs out first); there is no provider to sign out at.
+                    await ctx.Response.WriteAsJsonAsync(new { redirectUrl = "/" });
+                    ctx.HandleResponse();
+                    return;
+                }
+
                 ctx.ProtocolMessage.ClientId = ctx.Options.ClientId;
                 ctx.ProtocolMessage.State = ctx.Options.StateDataFormat.Protect(ctx.Properties);
                 if (string.IsNullOrEmpty(ctx.ProtocolMessage.IssuerAddress))
@@ -197,22 +252,20 @@ public static class AdminAuthentication
         builder.Services.AddSingleton<ITicketStore, AdminTicketStore>();
         builder.Services.AddOptions<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme)
             .Configure<ITicketStore>((o, store) => o.SessionStore = store);
-        // Read from the validated options when the handler is first used, not while services are registered.
-        builder.Services.AddOptions<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme).Configure<IOptions<OidcOptions>>((o, oidc) =>
-        {
-            o.Authority = oidc.Value.Authority;
-            o.ClientId = oidc.Value.ClientId;
-            o.ClientSecret = oidc.Value.ClientSecret;
-            foreach (var scope in oidc.Value.ExtraScopes.Where(scope => !string.IsNullOrWhiteSpace(scope)))
-            {
-                o.Scope.Add(scope);
-            }
-        });
+        // The effective sign-in values, applied at every build of the options: the first, and each rebuild after they changed.
+        builder.Services.AddSingleton<AdminSignIn>();
+        builder.Services.AddOptions<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme).Configure<AdminSignIn>((o, signIn) => signIn.Configure(o));
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Sign-in refused: sign-in is not configured ({Reason})")]
+    private static partial void LogSignInNotConfigured(ILogger logger, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "A sign-in callback could not be completed ({FailureType}); the person is sent back to sign in")]
+    private static partial void LogSignInFailed(ILogger logger, string failureType);
 
     public static void MapAdminAuthentication(this WebApplication app)
     {
-        app.MapGet("/bff/login", (string? returnUrl) =>
+        app.MapGet(LoginPath, (string? returnUrl) =>
         {
             var destination = returnUrl ?? "/";
             if (!destination.StartsWith('/') || destination.StartsWith("//", StringComparison.Ordinal) || destination.Contains('\\', StringComparison.Ordinal) ||
@@ -222,7 +275,7 @@ public static class AdminAuthentication
             }
             return Results.Challenge(new AuthenticationProperties { RedirectUri = destination }, [OpenIdConnectDefaults.AuthenticationScheme]);
         });
-        app.MapGet("/bff/user", async (HttpContext http, IAntiforgery antiforgery, IHostEnvironment environment, IOptions<AdminOptions> admin) =>
+        app.MapGet(UserPath, async (HttpContext http, IAntiforgery antiforgery, IHostEnvironment environment, IOptions<AdminOptions> admin, AdminSignIn signIn) =>
         {
             var tokens = antiforgery.GetAndStoreTokens(http);
             http.Response.Cookies.Append("XSRF-TOKEN", tokens.RequestToken!, new CookieOptions
@@ -243,9 +296,11 @@ public static class AdminAuthentication
                 teamCodes = http.User.FindAll(AdminClaims.TeamCodes).Select(c => c.Value).ToArray(),
                 sessionExpiresAt = auth.Properties?.ExpiresUtc,
                 sessionLimitAt = AdminSessionLimit.LimitOf(auth.Properties, TimeSpan.FromHours(admin.Value.MaxSessionHours)),
+                // Read at most UserRefreshInterval before this request: false while no usable identity provider is set.
+                signIn = new { configured = signIn.Current.IsConfigured },
             });
         });
-        app.MapPost("/bff/logout", (HttpContext http, ILoggerFactory loggers) =>
+        app.MapPost(LogoutPath, (HttpContext http, ILoggerFactory loggers) =>
         {
             var actor = AdminActor.Of(http);
             SecurityEvents.AdminSignOut(SecurityEvents.CreateLogger(loggers), actor.Subject, actor.SourceAddress, actor.SessionId);

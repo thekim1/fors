@@ -24,6 +24,7 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<GatewaySettings> Settings => Set<GatewaySettings>();
     public DbSet<Branding> Branding => Set<Branding>();
+    public DbSet<SignInSettings> SignInSettings => Set<SignInSettings>();
     public DbSet<UsageRecord> UsageRecords => Set<UsageRecord>();
     public DbSet<UsageMonthlyTotal> UsageMonthlyTotals => Set<UsageMonthlyTotal>();
     public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
@@ -209,6 +210,19 @@ public sealed class GatewayDbContext(DbContextOptions<GatewayDbContext> options)
             e.Property(x => x.Id).ValueGeneratedNever();
             e.Property(x => x.OrganisationName).HasMaxLength(Domain.Entities.Branding.MaxOrganisationNameLength).HasDefaultValue(Domain.Entities.Branding.DefaultOrganisationName);
             e.Property(x => x.LogoContentType).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<SignInSettings>(e =>
+        {
+            e.ToTable("SignInSettings", t => t.HasCheckConstraint("CK_SignInSettings_Singleton", $"\"Id\" = {Domain.Entities.SignInSettings.SingletonId}"));
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Authority).HasMaxLength(Domain.Entities.SignInSettings.MaxAuthorityLength);
+            e.Property(x => x.ClientId).HasMaxLength(Domain.Entities.SignInSettings.MaxValueLength);
+            e.Property(x => x.RoleClaim).HasMaxLength(Domain.Entities.SignInSettings.MaxValueLength);
+            e.Property(x => x.DepartmentClaim).HasMaxLength(Domain.Entities.SignInSettings.MaxValueLength);
+            e.Property(x => x.TeamClaim).HasMaxLength(Domain.Entities.SignInSettings.MaxValueLength);
+            e.Property(x => x.GroupClaim).HasMaxLength(Domain.Entities.SignInSettings.MaxValueLength);
+            e.Property(x => x.EncryptedClientSecret).HasMaxLength(Domain.Entities.SignInSettings.MaxEncryptedClientSecretLength);
         });
 
         modelBuilder.Entity<UsageRecord>(e =>

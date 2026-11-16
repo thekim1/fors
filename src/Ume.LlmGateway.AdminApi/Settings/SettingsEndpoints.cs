@@ -15,6 +15,8 @@ public static class SettingsEndpoints
         settings.MapPut("/network", (NetworkSettingsRequest input, GatewaySettingsService service, HttpContext http, CancellationToken ct) =>
             service.SetNetworkAsync(http, input, ct))
             .WithName("SetNetworkSettings").WithSummary("Replaces the trusted reverse proxies; the gateways apply them on their next request");
+        settings.MapGet("/sign-in", (SignInSettingsService service, CancellationToken ct) => service.GetAsync(ct))
+            .WithName("GetSignInSettings").WithSummary("The admin console's sign-in values and where each comes from; of the client secret only whether it is set");
         settings.MapGet("/request-log", (GatewaySettingsService service, CancellationToken ct) => service.GetRequestLogAsync(ct))
             .WithName("GetRequestLogSettings").WithSummary("Whether the gateways log every request, and until when");
         settings.MapPut("/request-log", (RequestLogSettingsRequest input, GatewaySettingsService service, CancellationToken ct) =>

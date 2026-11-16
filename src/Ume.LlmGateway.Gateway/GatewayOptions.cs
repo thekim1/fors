@@ -119,7 +119,8 @@ public sealed class GatewayOptions
     /// <summary>
     /// The address of the sign-in provider the admin console uses (the admin API's <c>Oidc:Authority</c>), handed out on
     /// <c>/v1/ume/context</c> so a platform that signs its users in through the same provider needs no copy of it
-    /// (docs/integrations.md). A public address, never a client id or secret. Empty leaves it out.
+    /// (docs/integrations.md). A public address, never a client id or secret. Empty hands out the authority stored in the admin
+    /// console's sign-in settings instead (<see cref="CatalogSnapshot.OidcAuthority"/>), or none.
     /// </summary>
     [RegularExpression("^$|^https://\\S+$", ErrorMessage = "Gateway:OidcAuthority must be empty or an absolute https URL.")]
     public string? OidcAuthority { get; set; }

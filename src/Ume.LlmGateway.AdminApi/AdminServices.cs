@@ -26,7 +26,9 @@ public static class AdminServices
         services.AddValidatedOptions<AdminOptions>(AdminOptions.SectionName);
         services.AddValidatedOptions<GatewayLinkOptions>(GatewayLinkOptions.SectionName);
         services.AddValidatedOptions<DataApiLinkOptions>(DataApiLinkOptions.SectionName);
-        services.AddValidatedOptions<OidcOptions>(OidcOptions.SectionName);
+        // Only a set authority is checked: the admin API starts without one, and sign-in is then not configured.
+        services.AddValidatedOptions<OidcOptions>(OidcOptions.SectionName).Validate<IHostEnvironment>((o, environment) =>
+            string.IsNullOrWhiteSpace(o.Authority) || OidcOptions.IsUsableAuthority(o.Authority, !environment.IsDevelopment()), OidcOptions.AuthorityError);
         services.AddValidatedOptions<RetentionOptions>(RetentionOptions.SectionName);
 
         services.AddHttpContextAccessor();
@@ -67,6 +69,9 @@ public static class AdminServices
         services.AddHttpClient(GatewayOperationsClient.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
         services.AddScoped<GatewaySettingsService>();
+        // The admin console's sign-in values: the deployment's, else the database's (the client secret encrypted), else the defaults.
+        services.AddScoped<SignInSettingsService>();
+        services.AddSingleton<SignInSecretProtector>();
         services.AddScoped<BrandingService>();
         services.AddSingleton<BrandingCache>();
         services.AddSingleton<ReleaseCheck>();

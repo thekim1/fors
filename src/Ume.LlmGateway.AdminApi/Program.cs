@@ -42,6 +42,8 @@ app.UseApiReferencePolicy("/scalar", ScalarOptions.NonceHttpContextItemKey);
 app.UseProblemDetailsForEmptyErrors("The action could not be completed");
 // Outside authentication and authorization, so it sees their 403s and the signed-in user afterwards.
 app.UseMiddleware<AdminActivityMiddleware>();
+// Before authentication: the sign-in start, callback and sign-out read the current sign-in values (AdminSignIn).
+app.UseMiddleware<AdminSignInRefreshMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();

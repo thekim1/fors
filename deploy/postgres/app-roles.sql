@@ -13,6 +13,8 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ume_gateway, ume_admin;
 INSERT INTO "GatewaySettings" ("Id", "TrustedProxies", "AuditRetentionDays") VALUES (1, ARRAY[]::text[], 365) ON CONFLICT ("Id") DO NOTHING;
 -- The same for the admin console's branding (organisation name and logo; the name's default is the column default).
 INSERT INTO "Branding" ("Id") VALUES (1) ON CONFLICT ("Id") DO NOTHING;
+-- And for the admin console's stored sign-in values (all unset until setup mode stores them).
+INSERT INTO "SignInSettings" ("Id", "ExtraScopes") VALUES (1, ARRAY[]::text[]) ON CONFLICT ("Id") DO NOTHING;
 
 -- Gateway (faces the clients): what it authenticates, routes and accounts with. Not the audit log or Data API keys. It reads
 -- the Data Protection key ring but does not add keys (it only decrypts; the admin API creates and rotates them).
@@ -23,19 +25,23 @@ GRANT INSERT ON "UsageRecords", "AlertEvents", "AuthFailures" TO ume_gateway;
 GRANT UPDATE ("LastUsedAt") ON "VirtualKeys" TO ume_gateway;
 -- The organisation's name for integrations' context; never the logo.
 GRANT SELECT ("OrganisationName") ON "Branding" TO ume_gateway;
+-- The sign-in provider's address for integrations' context; never the client id or the encrypted client secret.
+GRANT SELECT ("Authority") ON "SignInSettings" TO ume_gateway;
 
 -- Admin API: reads everything it shows (and the schema version for Operations); changes configuration, appends audit
 -- entries, creates Data Protection keys. Settings column by column, without UsageRetainedFrom.
 GRANT SELECT ON "Departments", "Teams", "VirtualKeys", "Integrations", "DataApiKeys", "ProviderAccounts", "ModelDeployments", "ModelPrices",
   "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets", "Budgets", "GatewaySettings",
   "UsageRecords", "UsageMonthlyTotals", "AuditLog", "AlertEvents", "AuthFailures", "DataProtectionKeys",
-  "Branding", "__EFMigrationsHistory" TO ume_admin;
+  "Branding", "SignInSettings", "__EFMigrationsHistory" TO ume_admin;
 GRANT INSERT, UPDATE, DELETE ON "Departments", "Teams", "VirtualKeys", "Integrations", "ProviderAccounts",
   "ModelDeployments", "ModelPrices", "RouteAliases", "RouteTargets", "RoutingRules", "RoutingRuleTargets",
   "Budgets", "DataApiKeys" TO ume_admin;
 GRANT UPDATE ("TrustedProxies", "LogAllRequests", "LogAllRequestsUntil", "UpdatedAt", "UsageRetentionDays", "AuditRetentionDays",
   "RetentionLastRunAt", "RetentionLastRunDeleted", "RetentionLastRunError") ON "GatewaySettings" TO ume_admin;
 GRANT UPDATE ("OrganisationName", "Logo", "LogoContentType", "UpdatedAt") ON "Branding" TO ume_admin;
+GRANT UPDATE ("Authority", "ClientId", "RoleClaim", "DepartmentClaim", "TeamClaim", "GroupClaim", "ExtraScopes", "EncryptedClientSecret",
+  "ClientSecretSetAt", "ClientSecretExpiresOn", "UpdatedAt") ON "SignInSettings" TO ume_admin;
 GRANT INSERT ON "AuditLog", "DataProtectionKeys" TO ume_admin;
 GRANT UPDATE ("Acknowledged") ON "AlertEvents" TO ume_admin;
 -- Data retention: old rows are removed only through this function (owner's rights, minimum 90 days); the admin role

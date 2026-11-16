@@ -429,6 +429,60 @@ public sealed class IntegrationGatewayTests(GatewayFixture fixture)
         IntegrationContract.Differences(body, "UmeContext").ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task The_context_names_the_stored_sign_in_authority_when_the_option_is_empty()
+    {
+        var key = await fixture.CreateKeyAsync();
+        await using var gateway = fixture.Derive(_ => { }, host => host.UseSetting("Gateway:OidcAuthority", ""));
+        using var client = gateway.CreateHttpsClient();
+        try
+        {
+            await SetStoredAuthorityAsync(null);
+            (await OidcAuthorityAsync(client, key)).ShouldBeNull();
+
+            // Stored in the admin console's sign-in settings (setup mode): read with the catalogue, as the organisation name is.
+            await SetStoredAuthorityAsync("https://stored.example.se/realms/ume");
+            (await OidcAuthorityAsync(client, key)).ShouldBe("https://stored.example.se/realms/ume");
+            // Gateway:OidcAuthority, when set, wins.
+            (await OidcAuthorityAsync(fixture.Client, key)).ShouldBe(GatewayFixture.OidcAuthority);
+
+            // Only an https address is handed out, as the option allows.
+            await SetStoredAuthorityAsync("http://idp.local/realms/ume");
+            (await OidcAuthorityAsync(client, key)).ShouldBeNull();
+        }
+        finally
+        {
+            await SetStoredAuthorityAsync(null);
+        }
+    }
+
+    private static async Task<string?> OidcAuthorityAsync(HttpClient client, TestKey key)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/v1/ume/context");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key.Secret);
+        using var response = await client.SendAsync(request, Ct);
+        var text = await response.Content.ReadAsStringAsync(Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, text);
+        var body = JsonNode.Parse(text)!;
+        IntegrationContract.Differences(body, "UmeContext").ShouldBeEmpty();
+        return body["gateway"]!["oidc_authority"]?.GetValue<string>();
+    }
+
+    private async Task SetStoredAuthorityAsync(string? authority)
+    {
+        using var scope = fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+        var settings = await db.SignInSettings.SingleOrDefaultAsync(Ct);
+        if (settings is null)
+        {
+            settings = new SignInSettings();
+            db.SignInSettings.Add(settings);
+        }
+
+        settings.Authority = authority;
+        await db.SaveChangesAsync(Ct);
+    }
+
     private async Task SetOrganisationNameAsync(string name)
     {
         using var scope = fixture.Services.CreateScope();
