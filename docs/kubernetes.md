@@ -78,7 +78,11 @@ The admin console's sign-in is set one of two ways ([identity and roles](identit
 - **Declared:** the overlay sets `Oidc__Authority` in `ume-adminapi-config` (and `Oidc__ClientId`, claim names as
   needed; a confidential client's secret as `Oidc__ClientSecret` in `ume-adminapi-secrets`, from
   `init-deployment.sh --oidc-authority ... --oidc-client-secret-file`). Setup counts as completed at the first start and
-  never opens; each `Oidc__*` set is locked in the wizard.
+  never opens (unless `Setup__Reopen` is used); each `Oidc__*` set is locked in the wizard. **Set
+  `Gateway__OidcAuthority` in `ume-gateway-config` to the same address:** the gateway cannot see the admin API's
+  configuration, and without it `/v1/ume/context` hands out the address saved in the wizard, which is an old one on a
+  deployment that was set up in the wizard and declares its provider later (Compose and Portainer set both from one
+  variable).
 - **The setup wizard:** leave `Oidc__Authority` out. After `deploy.sh` (it says when setup mode is open), read the code
   with `kubectl -n ume-gateway logs deploy/adminapi | grep 'Setup code'` (every pod prints the same code) and open
   `https://<admin host>/setup` within the hour. It needs `Setup__Secret` in `ume-adminapi-secrets`, which

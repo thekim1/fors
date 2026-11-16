@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -626,6 +627,98 @@ public sealed class SetupTestSignInTests(AdminFixture fixture) : IAsyncLifetime
         }
 
         (await LatestTestAsync(session)).GetProperty("status").GetString().ShouldBe("passed");
+    }
+
+    [Fact]
+    public async Task Setup_callbacks_are_limited_per_address_while_setup_is_open_and_answer_404_once_it_is_closed()
+    {
+        // Anyone can send a callback with a setup test's state; each one that reaches the lookup costs a statement.
+        using var provider = new FakeProvider();
+        var forged = SetupTestSignIn.StatePrefix + new string('x', 43);
+        await using (var host = Host(provider))
+        {
+            using var session = await SessionAsync(host, fixture);
+            using var stranger = host.CreateHttpsClient();
+            for (var i = 0; i < SetupCallbackThrottle.Limit; i++)
+            {
+                using var answered = await CallbackAsync(stranger, forged);
+                answered.Headers.Location!.OriginalString.ShouldBe(SetupTestSignIn.DonePath);
+            }
+
+            using var limited = await CallbackAsync(stranger, forged);
+            limited.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
+            limited.Headers.RetryAfter.ShouldNotBeNull();
+        }
+
+        // Closed (every deployment after its setup): 404 from the values last read, whatever the marker.
+        await ResetAsync(fixture, completed: true);
+        await using var closed = Host(provider);
+        using var client = closed.CreateHttpsClient();
+        for (var i = 0; i < SetupCallbackThrottle.Limit + 5; i++)
+        {
+            using var answered = await CallbackAsync(client, forged);
+            answered.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        }
+    }
+
+    [Fact]
+    public void The_callback_limit_counts_each_address_on_its_own_in_one_minute_windows()
+    {
+        var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var throttle = new SetupCallbackThrottle(time);
+        for (var i = 0; i < SetupCallbackThrottle.Limit; i++)
+        {
+            throttle.TryAcquire("198.51.100.1", out _).ShouldBeTrue();
+        }
+
+        throttle.TryAcquire("198.51.100.1", out var retryAfter).ShouldBeFalse();
+        retryAfter.ShouldBe(SetupCallbackThrottle.Window);
+        // A flood from one address does not keep another one's callback out; no address counts as one.
+        throttle.TryAcquire("203.0.113.9", out _).ShouldBeTrue();
+        throttle.TryAcquire(null, out _).ShouldBeTrue();
+        time.Advance(SetupCallbackThrottle.Window);
+        throttle.TryAcquire("198.51.100.1", out _).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Completing_asks_for_a_new_test_when_the_claim_mapping_changed_since_the_test()
+    {
+        using var provider = new FakeProvider();
+        await using var host = Host(provider);
+        using var session = await SessionAsync(host, fixture);
+        provider.Claims = FakeProvider.Person("person-1", AdminRoles.GatewayAdmin);
+        var (testId, _, state) = await StartAsync(session, provider);
+        using (await CallbackAsync(session, state))
+        {
+        }
+
+        (await LatestTestAsync(session)).GetProperty("result").GetProperty("isGatewayAdmin").GetBoolean().ShouldBeTrue();
+
+        // The deployment now names another role claim (a rolling change): the passed test read the old one.
+        var configuration = host.Services.GetRequiredService<IConfiguration>();
+        configuration["Oidc:RoleClaim"] = "app_roles";
+        using (var refused = await PostAsync(session, "/bff/setup/complete", new { authority = FakeProvider.Authority, testId }))
+        {
+            refused.StatusCode.ShouldBe(HttpStatusCode.Conflict, await refused.Content.ReadAsStringAsync(Ct));
+            (await ReasonOf(refused)).ShouldBe("values_changed");
+        }
+
+        configuration["Oidc:RoleClaim"] = null;
+        using var completed = await PostAsync(session, "/bff/setup/complete", new { authority = FakeProvider.Authority, testId });
+        completed.StatusCode.ShouldBe(HttpStatusCode.OK, await completed.Content.ReadAsStringAsync(Ct));
+    }
+
+    [Fact]
+    public void The_tests_fingerprint_covers_the_claim_names_and_the_role_groups()
+    {
+        var values = new SignInWizardValues { Authority = FakeProvider.Authority };
+        OidcOptions Mapping(string roleClaim = "roles", params (string Role, string Group)[] groups) =>
+            new() { RoleClaim = roleClaim, RoleGroups = groups.ToDictionary(g => g.Role, g => g.Group) };
+        var same = SetupTestSignIn.Fingerprint(values, Mapping(groups: [("gateway-admin", "GG-Admins"), ("viewer", "GG-All")]));
+        SetupTestSignIn.Fingerprint(values, Mapping(groups: [("viewer", "GG-All"), ("gateway-admin", "GG-Admins")])).ShouldBe(same);
+        SetupTestSignIn.Fingerprint(values, Mapping(groups: [("gateway-admin", "GG-Everyone"), ("viewer", "GG-All")])).ShouldNotBe(same);
+        SetupTestSignIn.Fingerprint(values, Mapping("app_roles", ("gateway-admin", "GG-Admins"), ("viewer", "GG-All"))).ShouldNotBe(same);
+        SetupTestSignIn.Fingerprint(new SignInWizardValues { Authority = OtherAuthority }, Mapping(groups: [("gateway-admin", "GG-Admins"), ("viewer", "GG-All")])).ShouldNotBe(same);
     }
 
     [Fact]

@@ -52,7 +52,8 @@ configMapGenerator:
       # - OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.observability:4317
       # - Gateway__AdminUrl=https://llm-admin.example.se
       # - Gateway__IntegrationApiUrl=https://adminapi:8443/integration/v1
-      # The admin console's provider for /v1/ume/context; unset hands out the one saved in the setup wizard.
+      # The admin console's provider for /v1/ume/context; unset hands out the one saved in the setup wizard. Set it
+      # whenever ume-adminapi-config declares Oidc__Authority, to the same address.
       # - Gateway__OidcAuthority=https://idp.example.se/realms/ume
   # With ../components/dataapi:
   # - name: ume-dataapi-config

@@ -108,7 +108,8 @@ public sealed class SignInSnapshot
 /// The sign-in values the admin API's OpenID Connect options are built from (thekim1/llmgateway#100). <see cref="Configure"/>
 /// is the options' configure step for the first build and every rebuild; it takes <see cref="Current"/>, which
 /// <see cref="RefreshAsync"/> reads from the database before the authentication middleware creates the handler for a sign-in
-/// start, a callback, a sign-out or <c>/bff/user</c>. When the values differ from what the live options were built from, the
+/// start, a callback, a sign-out or <c>/bff/user</c>, at most once per <see cref="SignInRefreshInterval"/> (anyone may call those
+/// paths, so a flood of them costs one read per interval and never queues real sign-ins behind reads). When the values differ from what the live options were built from, the
 /// options are evicted from the options cache, so the next use builds them again, with the new authority's metadata. Nothing is
 /// shared between instances: each follows a change at its own next sign-in, without a restart.
 /// </summary>
@@ -116,6 +117,12 @@ public sealed partial class AdminSignIn(IConfiguration configuration, IHostEnvir
 {
     /// <summary>How long <c>/bff/user</c>, which anyone may call, answers from the values last read before it reads them again.</summary>
     public static readonly TimeSpan UserRefreshInterval = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// How long the sign-in start, the callback and the sign-out, which anyone may call, go on with the values last read. Completing
+    /// setup reads them at once on its own instance; another instance follows a change within this time.
+    /// </summary>
+    public static readonly TimeSpan SignInRefreshInterval = TimeSpan.FromSeconds(2);
 
     private const string Scheme = OpenIdConnectDefaults.AuthenticationScheme;
 
@@ -138,20 +145,32 @@ public sealed partial class AdminSignIn(IConfiguration configuration, IHostEnvir
     public SignInSnapshot Current => _current;
 
     /// <summary>
-    /// Whether the values are read before handling <paramref name="path"/>: the sign-in start, the callback and the sign-out
-    /// always; <c>/bff/user</c> once per <see cref="UserRefreshInterval"/>.
+    /// Whether the values are read before handling <paramref name="path"/>: the sign-in start, the callback and the sign-out once
+    /// per <see cref="SignInRefreshInterval"/>; <c>/bff/user</c> once per <see cref="UserRefreshInterval"/>.
     /// </summary>
-    public bool Refreshes(PathString path, OpenIdConnectOptions options)
+    public bool Refreshes(PathString path, OpenIdConnectOptions options) => IntervalFor(path, options) is { } interval && !ReadWithin(interval);
+
+    /// <summary>The time the values last read stay in use for <paramref name="path"/>; null for a path that reads nothing.</summary>
+    public static TimeSpan? IntervalFor(PathString path, OpenIdConnectOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (path.Equals(AdminAuthentication.UserPath, StringComparison.OrdinalIgnoreCase))
         {
-            return time.GetUtcNow().UtcTicks - Interlocked.Read(ref _readAt) >= UserRefreshInterval.Ticks;
+            return UserRefreshInterval;
         }
 
         return path.Equals(AdminAuthentication.LoginPath, StringComparison.OrdinalIgnoreCase) ||
-               path.Equals(AdminAuthentication.LogoutPath, StringComparison.OrdinalIgnoreCase) || path == options.CallbackPath;
+               path.Equals(AdminAuthentication.LogoutPath, StringComparison.OrdinalIgnoreCase) || path == options.CallbackPath
+            ? SignInRefreshInterval
+            : null;
     }
+
+    /// <summary>Whether the values were read less than <paramref name="interval"/> ago.</summary>
+    public bool ReadWithin(TimeSpan interval) => time.GetUtcNow().UtcTicks - Interlocked.Read(ref _readAt) < interval.Ticks;
+
+    /// <summary>Whether <paramref name="ex"/> says the database is away, so the values last read stay in use.</summary>
+    public static bool IsDatabaseAway(Exception ex) =>
+        ex is NpgsqlException or TimeoutException or RetryLimitExceededException or InvalidOperationException { InnerException: NpgsqlException };
 
     /// <summary>The snapshot <paramref name="options"/> were built from (the handler's own), else <see cref="Current"/>.</summary>
     public SignInSnapshot For(OpenIdConnectOptions options) => _builtFrom.TryGetValue(options, out var snapshot) ? snapshot : _current;
@@ -186,10 +205,11 @@ public sealed partial class AdminSignIn(IConfiguration configuration, IHostEnvir
 
     /// <summary>
     /// Reads the effective values (one primary-key read) and, when they differ from what the live options were built from, evicts
-    /// the options so they are built again from them. Returns the values read.
+    /// the options so they are built again from them. Returns the values read. With <paramref name="unlessReadWithin"/>, a caller
+    /// that waited for another one's read takes that read instead of making its own, so requests arriving together read once.
     /// </summary>
     public async Task<SignInSnapshot> RefreshAsync(SignInSettingsService settings, IOptionsMonitor<OpenIdConnectOptions> monitor,
-        IOptionsMonitorCache<OpenIdConnectOptions> cache, CancellationToken ct)
+        IOptionsMonitorCache<OpenIdConnectOptions> cache, CancellationToken ct, TimeSpan? unlessReadWithin = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(monitor);
@@ -197,6 +217,11 @@ public sealed partial class AdminSignIn(IConfiguration configuration, IHostEnvir
         await _refresh.WaitAsync(ct);
         try
         {
+            if (unlessReadWithin is { } interval && ReadWithin(interval))
+            {
+                return _current;
+            }
+
             var fresh = SignInSnapshot.Of(await settings.ReadAsync(ct), _requireHttps);
             _current = fresh;
             Interlocked.Exchange(ref _readAt, time.GetUtcNow().UtcTicks);
@@ -239,8 +264,8 @@ public sealed partial class AdminSignIn(IConfiguration configuration, IHostEnvir
 
 /// <summary>
 /// Runs <see cref="AdminSignIn.RefreshAsync"/> before the authentication middleware on the paths of
-/// <see cref="AdminSignIn.Refreshes"/>, so the handler created for the request has the current values. Every other request
-/// reads nothing.
+/// <see cref="AdminSignIn.Refreshes"/>, so the handler created for the request has the current values (at most
+/// <see cref="AdminSignIn.SignInRefreshInterval"/> old). Every other request reads nothing.
 /// </summary>
 public sealed partial class AdminSignInRefreshMiddleware(RequestDelegate next, ILogger<AdminSignInRefreshMiddleware> logger)
 {
@@ -249,13 +274,13 @@ public sealed partial class AdminSignInRefreshMiddleware(RequestDelegate next, I
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(signIn);
         ArgumentNullException.ThrowIfNull(monitor);
-        if (signIn.Refreshes(http.Request.Path, monitor.Get(OpenIdConnectDefaults.AuthenticationScheme)))
+        if (AdminSignIn.IntervalFor(http.Request.Path, monitor.Get(OpenIdConnectDefaults.AuthenticationScheme)) is { } interval && !signIn.ReadWithin(interval))
         {
             try
             {
-                await signIn.RefreshAsync(http.RequestServices.GetRequiredService<SignInSettingsService>(), monitor, cache, http.RequestAborted);
+                await signIn.RefreshAsync(http.RequestServices.GetRequiredService<SignInSettingsService>(), monitor, cache, http.RequestAborted, interval);
             }
-            catch (Exception ex) when (ex is NpgsqlException or TimeoutException or RetryLimitExceededException or InvalidOperationException { InnerException: NpgsqlException })
+            catch (Exception ex) when (AdminSignIn.IsDatabaseAway(ex))
             {
                 // The database is away: go on with the values last read, so the sign-in page still loads. A sign-in itself needs
                 // the session store and fails there if that is away too.

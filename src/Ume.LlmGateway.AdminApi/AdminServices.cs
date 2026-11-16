@@ -77,6 +77,7 @@ public static class AdminServices
         // Setup mode: the setup code, sessions and test sign-in; evaluated at start, which writes the code to standard output.
         services.AddSingleton<SetupSecret>();
         services.AddSingleton<SetupCodeThrottle>();
+        services.AddSingleton<SetupCallbackThrottle>();
         services.AddSingleton<SetupEventSampler>();
         services.AddSingleton<SetupCleanup>();
         services.AddSingleton(new SetupConsole());

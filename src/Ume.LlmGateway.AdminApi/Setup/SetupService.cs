@@ -104,7 +104,7 @@ public sealed class SetupService(
             : latest?.Id != test.Id ? "not_latest"
             : test.Passed != true || result is null ? "not_passed"
             : !result.IsGatewayAdmin ? "not_gateway_admin"
-            : !CryptographicOperations.FixedTimeEquals(test.ValuesFingerprint, SetupTestSignIn.Fingerprint(values)) ? "values_changed"
+            : !CryptographicOperations.FixedTimeEquals(test.ValuesFingerprint, SetupTestSignIn.Fingerprint(values, tests.MappingOf(values))) ? "values_changed"
             // What is about to be in force must be what the test ran against: the deployment's values are read again here, and
             // they may differ from the instance and moment the test started on (a rolling change of Oidc:Authority).
             : !TestedProviderIsInForce(payload, values) ? "values_changed"

@@ -33,6 +33,9 @@ public sealed class SignInReloadTests(AdminFixture fixture)
     private const string StoredSecret = "stored-secret-0c4d7e";
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>The hosts' clock: a sign-in reads the values at most once per <see cref="AdminSignIn.SignInRefreshInterval"/>, so <see cref="ChallengeAsync"/> moves it on.</summary>
+    private readonly FakeTimeProvider _time = new(DateTimeOffset.UtcNow);
+
     /// <summary>An admin API instance on the fixture's database with no deployment authority or secret, plus <paramref name="settings"/>.</summary>
     private WebApplicationFactory<Program> Host(CapturingLoggerProvider? logs = null, params (string Key, string Value)[] settings) =>
         fixture.Derive(web =>
@@ -44,15 +47,21 @@ public sealed class SignInReloadTests(AdminFixture fixture)
                 web.UseSetting(key, value);
             }
 
+            web.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(_time));
             if (logs is not null)
             {
                 web.ConfigureTestServices(services => services.AddLogging(b => b.AddProvider(logs).SetMinimumLevel(LogLevel.Trace)));
             }
         });
 
-    /// <summary>Starts a sign-in at <c>/bff/login</c>; returns where the browser is sent.</summary>
-    private static async Task<Uri> ChallengeAsync(WebApplicationFactory<Program> factory)
+    /// <summary>Starts a sign-in at <c>/bff/login</c>, later than the values last read stay in use; returns where the browser is sent.</summary>
+    private async Task<Uri> ChallengeAsync(WebApplicationFactory<Program> factory, bool atOnce = false)
     {
+        if (!atOnce)
+        {
+            _time.Advance(AdminSignIn.SignInRefreshInterval);
+        }
+
         using var client = factory.CreateHttpsClient();
         using var response = await client.GetAsync("/bff/login?returnUrl=/keys", Ct);
         response.StatusCode.ShouldBe(HttpStatusCode.Redirect, await response.Content.ReadAsStringAsync(Ct));
@@ -186,6 +195,50 @@ public sealed class SignInReloadTests(AdminFixture fixture)
     }
 
     [Fact]
+    public async Task The_sign_in_paths_read_the_values_at_most_every_two_seconds_and_requests_arriving_together_read_once()
+    {
+        await using var factory = Host();
+        try
+        {
+            await SignInSettingsTests.SaveAsync(factory.Services, new SignInWizardValues { Authority = StoredA, ClientId = "client-a" }, null);
+            ShouldGoTo(await ChallengeAsync(factory), StoredA, "client-a");
+
+            // Anyone may call the sign-in start, the callback and the sign-out: they go on with the values last read for two seconds.
+            await SignInSettingsTests.SaveAsync(factory.Services, new SignInWizardValues { Authority = StoredB, ClientId = "client-b" }, null);
+            ShouldGoTo(await ChallengeAsync(factory, atOnce: true), StoredA, "client-a");
+            var signIn = factory.Services.GetRequiredService<AdminSignIn>();
+            var options = LiveOptions(factory);
+            signIn.Refreshes(AdminAuthentication.LoginPath, options).ShouldBeFalse();
+            signIn.Refreshes(options.CallbackPath, options).ShouldBeFalse();
+            signIn.Refreshes(AdminAuthentication.LogoutPath, options).ShouldBeFalse();
+            using (var client = factory.CreateHttpsClient())
+            {
+                using var callback = await client.GetAsync(options.CallbackPath + "?state=made-up&code=x", Ct);
+                signIn.Current.Values.Authority.Value.ShouldBe(StoredA);
+            }
+
+            _time.Advance(AdminSignIn.SignInRefreshInterval);
+            signIn.Refreshes(options.CallbackPath, options).ShouldBeTrue();
+
+            // Requests that waited for another one's read take that read.
+            using var scope = factory.Services.CreateScope();
+            var settings = scope.ServiceProvider.GetRequiredService<SignInSettingsService>();
+            var monitor = factory.Services.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>();
+            var cache = factory.Services.GetRequiredService<IOptionsMonitorCache<OpenIdConnectOptions>>();
+            var first = await signIn.RefreshAsync(settings, monitor, cache, Ct, AdminSignIn.SignInRefreshInterval);
+            first.Values.Authority.Value.ShouldBe(StoredB);
+            await SignInSettingsTests.SaveAsync(factory.Services, new SignInWizardValues { Authority = StoredA, ClientId = "client-a" }, null);
+            (await signIn.RefreshAsync(settings, monitor, cache, Ct, AdminSignIn.SignInRefreshInterval)).ShouldBeSameAs(first);
+            // Without the interval (completing setup) the values are read at once.
+            (await signIn.RefreshAsync(settings, monitor, cache, Ct)).Values.Authority.Value.ShouldBe(StoredA);
+        }
+        finally
+        {
+            await SignInSettingsTests.ClearAsync(fixture.Services);
+        }
+    }
+
+    [Fact]
     public async Task The_user_document_reads_the_values_again_at_most_every_ten_seconds()
     {
         var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
@@ -221,6 +274,7 @@ public sealed class SignInReloadTests(AdminFixture fixture)
             await SignInSettingsTests.ReplaceCiphertextAsync(fixture.Services);
 
             // Not signed in as a public client without the secret: refused until the secret is set again.
+            _time.Advance(AdminSignIn.SignInRefreshInterval);
             using var client = factory.CreateHttpsClient();
             using var login = await client.GetAsync("/bff/login", Ct);
             login.StatusCode.ShouldBe(HttpStatusCode.Conflict, await login.Content.ReadAsStringAsync(Ct));

@@ -27,6 +27,12 @@
   `/v1/ume/context`'s `gateway.oidc_authority` falls back to the stored authority when `Gateway:OidcAuthority` is empty;
   the gateway's database role may read only that column of `SignInSettings`. Migration `SignInSettings`; `app-roles.sql`
   creates the row and grants the roles. Existing deployments, which set `Oidc:*`, sign in as before.
+- **The sign-in paths are bounded for anonymous callers** (thekim1/llmgateway#100, review of #103). The sign-in start,
+  the callback and the sign-out read the sign-in values at most once every 2 seconds per instance (requests arriving
+  together share one read), instead of once per request. A callback with a setup test's state answers 404 without a
+  read while setup is closed, and is limited to 20 a minute per client address while it is open (429). Completing
+  setup also compares the claim mapping the test ran with (claim names, role groups) with the one in force
+  (`values_changed`). On Kubernetes, a deployment that declares `Oidc__Authority` sets `Gateway__OidcAuthority` too.
 - **Setup mode in the admin API** (thekim1/llmgateway#100, second step; the wizard's pages follow). The admin console's
   sign-in can be set in a browser wizard under `/bff/setup` ([admin-api.md](docs/admin-api.md#setup-mode-bffsetup),
   [identity and roles](docs/identity-and-roles.md#setup-mode)): a setup code printed on the admin API's standard output

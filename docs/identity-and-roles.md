@@ -230,11 +230,20 @@ the authority, client id or client secret into its variables. The API is in [adm
   a provider the deployment sets, the claim names it does not set; either can make the holder a gateway admin. That is the
   design: the code is read from the container's output, which only someone with access to the host or its logs has. Treat
   that output as you treat the deployment's secrets, finish setup soon after the admin API starts, and watch for
-  `admin.setup.session` events you did not cause. A deployment that sets `Oidc:Authority` never opens setup at all. Sessions
+  `admin.setup.session` events you did not cause. A deployment that sets `Oidc:Authority` never opens setup unless `Setup:Reopen` is used. Sessions
   signed in before a change of provider stay valid until they end (`Admin:MaxSessionHours`).
 - **A code holder can make the admin API call an `https` address of their choice** (the candidate's discovery document, keys
   and token endpoint) and learn whether it answered, from the failure's step. Nothing of an answer comes back, no redirect is
   followed, and only hosts with a certificate the admin API trusts get past the TLS step.
+- **Anyone can send requests to the sign-in paths** (`/bff/login`, the callback `/signin-oidc`, `/bff/logout`), so they
+  are bounded before anything is signed in. The admin API reads the sign-in values for them at most once every 2
+  seconds per instance, however many requests arrive; an instance other than the one that completed setup therefore
+  follows a change of the values within 2 seconds. A callback that claims to be a setup test's answers 404 with nothing
+  more read while setup is closed, and while it is open at most 20 a minute per client address reach the database
+  (`429` beyond that).
+- **A passed test stands for the claim mapping it ran with** (the claim names and the deployment's role groups, besides
+  the values): if those differ when setup is completed, for example during a rolling change of `Oidc:RoleGroups`, the
+  answer is `values_changed` and the test is run again.
 - **A restored or emptied database can open setup again** on a deployment that does not set the authority: a backup from
   before setup was completed, an emptied database, or a backup older than the `Setup:Reopen` value still in the deployment.
   Only a new code is printed. Empty `Setup:Reopen` before a restore, and complete setup or set the authority afterwards.
