@@ -198,13 +198,20 @@ public sealed partial class SetupModeTests(AdminFixture fixture) : IAsyncLifetim
         var after = (await RowAsync(fixture))!;
         (after.SetupNonce, after.SetupOpenedAt, after.UpdatedAt).ShouldBe((before!.SetupNonce, before.SetupOpenedAt, before.UpdatedAt));
 
-        // Over 20 checks in the minute: 429 with the seconds to the window's end, for the right code too.
+        // Over 20 wrong codes in the minute: 429 with the seconds to the window's end.
         time.Advance(TimeSpan.FromSeconds(20));
-        using (var flooded = await PostAsync(client, "/bff/setup/session", new { code }))
+        using (var flooded = await PostAsync(client, "/bff/setup/session", new { code = wrong }))
         {
             flooded.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
             (await CodeOf(flooded)).ShouldBe(SetupErrors.AttemptsExhausted);
             int.Parse(flooded.Headers.RetryAfter!.ToString(), System.Globalization.CultureInfo.InvariantCulture).ShouldBeInRange(39, 40);
+        }
+
+        // The right code is never throttled: a flood of wrong codes cannot keep the deployer out (the code is compared first).
+        using (var deployer = await ClientAsync(host))
+        using (var inTheFlood = await PostAsync(deployer, "/bff/setup/session", new { code }))
+        {
+            inTheFlood.StatusCode.ShouldBe(HttpStatusCode.OK, await inTheFlood.Content.ReadAsStringAsync(Ct));
         }
 
         // Sampled: the first wrong code at once, the other 19 in the next event after 10 seconds.

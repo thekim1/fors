@@ -82,9 +82,9 @@ closed**, whatever the method, body or cookie. Problems carry `code` and, for a 
 - `POST /bff/setup/session` `{ code }` (the setup code from the admin API's standard output; case, spaces and dashes do not
   matter, at most 64 characters) → `200 { expiresAt, setupEndsAt }` and the cookie `__Secure-ume-setup` (`HttpOnly`,
   `Secure`, `SameSite=Strict`, path `/bff/setup`, 30 minutes, valid only in the opening it was given in). A wrong code →
-  `400` `code: "setup_code_invalid"`; it voids nothing. More than 20 code checks a minute on one instance → `429`
-  `code: "setup_attempts_exhausted"` with `Retry-After` (seconds to the minute's end), for the right code too; nothing is
-  counted towards a lock.
+  `400` `code: "setup_code_invalid"`; it voids nothing. After 20 wrong codes in a minute on one instance, further wrong ones → `429`
+  `code: "setup_attempts_exhausted"` with `Retry-After` (seconds to the minute's end). The right code is never refused: it
+  is compared first, so nothing a guesser does keeps the deployer out.
 - The routes below need the setup session: without it (none, expired, or of an earlier opening) → `401`
   `code: "setup_session_required"` (the UI asks for the code again).
 - `GET /bff/setup/state` → `{ kind: "first_run" | "reopen", endsAt, sessionExpiresAt, signIn, redirectUris: { signIn,

@@ -38,7 +38,7 @@
   setup opens), for one hour; a fault never opens it. **A deployment that sets `Oidc:Authority` counts as completed**: it
   never prints a code and `/bff/setup` answers 404, so existing deployments are unchanged and need no new setting. Setup mode
   needs the new optional setup secret (`Setup:Secret`, a generated file or variable of at least 32 characters). Wrong codes
-  are throttled (20 a minute per instance), never counted towards a lock. A stored or deployment client secret is sent only to
+  are throttled (20 a minute per instance), never counted towards a lock, and the right code is never refused. A stored or deployment client secret is sent only to
   the provider it belongs to. `/bff/user` gains `setup.open`; `GET /api/settings/sign-in` gains `locked` per value. New
   security events `admin.setup.opened`, `admin.setup.code_refused`, `admin.setup.session`, `admin.setup.test` and
   `admin.setup.completed` (2008–2012). `app-roles.sql` grants the admin role the new columns and tables; the gateway role

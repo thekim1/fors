@@ -191,9 +191,10 @@ the authority, client id or client secret into its variables. The API is in [adm
   through the logger, so it is not in the OTLP export (a collector that ships container output would carry it; it is void
   once setup closes). Without a setup secret there is no setup mode: the admin API logs an error and setup stays closed. The
   code is worth a gateway admin while setup is open, since its holder chooses the identity provider.
-- **Wrong codes are throttled, never counted**: each instance checks at most 20 codes a minute (then `429`), on top of the
-  per-address limit; nothing is stored and the right code always works again within a minute, so a guesser cannot lock the
-  deployer out. 128 bits need no hard stop. Wrong codes are a sampled security event.
+- **Wrong codes are throttled, never counted**: after 20 wrong codes in a minute an instance answers further wrong ones
+  `429`, on top of the per-address limit. The code is compared first, so the right code always gives a session at once: a
+  flood of wrong codes cannot keep the deployer out, and nothing is stored. 128 bits need no hard stop. Wrong codes are a
+  sampled security event.
 - **A test sign-in before saving.** The wizard sends the candidate values; the admin API checks the provider's discovery
   document and keys (`https` only outside Development, no redirects, nothing of the answer returned) and starts a real
   authorization-code sign-in with PKCE at the candidate provider with the candidate client and the admin API's own redirect
@@ -214,6 +215,21 @@ the authority, client id or client secret into its variables. The API is in [adm
   opens nothing. While it is open the existing sign-in keeps working. Or set the value in the deployment, which always wins.
 - Security events `admin.setup.opened`, `admin.setup.code_refused`, `admin.setup.session`, `admin.setup.test` and
   `admin.setup.completed` (2008–2012, [data-access.md](data-access.md)) record each step with the address.
+
+**What the setup code is worth, and what is accepted** (an independent security review of the implementation, 2026-11-16):
+
+- **The code is a gateway-admin credential for the hour.** Its holder chooses the identity provider, and on a re-open with
+  a provider the deployment sets, the claim names it does not set; either can make the holder a gateway admin. That is the
+  design: the code is read from the container's output, which only someone with access to the host or its logs has. Treat
+  that output as you treat the deployment's secrets, finish setup soon after the admin API starts, and watch for
+  `admin.setup.session` events you did not cause. A deployment that sets `Oidc:Authority` never opens setup at all. Sessions
+  signed in before a change of provider stay valid until they end (`Admin:MaxSessionHours`).
+- **A code holder can make the admin API call an `https` address of their choice** (the candidate's discovery document, keys
+  and token endpoint) and learn whether it answered, from the failure's step. Nothing of an answer comes back, no redirect is
+  followed, and only hosts with a certificate the admin API trusts get past the TLS step.
+- **A restored or emptied database can open setup again** on a deployment that does not set the authority: a backup from
+  before setup was completed, an emptied database, or a backup older than the `Setup:Reopen` value still in the deployment.
+  Only a new code is printed. Empty `Setup:Reopen` before a restore, and complete setup or set the authority afterwards.
 
 ## Keycloak
 

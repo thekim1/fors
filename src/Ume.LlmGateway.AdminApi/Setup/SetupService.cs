@@ -31,22 +31,16 @@ public sealed class SetupService(
     private readonly ILogger _security = SecurityEvents.CreateLogger(loggers);
 
     /// <summary>
-    /// <c>POST /bff/setup/session</c>: a session for the right code (its cookie set on <paramref name="http"/>); a wrong code is
-    /// <c>setup_code_invalid</c>, more than <see cref="SetupCodeThrottle.Limit"/> checks a minute on this instance
-    /// <c>setup_attempts_exhausted</c> (429 with <c>Retry-After</c>), whatever the code.
+    /// <c>POST /bff/setup/session</c>: a session for the right code (its cookie set on <paramref name="http"/>), always: the code is
+    /// compared first, so no number of wrong codes keeps the right one out. A wrong code is <c>setup_code_invalid</c>, and after
+    /// <see cref="SetupCodeThrottle.Limit"/> wrong codes a minute on this instance <c>setup_attempts_exhausted</c> (429 with
+    /// <c>Retry-After</c>).
     /// </summary>
     public async Task<IResult> StartSessionAsync(HttpContext http, SetupStatus status, string? code, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(status);
         var address = http.Items[AdminClientAddresses.ItemKey] as string;
-        if (!throttle.TryAcquire(out var retryAfter))
-        {
-            http.Response.Headers.RetryAfter = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
-            return Results.Problem(statusCode: StatusCodes.Status429TooManyRequests, detail: "Too many setup code attempts. Wait a minute and try again.",
-                extensions: new Dictionary<string, object?> { ["code"] = SetupErrors.AttemptsExhausted });
-        }
-
         var result = await sessions.StartAsync(status, code, ct);
         switch (result.Outcome)
         {
@@ -55,6 +49,14 @@ public sealed class SetupService(
                 SecurityEvents.AdminSetupSessionStarted(_security, SetupSessions.EventId(result.Session), address, result.Session.ExpiresAt);
                 return Results.Ok(new SetupSessionDto(result.Session.ExpiresAt, status.EndsAt!.Value));
             case SetupCodeOutcome.Wrong:
+                // Only wrong codes count: the throttle slows a guesser and bounds the log, and can never refuse the right code.
+                if (!throttle.TryAcquire(out var retryAfter))
+                {
+                    http.Response.Headers.RetryAfter = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+                    return Results.Problem(statusCode: StatusCodes.Status429TooManyRequests, detail: "Too many wrong setup codes. Wait a minute and try again.",
+                        extensions: new Dictionary<string, object?> { ["code"] = SetupErrors.AttemptsExhausted });
+                }
+
                 if (sampler.ShouldLog(WrongCodeEvent, out var count))
                 {
                     SecurityEvents.AdminSetupCodeRefused(_security, address, count);
@@ -103,6 +105,9 @@ public sealed class SetupService(
             : test.Passed != true || result is null ? "not_passed"
             : !result.IsGatewayAdmin ? "not_gateway_admin"
             : !CryptographicOperations.FixedTimeEquals(test.ValuesFingerprint, SetupTestSignIn.Fingerprint(values)) ? "values_changed"
+            // What is about to be in force must be what the test ran against: the deployment's values are read again here, and
+            // they may differ from the instance and moment the test started on (a rolling change of Oidc:Authority).
+            : !TestedProviderIsInForce(payload, values) ? "values_changed"
             : null;
         if (refusal is not null)
         {
@@ -137,6 +142,14 @@ public sealed class SetupService(
         // This instance's /bff/user reports setup closed at once; the others within AdminSignIn.UserRefreshInterval.
         await adminSignIn.RefreshAsync(signIn, oidc, oidcCache, ct);
         return new SetupCompletedDto(SignInUrl);
+    }
+
+    /// <summary>Whether the authority and client the test signed in with are the ones <paramref name="values"/> give with this instance's deployment values.</summary>
+    private bool TestedProviderIsInForce(SetupTestPayload payload, SignInWizardValues values)
+    {
+        var effective = SignInSettingsService.Resolve(configuration, values, () => StoredSecretValue.NotSet, null, null);
+        return string.Equals(effective.Authority.Value?.Trim(), payload.Authority.Trim(), StringComparison.Ordinal) &&
+               string.Equals(effective.ClientId.Value.Trim(), payload.ClientId.Trim(), StringComparison.Ordinal);
     }
 
     private Task<SetupTest?> LatestTestAsync(SetupSession session, CancellationToken ct) =>

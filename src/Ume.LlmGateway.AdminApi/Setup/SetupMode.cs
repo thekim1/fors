@@ -163,9 +163,10 @@ public sealed class SetupMode(GatewayDbContext db, IConfiguration configuration,
 }
 
 /// <summary>
-/// The throttle on setup code checks: at most <see cref="Limit"/> per minute in this process, a fixed window. Nothing is stored
-/// and nothing voids the code: once the window allows, the right code works again, so a guesser cannot lock the deployer out
-/// (128 bits need no hard stop). The per-address rate limit stays on the route as well.
+/// The throttle on wrong setup codes: at most <see cref="Limit"/> per minute in this process, a fixed window; further wrong
+/// codes in the window answer 429. The code is compared before the throttle is asked, so the right code always gives a session
+/// and a guesser cannot lock the deployer out (128 bits need no hard stop). Nothing is stored and nothing voids the code. The
+/// per-address rate limit stays on the route as well.
 /// </summary>
 public sealed class SetupCodeThrottle(TimeProvider time)
 {
@@ -176,7 +177,7 @@ public sealed class SetupCodeThrottle(TimeProvider time)
     private DateTimeOffset _windowStart = DateTimeOffset.MinValue;
     private int _count;
 
-    /// <summary>Whether one more check may run now; else <paramref name="retryAfter"/> is the time to the window's end.</summary>
+    /// <summary>Counts one wrong code: false when the window is full, with <paramref name="retryAfter"/> the time to its end.</summary>
     public bool TryAcquire(out TimeSpan retryAfter)
     {
         var now = time.GetUtcNow();
