@@ -1,15 +1,28 @@
 # Production setup
 
-On a Linux Docker host (Docker 28+, Compose v2.24+) with an OIDC client for the admin UI, download a
+On a Linux Docker host (Docker 28+, Compose v2.24+), download a
 [GitHub release](https://github.com/thekim1/llmgateway/releases) bundle; its Compose files point at
 that release's images on GHCR, pinned by digest:
 
 ```bash
 curl -fsSLO https://github.com/thekim1/llmgateway/releases/download/vX.Y.Z/ume-llm-gateway-X.Y.Z.tar.gz
 tar -xzf ume-llm-gateway-X.Y.Z.tar.gz && cd ume-llm-gateway-X.Y.Z
-./deploy/init-deployment.sh        # asks for the OIDC authority and public hostnames
+./deploy/init-deployment.sh        # asks for the public hostnames, and once for an OIDC authority (empty: the wizard)
 docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait
 ```
+
+**Sign-in to the admin console**, one of two ways:
+
+- **With the authority at hand** (your Keycloak realm, AD FS or Entra ID tenant and a client registered for the admin
+  UI): pass `--oidc-authority https://...` (and `--oidc-client-id`, `--oidc-client-secret-file` for a confidential
+  client) to `init-deployment.sh`, or answer its question. The sign-in is declared: the setup wizard never opens, and
+  you sign in after the first `up`.
+- **Without it:** leave it empty. After the first `up`, read the setup code with
+  `docker compose -f deploy/compose.prod.yaml --env-file deploy/.env logs adminapi | grep 'Setup code'` and open
+  `https://<admin host>:9443/setup` (or without the port behind a proxy) within the hour. The wizard shows the redirect
+  URIs to register, takes the provider, client and secret, and saves them after a test sign-in by a person who comes out
+  as `gateway-admin` ([runbook](runbook.md#first-start-without-an-authority-the-setup-wizard)). The optional Data API
+  then takes tokens only from `UME_DATA_AUTHORITY`.
 
 Releases are made by pushing a tag `vX.Y.Z` that matches `<Version>` in `Directory.Build.props`; the
 release workflow tests, pushes the images, smoke-tests the bundle and publishes it (runbook, *Releases*).
@@ -17,7 +30,7 @@ GHCR packages start private: make them public or `docker login ghcr.io` on the h
 yourself instead, see the runbook, *Build and publish*, and run the same commands from a clone.
 
 `init-deployment.sh` creates an internal CA, service certificates, the Data Protection
-certificate, all database/Redis passwords, the key pepper and `deploy/.env`
+certificate, all database/Redis passwords, the key pepper, the admin API's setup secret and `deploy/.env`
 (non-secret settings, `GATEWAY_IMAGE`/`ADMINAPI_IMAGE`/`MIGRATIONS_IMAGE` overrides).
 It is safe to re-run: existing secrets are never overwritten. All options are available
 non-interactively (`--help`); `--renew-certs` re-issues the service certificates. Back up
@@ -60,7 +73,8 @@ add one gateway row.
 
 No shell access (**Portainer**)? Use `compose.portainer.yaml` (attached to each release, image references
 already pinned): the same stack configured only through environment variables, with certificates and secrets generated automatically in Docker volumes on
-first start. See the runbook, *Portainer and other hosts without shell access*.
+first start. A new stack needs only `UME_DOMAIN`; sign-in is then set in the setup wizard, or declared with
+`UME_OIDC_AUTHORITY`. See the runbook, *Portainer and other hosts without shell access*.
 
 Behind **Nginx Proxy Manager, nginx or an F5** that terminates TLS: add `--proxy` (two hostnames,
 an nginx config is generated). With certificates from your **PKI**: pass `--gateway-cert`,
@@ -70,8 +84,9 @@ Manager settings are in the runbook, *Reverse proxy and PKI*.
 To update without downtime, run two instances of the gateway and admin API behind your proxy; see
 [Updates without downtime](zero-downtime-updates.md). For Kubernetes instead of Compose, see [Kubernetes](kubernetes.md).
 
-Production never uses the development Keycloak realm in `dev/keycloak`: point `UME_OIDC_AUTHORITY` at your existing
-Keycloak, AD FS or Entra ID, or run the optional production [Keycloak project](keycloak.md) (`deploy/keycloak`).
+Production never uses the development Keycloak realm in `dev/keycloak`: point the sign-in (`UME_OIDC_AUTHORITY`, or the
+setup wizard) at your existing Keycloak, AD FS or Entra ID, or run the optional production [Keycloak project](keycloak.md)
+(`deploy/keycloak`).
 Roles, department codes and AD groups are mapped by claims; see [Identity provider and roles](identity-and-roles.md).
 
 `deploy/compose.prod.yaml` is the recommended, self-contained production file (hardened,

@@ -75,6 +75,32 @@ jobs:
             docker compose -f deploy/compose.portainer.yaml config > "$RUNNER_TEMP/portainer-domain.yaml"
           grep -q 'Gateway__BaseUrl: https://llm.example.se$' "$RUNNER_TEMP/portainer-domain.yaml"
           grep -q 'UME_ADMIN_HOST: llm-admin.example.se$' "$RUNNER_TEMP/portainer-domain.yaml"
+          # Setup mode (#100). The variables above are the previous release's (authority, gateway host, public URL; no
+          # UME_DOMAIN, no setup variables): the admin API is declared, Setup__Reopen is empty, and the client id and claim
+          # names are not passed as values that would lock the wizard (empty is unset; the code's defaults apply).
+          for files in deploy/compose.prod.yaml "deploy/compose.prod.yaml deploy/compose.rolling.yaml" deploy/compose.portainer.yaml; do
+            # shellcheck disable=SC2046
+            docker compose $(printf -- '-f %s ' $files) --profile data config --format json | jq -e '.services.adminapi.environment
+              | .Oidc__Authority == "https://idp.example.se" and .Setup__Reopen == ""
+                and ([to_entries[] | select((.key | test("^Oidc__(ClientId|RoleClaim|DepartmentClaim|TeamClaim|GroupClaim|ExtraScopes__0)$"))
+                       and .value != "")] | length == 0)' >/dev/null
+          done
+          # A new deployment for the setup wizard: every file renders without UME_OIDC_AUTHORITY, and nothing declares sign-in.
+          for files in deploy/compose.prod.yaml "deploy/compose.prod.yaml deploy/compose.rolling.yaml" deploy/compose.portainer.yaml; do
+            # shellcheck disable=SC2046
+            env -u UME_OIDC_AUTHORITY docker compose $(printf -- '-f %s ' $files) --profile data config --format json | jq -e '[.services[]
+              | .environment // {} | to_entries[] | select((.key | test("^Oidc__|^DataApi__Authority$|^Gateway__OidcAuthority$")) and .value != "")]
+              | length == 0' >/dev/null
+          done
+          # The Portainer stack with only the domain and the images (the release asset pins the images).
+          env -u UME_OIDC_AUTHORITY -u UME_GATEWAY_HOST -u UME_GATEWAY_PUBLIC_URL UME_DOMAIN=example.se \
+            docker compose -f deploy/compose.portainer.yaml --profile data config --format json | jq -e '.services
+              | .adminapi.environment.Oidc__Authority == "" and .adminapi.environment.Setup__Reopen == ""
+                and .bootstrap.environment.UME_GATEWAY_HOST == "llm.example.se"' >/dev/null
+      - name: Setup mode in the deploy forms
+        # The Portainer bootstrap (run as the stack runs it) and init-deployment.sh: the setup secret once, a client secret
+        # only with the authority, a declared sign-in and UME_SETUP_REOPEN kept on a re-run (deploy/tests/setup-mode-deploy.sh).
+        run: bash deploy/tests/setup-mode-deploy.sh
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.403

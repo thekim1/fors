@@ -18,7 +18,9 @@ publish*), then run `deploy/init-deployment.sh` on the Docker host and
 `docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait`.
 The script generates everything in *Nonsecret deployment inputs* and *Certificate and secret
 layout* below (internal CA, certificates, secrets, `deploy/.env`) and prints the OIDC redirect
-URIs to register. It never overwrites existing secrets; `--renew-certs` re-issues service
+URIs to register. Sign-in to the admin console is either declared with `--oidc-authority` (and
+`--oidc-client-secret-file` for a confidential client) or, without them, set in the setup wizard after the first `up`
+(*First start without an authority* below). It never overwrites existing secrets; `--renew-certs` re-issues service
 certificates (generated leaves last 825 days, the CA and Data Protection certificate 10 years).
 `deploy/certs/ca.key` signs them: move it off the host after setup and bring it back only for
 `--renew-certs` (anyone who can read it can issue certificates the services trust). `--renew-ca`
@@ -34,8 +36,9 @@ and the Aspire-generated base plus `compose.hardening.yaml`.
 `deploy/compose.portainer.yaml` is the same hardened stack configured **only through environment
 variables**, for operators who cannot run `init-deployment.sh` (Portainer, managed Docker hosts).
 Paste it into a Portainer stack (Web editor) or deploy the repository's file via Git, and set the
-variables listed at the top of the file (images, `UME_OIDC_AUTHORITY`, `UME_DOMAIN`; optional host names, claim
-mapping and ports). With `UME_DOMAIN=example.se` the gateway API is `llm.example.se`, the admin UI
+variables listed at the top of the file. **A new stack needs only `UME_DOMAIN`** (or `UME_GATEWAY_HOST`) and the images;
+the `compose.portainer.yaml` attached to a GitHub release pins its images, so with it `UME_DOMAIN` alone is enough. The
+rest is optional: host names, ports, claim mapping, and the sign-in variables. With `UME_DOMAIN=example.se` the gateway API is `llm.example.se`, the admin UI
 `llm-admin.example.se` and the gateway's public URL `https://llm.example.se`; `UME_GATEWAY_HOST`, `UME_ADMIN_HOST` and
 `UME_GATEWAY_PUBLIC_URL` each override their default, and a stack that sets `UME_GATEWAY_HOST` needs no `UME_DOMAIN`. The images must be in a registry the
 host can pull from. The `compose.portainer.yaml` attached to a GitHub release already points at that
@@ -48,7 +51,19 @@ service certificates are re-issued when they expire within 30 days, the hostname
 (restart the stack to renew; redeploying runs bootstrap again). An internal CA without the `keyUsage` extension
 (created before it was added) is replaced automatically and all certificates are re-issued. The CA key stays in the
 `ume-certs` volume because bootstrap needs it; restrict who can read Docker volumes on the host. `UME_OIDC_CLIENT_SECRET`, if used, is the one secret
-you enter yourself; it is stored in the Portainer stack's environment, so restrict who can view it.
+you enter yourself; it is stored in the Portainer stack's environment, so restrict who can view it (or enter it in the
+setup wizard, where it is stored encrypted instead).
+
+- **Sign-in.** Without `UME_OIDC_AUTHORITY` the stack starts for the setup wizard: the end of the `bootstrap`
+  container's log names its address (`https://<admin host>:9443/setup`, or `https://<admin host>/setup` behind a proxy),
+  and the setup code is in the `adminapi` container's log (*Containers › adminapi › Logs*, the line
+  `adminapi: setup mode is open until … Setup code: …`). See *First start without an authority* below. To declare the
+  sign-in instead, set `UME_OIDC_AUTHORITY` (and `UME_OIDC_CLIENT_ID`, `UME_OIDC_CLIENT_SECRET` as needed) before the
+  first deploy: the wizard then never opens, and the bootstrap's log says so. `UME_OIDC_CLIENT_SECRET` is written only
+  together with `UME_OIDC_AUTHORITY`; the bootstrap names it when it is left out, and an example value left in either.
+- **Re-opening setup** (to change the provider, client or secret later): set `UME_SETUP_REOPEN` to a new value (for
+  example today's date) and *Update the stack*; a new code is in the `adminapi` log, valid for an hour. The value is
+  consumed, so leaving it in place opens nothing more. Empty it before restoring a database.
 
 - **Back up** `ume-secrets/.pepper` and `ume-certs/data-protection.pfx` (for example
   `docker run --rm -v <stack>_ume-secrets:/s alpine cat /s/.pepper`). Deleting the stack's volumes loses
@@ -70,8 +85,9 @@ you enter yourself; it is stored in the Portainer stack's environment, so restri
 ## Identity provider (existing Keycloak, AD FS, Entra ID, Active Directory)
 
 The development Keycloak realm (`dev/keycloak`) is for local runs only; **production uses an existing OIDC
-provider or the optional [Keycloak project](keycloak.md)** (`deploy/keycloak`), set as `UME_OIDC_AUTHORITY` in
-`deploy/.env`. The admin API needs a client
+provider or the optional [Keycloak project](keycloak.md)** (`deploy/keycloak`), either set as `UME_OIDC_AUTHORITY` in
+`deploy/.env` (the Portainer stack's variable, Kubernetes' `Oidc__Authority`) or entered in the setup wizard (*First
+start without an authority* below). The admin API needs a client
 (authorization code + PKCE; redirect URIs `https://<admin host>/signin-oidc` and
 `/signout-callback-oidc`) and these
 claims **in the ID token** (step-by-step setup per provider and what each role may do:
@@ -84,7 +100,8 @@ claims **in the ID token** (step-by-step setup per provider and what each role m
 | `name`, `email` | Display |
 
 If the provider cannot emit those names or values, remap them instead of changing the provider
-(settings in `deploy/.env`; for local runs the same keys as `Oidc:<Setting>` in AppHost user secrets):
+(in the setup wizard, which takes them with the provider, or as settings in `deploy/.env`, which win and lock the wizard's field; for local
+runs the same keys as `Oidc:<Setting>` in AppHost user secrets):
 
 | Setting | Env variable | Purpose |
 |---|---|---|
@@ -93,7 +110,7 @@ If the provider cannot emit those names or values, remap them instead of changin
 | `Oidc:GroupClaim` | `UME_OIDC_GROUP_CLAIM` | Claim holding group names (default `groups`) |
 | `Oidc:RoleGroups:<role>` | `UME_OIDC_GROUPS_GATEWAY_ADMIN`, `_DEPARTMENT_ADMIN`, `_VIEWER`, `_TEAM_ADMIN` | Groups (`;`-separated, case-insensitive) that grant a role, so no IdP-side roles are needed |
 | `Oidc:ExtraScopes:0` | `UME_OIDC_EXTRA_SCOPE` | Additional scope to request (`groups`) |
-| `Oidc:ClientSecret` | `--oidc-client-secret-file` (init script) | Confidential client; stored as the `Oidc__ClientSecret` secret file |
+| `Oidc:ClientSecret` | `--oidc-client-secret-file` (init script) | Confidential client; stored as the `Oidc__ClientSecret` secret file. Only with the deployment's authority; without one, enter the secret in the setup wizard |
 
 Users without a granted role can sign in but are refused (403) by the role policies; there is no default role.
 
@@ -116,6 +133,34 @@ Users without a granted role can sign in but are refused (403) by the role polic
 Only the Keycloak realm defaults are tested end to end; the AD FS and Entra settings are the intended
 mapping and should be verified against the real IdP: sign in, then check `/bff/user`, which shows the
 `roles` and `departmentCodes` the API received. Test all three roles and department scoping.
+
+### First start without an authority: the setup wizard
+
+A deployment that does not set `UME_OIDC_AUTHORITY` (Kubernetes: `Oidc__Authority`) starts with sign-in not configured
+and opens **setup mode** for an hour at the admin API's first start. Rules, risks and the API:
+[identity and roles](identity-and-roles.md#setup-mode).
+
+1. **Read the setup code** on the admin API's output (it never goes through the logger or OTLP):
+   `docker compose -f deploy/compose.prod.yaml --env-file deploy/.env logs adminapi | grep 'Setup code'`; Portainer:
+   the `adminapi` container's log; Kubernetes: `kubectl -n <ns> logs deploy/adminapi | grep 'Setup code'` (every pod
+   prints the same code). The line reads `adminapi: setup mode is open until 2026-11-16 07:20 UTC. Setup code: …`.
+2. **Open `https://<admin host>/setup`** (with `:9443` without a proxy) and enter the code. The wizard shows the redirect
+   URIs to register at the provider (`/signin-oidc`, `/signout-callback-oidc`), takes the authority, client id, client
+   secret and, when the token differs from the defaults, the claim names and extra scope.
+3. **Test the sign-in** in the same browser. Saving needs a passed test by a person who comes out as `gateway-admin`
+   (a role in the token, or a group in `UME_OIDC_GROUPS_GATEWAY_ADMIN`). Saving completes setup and closes it.
+
+The code is a gateway-admin credential for the hour: treat the container's output like the deployment's secrets, and
+finish soon after the start. A restart within the hour prints the same code; while setup was never finished, a start
+after the hour opens a new hour with a new code. The admin API reaches the candidate provider's discovery document, keys
+and token endpoint over HTTPS, so its egress must allow that host ([network and ports](network-and-ports.md#outbound-egress)).
+The wizard does not set the Data API's token issuer: set `UME_DATA_AUTHORITY` for it.
+
+**Re-opening.** Give `UME_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) a new value, for example today's date, and restart
+the admin API (`up -d`, *Update the stack*, `deploy.sh`): setup opens once more for an hour with a new code, and the
+existing sign-in keeps working meanwhile. Values the deployment sets stay locked. Re-opening needs the setup secret
+(`Setup__Secret`), which the Portainer bootstrap and `init-deployment.sh` generate; an installation from before setup
+mode gets it as the [upgrade guide](upgrade-guide.md#unreleased) describes.
 
 **Local development against an existing provider.** Set `Oidc:Authority` (and `Oidc:ClientId`,
 `Oidc:ClientSecret`, any mapping settings above) in AppHost user secrets. The AppHost then does not start
@@ -288,14 +333,16 @@ Use host-native paths on Linux; the PowerShell examples are for the Windows buil
 
 Set `GATEWAY_IMAGE`, `ADMINAPI_IMAGE`, `MIGRATIONS_IMAGE` (and `DATAAPI_IMAGE` with the Data API) to approved `repository@sha256:...`.
 Set `UME_CERTS_DIR`, `UME_SECRETS_DIR` to absolute operator-managed directories.
-Set `UME_OIDC_AUTHORITY` (HTTPS), `UME_OIDC_CLIENT_ID`, `UME_GATEWAY_PUBLIC_URL` (HTTPS).
+Set `UME_GATEWAY_PUBLIC_URL` (HTTPS). Sign-in: `UME_OIDC_AUTHORITY` (HTTPS) and `UME_OIDC_CLIENT_ID` declare it (empty
+leaves it to the setup wizard, see *First start without an authority*); `UME_SETUP_REOPEN` (empty) re-opens the wizard.
 Optional `UME_GATEWAY_BIND/PORT` and `UME_ADMIN_BIND/PORT` default to loopback:8443/9443.
 For [integrations](integrations.md): `UME_ADMIN_PUBLIC_URL` (gateway `Gateway__AdminUrl`, the admin console's address
 handed to platforms on `/v1/ume/context`; `init-deployment.sh` writes it, empty leaves it out) and
 `UME_INTEGRATION_REQUESTS_PER_MINUTE` (admin API `Admin__IntegrationRequestsPerMinute`, default 60, per credential key
 on `/integration/v1`), and `UME_INTEGRATION_API_URL` (gateway `Gateway__IntegrationApiUrl`, the Integration API's address
 as platforms reach it, for example `https://adminapi:8443/integration/v1`; empty leaves it out), the gateway's
-`Gateway__OidcAuthority` (set from `UME_OIDC_AUTHORITY`: the sign-in provider's address as `oidc_authority`), and
+`Gateway__OidcAuthority` (set from `UME_OIDC_AUTHORITY`: the sign-in provider's address as `oidc_authority`; empty
+hands out the one saved in the setup wizard), and
 `UME_INTEGRATION_MANIFESTS_DIR` / `UME_INTEGRATION_SECRETS_DIR` (migration service; integration manifests to provision
 on every deploy and where the new credential keys' secrets are written, see
 [Provisioning from a manifest](integrations.md#provisioning-from-a-manifest); `UME_INTEGRATION_MANIFEST` in the
@@ -330,7 +377,7 @@ Do not mount another service's secrets into an app.
 | secrets/redis | users.acl based on users.acl.example, containing password SHA256 hash, not plaintext |
 | secrets/migrations | ConnectionStrings__gatewaydb (ume_migrator), Security__KeyPepper, optional DataProtection__CertificatePassword |
 | secrets/gateway | ConnectionStrings__gatewaydb (ume_gateway), ConnectionStrings__redis, Security__KeyPepper, optional DataProtection__CertificatePassword |
-| secrets/adminapi | ConnectionStrings__gatewaydb (ume_admin), ConnectionStrings__redis, Security__KeyPepper, Oidc__ClientSecret if confidential client, optional DataProtection__CertificatePassword |
+| secrets/adminapi | ConnectionStrings__gatewaydb (ume_admin), ConnectionStrings__redis, Security__KeyPepper, Setup__Secret (setup mode; at least 32 characters, generated once, no backup needed), Oidc__ClientSecret if a confidential client is declared (only with `Oidc__Authority`), optional DataProtection__CertificatePassword |
 | secrets/dataapi | ConnectionStrings__gatewaydb (ume_data) only: no pepper, no Redis |
 
 Use a secret manager to deliver files on a protected memory-backed mount. Application
@@ -381,7 +428,8 @@ and column by column on tables that hold secrets), so it can be deployed in a di
      `usage.detail` (data warehouse), `security.read` (SIEM), `catalog.read` (dimensions). Keycloak: realm roles
      mapped to a `roles` claim (see the `ume-data-dev` client in `dev/keycloak/ume-realm.json`); Entra ID: app roles
      granted to the client as application permissions.
-   - Tokens are accepted from `UME_DATA_AUTHORITY` (defaults to `UME_OIDC_AUTHORITY`).
+   - Tokens are accepted from `UME_DATA_AUTHORITY` (defaults to `UME_OIDC_AUTHORITY`, never to the provider saved in
+     the setup wizard; without either, only Data API keys).
    Alternatively (or for integrations that cannot do client credentials) a gateway admin creates a **Data API key** in
    the admin UI (*Access → Data API access*). Set `UME_DATA_PUBLIC_URL` (admin API `DataApi__PublicUrl`) to the
    Data API's public address so the UI can show a ready-made example request.
@@ -457,7 +505,11 @@ does not deploy/expose a public Aspire dashboard.
 | Log "Content guard model … is not an enabled on-prem model" | `Gateway__ContentGuard__Model` names a model that is missing, disabled or not on an on-prem provider; the guard uses its rules only (see docs/content-guard.md) |
 | Log "Content guard model unavailable …" / usage flag `guard_unavailable` | The guard model failed or took longer than `TimeoutMs`; check the on-prem server. With `FailOpen=false`, Block keys get 503 meanwhile |
 | Provider keeps failing but its circuit stays closed | Upstream 401/403/404, `https_required` and `credential_unavailable` are configuration errors: requests fall back but the circuit breaker ignores them. Fix the credential, URL or model name |
-| A service exits at startup with an options validation error | A required or out-of-range setting, e.g. `Oidc:Authority` missing, `Admin:RequestsPerMinute` outside 1–10000, `Gateway:BaseUrl`/`OperationsUrl` not an absolute http(s) URL (admin API), or invalid `Seed:*` settings (migration service) |
+| A service exits at startup with an options validation error | A required or out-of-range setting, e.g. an `Oidc:Authority` that is set but not an absolute https URL, `Admin:RequestsPerMinute` outside 1–10000, `Gateway:BaseUrl`/`OperationsUrl` not an absolute http(s) URL (admin API), or invalid `Seed:*` settings (migration service). A missing `Oidc:Authority` no longer stops the admin API: see the next row |
+| Sign-in not set up yet: `/bff/user` shows `signIn.configured: false`, `/bff/login` answers `409 sign_in_not_configured`, log "Sign-in refused: sign-in is not configured (no_authority)" | No authority in the deployment and none saved in the setup wizard. Use the setup code from the admin API's output (*First start without an authority*), or set `UME_OIDC_AUTHORITY`. `invalid_authority`: the saved authority is not an absolute https URL; `unreadable_client_secret`: see the restore notes in *Backup and restore* |
+| No setup code on the admin API's output | Declared deployments never print one (log "The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed" at the first start). Otherwise: setup was completed (re-open with a new `UME_SETUP_REOPEN`); the hour passed and the admin API has not started since (restart it; a never-completed setup opens a new hour); log "Setup mode would open, but the setup secret (Setup__Secret, at least 32 characters) is missing…": the deployment lacks `secrets/adminapi/Setup__Secret` (re-run `init-deployment.sh`, redeploy the Portainer stack, or `create-secrets.sh`); log "The SignInSettings row is missing…": run the migration service |
+| `429 setup_attempts_exhausted` on the setup code | More than 20 wrong codes in a minute on that instance; wait for `Retry-After`. The right code is never refused, so check for a typo or an older code (each opening has its own). Repeated `admin.setup.code_refused` events you did not cause mean someone is guessing: finish setup or declare the authority |
+| The wizard's test sign-in fails with a `reason` | Each reason names the step ([admin-api.md](admin-api.md#setup-mode-bffsetup)): `authority_unreachable` or `token_endpoint_unreachable` (the admin API's egress or DNS), `tls` (the provider's certificate is not trusted: add its CA to `ca.pem`, `init-deployment.sh --ca-file`), `issuer_mismatch` (enter the authority exactly as the `issuer` in the provider's `/.well-known/openid-configuration`), `provider_error` or `token_refused` (client id, secret or redirect URI at the provider), `browser_mismatch` (finish the test in the browser that started it), `deployment_secret_without_authority` (remove the deployment's `Oidc__ClientSecret` or set the authority), `not_gateway_admin` on saving (the person has no `gateway-admin` role or group) |
 | Budget alert webhook not received | Each alert is posted once (5 s timeout, no retries) and is still stored (`GET /api/alerts`); a warning is logged when the post fails or the 1 000-alert queue is full |
 | Live audio: 400 "requires a WebSocket connection" | The proxy drops the `Upgrade` header; see *Reverse proxy and PKI* |
 | A successful request is missing from the gateway log | Only refused, failed and cancelled requests are logged at Information ("Request … key … status … in … ms"); successful ones are in the usage records (find them by `request_id`). To log every request, turn on **Settings > Request logging** (24 hours or no time limit; applies within seconds). Without the admin UI, set `Logging__LogLevel__Ume.LlmGateway.Gateway.Requests.GatewayRequestHandler=Debug` on the gateway and restart it. Either costs 6–14 % of peak throughput while on |
@@ -509,6 +561,13 @@ passwords are separately managed, not stored in the database archive.
 
 With the optional Keycloak ([keycloak.md](keycloak.md)), back up its database too, as its own archive:
 `-Database keycloak` on both scripts (restore it with Keycloak stopped; it never touches gatewaydb).
+
+**Setup mode and a restore.** Empty `UME_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) before restoring: a backup older
+than its last re-open, restored while the variable holds that value, opens setup once more. On a deployment whose
+sign-in was set in the wizard, a backup from before setup was completed opens setup again at the next start (finish it
+again). A client secret saved in the wizard needs the same Data Protection certificate as the database; with another
+one it is unreadable, sign-in reports not configured (`unreadable_client_secret`), and setup must be re-opened to type
+it again. The setup secret (`Setup__Secret`) needs no backup.
 
 Back up the Data Protection private certificate/password and HMAC pepper separately
 through the secret manager. Test restoration in an isolated environment: schema,

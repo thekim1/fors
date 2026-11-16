@@ -26,13 +26,13 @@ namespace can enforce the **restricted** Pod Security Standard. Requirements: Ku
    you (the containers read them from Kubernetes secrets, not from disk):
 
    ```bash
-   ./deploy/init-deployment.sh --no-chown --oidc-authority https://idp.example.se/realms/ume \
-       --gateway-host llm.example.se --admin-host llm-admin.example.se
+   ./deploy/init-deployment.sh --no-chown --gateway-host llm.example.se --admin-host llm-admin.example.se
    ```
 
    It creates an internal CA, a certificate per service, database and Redis passwords, the key pepper, the Data Protection
-   certificate and connection strings to the hosts `postgres` and `redis` (the Service names in `components/datastores`).
-   It also writes `deploy/.env`, which Kubernetes does not use. **Back up `deploy/secrets/.pepper` and
+   certificate, the admin API's setup secret (`Setup__Secret`) and connection strings to the hosts `postgres` and `redis` (the Service names in `components/datastores`).
+   It also writes `deploy/.env`, which Kubernetes does not use. Add `--oidc-client-secret-file` (with `--oidc-authority`)
+   only to declare a confidential client's secret; otherwise the setup wizard takes it. **Back up `deploy/secrets/.pepper` and
    `deploy/certs/data-protection.pfx`** outside the cluster: without them a restored database is unusable.
 
 2. **Create the secrets** in your namespace:
@@ -49,8 +49,9 @@ namespace can enforce the **restricted** Pod Security Standard. Requirements: Ku
    repository with the `../base` paths adjusted) and change:
    - `images`: the release's images (`ghcr.io/thekim1/llmgateway/<service>`), pinned by digest from the release notes.
      A release bundle already pins the base.
-   - `Oidc__Authority` and `Gateway__BaseUrl`; claim mapping as in [Identity provider and roles](identity-and-roles.md)
-     (`Oidc__RoleClaim`, `Oidc__RoleGroups__gateway-admin`, ...).
+   - `Gateway__BaseUrl`, and how sign-in is set up (*Sign-in* below): `Oidc__Authority` to declare it, or nothing for the
+     setup wizard; claim mapping as in [Identity provider and roles](identity-and-roles.md) (`Oidc__RoleClaim`,
+     `Oidc__RoleGroups__gateway-admin`, ...).
    - The Ingress host names and TLS secrets. The pods speak HTTPS, so the controller must connect with TLS: the example
      annotations are for ingress-nginx; with Traefik use a ServersTransport, with the Gateway API an HTTPRoute and a
      BackendTLSPolicy. Pass the Host header through and turn off buffering, or streamed answers arrive all at once.
@@ -63,12 +64,29 @@ namespace can enforce the **restricted** Pod Security Standard. Requirements: Ku
    ./deploy/kubernetes/deploy.sh deploy/kubernetes/prod
    ```
 
-5. **Register** `https://<admin host>/signin-oidc` and `/signout-callback-oidc` at your identity provider, sign in, and
-   list the Ingress controller's pod network under *Settings > Trusted proxies*, so the gateway reads the client address
+5. **Register** `https://<admin host>/signin-oidc` and `/signout-callback-oidc` at your identity provider (the setup
+   wizard shows them), set up or check the sign-in (*Sign-in* below), sign in, and list the Ingress controller's pod network under *Settings > Trusted proxies*, so the gateway reads the client address
    from `X-Forwarded-For` (needed for [client address restrictions](client-addresses.md)).
 
 Settings go into the overlay as ConfigMap literals named the way the apps read them (`Section__Key`), for example
 `Gateway__Security__SourceAddress` or `OTEL_EXPORTER_OTLP_ENDPOINT`. Secrets stay in the secret files.
+
+## Sign-in
+
+The admin console's sign-in is set one of two ways ([identity and roles](identity-and-roles.md#setup-mode)):
+
+- **Declared:** the overlay sets `Oidc__Authority` in `ume-adminapi-config` (and `Oidc__ClientId`, claim names as
+  needed; a confidential client's secret as `Oidc__ClientSecret` in `ume-adminapi-secrets`, from
+  `init-deployment.sh --oidc-authority ... --oidc-client-secret-file`). Setup counts as completed at the first start and
+  never opens; each `Oidc__*` set is locked in the wizard.
+- **The setup wizard:** leave `Oidc__Authority` out. After `deploy.sh` (it says when setup mode is open), read the code
+  with `kubectl -n ume-gateway logs deploy/adminapi | grep 'Setup code'` (every pod prints the same code) and open
+  `https://<admin host>/setup` within the hour. It needs `Setup__Secret` in `ume-adminapi-secrets`, which
+  `create-secrets.sh` takes from `init-deployment.sh`'s files.
+
+To re-open the wizard later, set `Setup__Reopen` to a new value (for example today's date) in the overlay and run
+`deploy.sh`; empty it before restoring a database. The Data API does not follow the wizard: set `DataApi__Authority` in
+`ume-dataapi-config` for access tokens. The admin API reaches the provider over outbound 443 (see *Network policies*).
 
 ## Updates without downtime
 

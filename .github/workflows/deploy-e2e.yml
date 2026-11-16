@@ -1,8 +1,9 @@
 name: Deploy end to end
 # Updates without downtime, tested for real (docs/zero-downtime-updates.md, docs/kubernetes.md): builds the service
 # images, then replaces every instance under load with Docker Compose (compose.rolling.yaml + rolling-update.sh behind
-# nginx) and on a kind cluster (deploy.sh + a rolling restart). Fails if a single request is lost.
-# About 6 minutes a run, so not on draft pull requests; mark the pull request ready (or run it from the Actions tab).
+# nginx) and on a kind cluster (deploy.sh + a rolling restart). Fails if a single request is lost. Also boots a new
+# Portainer stack into setup mode (deploy/tests/setup-mode-boot.sh).
+# About 7 minutes a run, so not on draft pull requests; mark the pull request ready (or run it from the Actions tab).
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -51,6 +52,10 @@ jobs:
           done
       - name: Docker Compose rolling update under load
         run: deploy/tests/compose-rolling-e2e.sh
+      - name: Setup mode on a new Portainer stack
+        # Only UME_DOMAIN and the images: the setup code is printed and gives a setup session, a restart prints the same
+        # code, and declaring UME_OIDC_AUTHORITY afterwards completes setup (about a minute; thekim1/llmgateway#100).
+        run: deploy/tests/setup-mode-boot.sh
       - name: Install kind
         run: |
           command -v kind && exit 0

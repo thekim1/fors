@@ -111,11 +111,13 @@ out ends the session, also for a copied cookie.
 
 Register one client (in the examples called `ume-admin`):
 
-- **Flow**: authorization code with PKCE (S256). A client secret is optional; with one, pass it to `init-deployment.sh`
-  with `--oidc-client-secret-file`, where it becomes the `Oidc__ClientSecret` secret file.
+- **Flow**: authorization code with PKCE (S256). A client secret is optional; with one, enter it in the
+  [setup wizard](#setup-mode), or declare it with the authority: `init-deployment.sh --oidc-authority ...
+  --oidc-client-secret-file`, where it becomes the `Oidc__ClientSecret` secret file (Portainer: `UME_OIDC_CLIENT_SECRET`).
 - **Redirect URI**: `https://<admin host>/signin-oidc`
 - **Post-logout redirect URI**: `https://<admin host>/signout-callback-oidc`
-- **Scopes**: `openid`, `profile` and `email` are always requested; add one more with `UME_OIDC_EXTRA_SCOPE`.
+- **Scopes**: `openid`, `profile` and `email` are always requested; add one more with `UME_OIDC_EXTRA_SCOPE` (or the
+  wizard's extra scopes).
 - **Sign-out**: the provider's discovery document must have an `end_session_endpoint`.
 
 And these claims **in the ID token** (not only in the access token):
@@ -131,7 +133,9 @@ And these claims **in the ID token** (not only in the access token):
 ### Claim mapping
 
 If the provider cannot issue claims with exactly those names and values, map them in the gateway instead of changing the
-provider. Set them in `deploy/.env` (for local runs, the same keys as `Oidc:<Setting>` in AppHost user secrets):
+provider: in the setup wizard (it takes the claim names and extra scope too), or in `deploy/.env` (the Portainer stack's variables; for local runs,
+the same keys as `Oidc:<Setting>` in AppHost user secrets), which wins and locks the wizard's field. The role groups are
+deployment values only:
 
 | Env variable | Setting | Default | Purpose |
 |---|---|---|---|
@@ -143,7 +147,7 @@ provider. Set them in `deploy/.env` (for local runs, the same keys as `Oidc:<Set
 | `UME_OIDC_GROUPS_DEPARTMENT_ADMIN` | `Oidc:RoleGroups:department-admin` | | As above |
 | `UME_OIDC_GROUPS_VIEWER` | `Oidc:RoleGroups:viewer` | | As above |
 | `UME_OIDC_GROUPS_TEAM_ADMIN` | `Oidc:RoleGroups:team-admin` | | As above |
-| `UME_OIDC_EXTRA_SCOPE` | `Oidc:ExtraScopes:0` | `email` | One more scope to request, for example `groups` or `allatclaims` |
+| `UME_OIDC_EXTRA_SCOPE` | `Oidc:ExtraScopes:0` | none | One more scope to request, for example `groups` or `allatclaims` |
 
 Group mapping means you do not need roles in the identity provider at all: put people in AD groups and list the groups.
 For example, `UME_OIDC_GROUPS_GATEWAY_ADMIN=GG-Llm-Admins` and `UME_OIDC_GROUPS_VIEWER=GG-Llm-Readers;GG-Economy`.
@@ -213,6 +217,10 @@ the authority, client id or client secret into its variables. The API is in [adm
   route under `/api`. To re-open, give `Setup:Reopen` (`UME_SETUP_REOPEN`) a new value, for example today's date, and restart
   the admin API: setup opens once, for an hour, with a new code; the value is consumed then, so a restart with the same value
   opens nothing. While it is open the existing sign-in keeps working. Or set the value in the deployment, which always wins.
+- **In the deploy forms** (the Portainer stack, `init-deployment.sh` with `compose.prod.yaml`, Kubernetes): without
+  `UME_OIDC_AUTHORITY` (`Oidc__Authority`) a new deployment starts for the wizard; each form generates the setup secret
+  and passes `UME_SETUP_REOPEN` (`Setup__Reopen`). Where the code is and what to check:
+  [runbook](runbook.md#first-start-without-an-authority-the-setup-wizard); upgrading: [upgrade guide](upgrade-guide.md#unreleased).
 - Security events `admin.setup.opened`, `admin.setup.code_refused`, `admin.setup.session`, `admin.setup.test` and
   `admin.setup.completed` (2008–2012, [data-access.md](data-access.md)) record each step with the address.
 
@@ -254,7 +262,9 @@ development realm `dev/keycloak/ume-realm.json` is a working example too.
    `departmentCodes`, multivalued, *Add to ID token* on.
    **Team codes** work the same way: a user attribute `teamCodes` (declared in the user profile) and a *User Attribute*
    mapper to the claim `teamCodes`. Or use groups, see [Claim mapping](#claim-mapping).
-5. **Gateway.**
+5. **Gateway.** Enter the authority `https://keycloak.example.se/realms/<realm>`, the client id and, for a
+   confidential client, the secret in the [setup wizard](#setup-mode), which shows the redirect URIs of step 1 and tests
+   the sign-in. Or declare them:
    ```bash
    UME_OIDC_AUTHORITY=https://keycloak.example.se/realms/<realm>
    UME_OIDC_CLIENT_ID=ume-admin
@@ -277,12 +287,14 @@ development realm `dev/keycloak/ume-realm.json` is a working example too.
    sign-on → Attributes & Claims* add a claim named `departmentCodes` with that attribute as source. For the claim to be
    issued without a custom signing key, set `"acceptMappedClaims": true` in the app registration's *Manifest*. If the
    claim gets another name, set `UME_OIDC_DEPARTMENT_CLAIM` to it.
-5. **Gateway.**
+5. **Gateway.** Enter the authority `https://login.microsoftonline.com/<tenant id>/v2.0`, the application (client) id
+   and the client secret in the [setup wizard](#setup-mode). Or declare them:
    ```bash
    UME_OIDC_AUTHORITY=https://login.microsoftonline.com/<tenant id>/v2.0
    UME_OIDC_CLIENT_ID=<application (client) id>
    ```
-   and the secret with `init-deployment.sh --oidc-client-secret-file <file>`.
+   and the secret with `init-deployment.sh --oidc-client-secret-file <file>` (Portainer: `UME_OIDC_CLIENT_SECRET`). The
+   secret's expiry date can be noted in the wizard as a reminder.
 
 Prefer app roles to the `groups` claim: Entra puts group object ids (not names) in it, and replaces the list with a link
 when a user is in more than 200 groups. If you use groups anyway, list the object ids in `UME_OIDC_GROUPS_*`.
@@ -304,7 +316,8 @@ AD FS 2016 or later.
      cost-centre code (for example `departmentNumber`) → outgoing type `departmentCodes` (typed in by hand).
    - Or, instead of groups: *Send Group Membership as a Claim*, one rule per role: the AD group, outgoing type `Role`,
      value `gateway-admin` (and so on). Then set `UME_OIDC_ROLE_CLAIM=role` and leave the group settings empty.
-4. **Gateway.**
+4. **Gateway.** Enter the authority, client identifier, shared secret, the scope `allatclaims` and the group claim in the
+   [setup wizard](#setup-mode); the role groups are always deployment values. Or declare them all:
    ```bash
    UME_OIDC_AUTHORITY=https://adfs.example.se/adfs
    UME_OIDC_CLIENT_ID=ume-admin

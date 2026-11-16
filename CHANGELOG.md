@@ -43,7 +43,6 @@
   security events `admin.setup.opened`, `admin.setup.code_refused`, `admin.setup.session`, `admin.setup.test` and
   `admin.setup.completed` (2008–2012). `app-roles.sql` grants the admin role the new columns and tables; the gateway role
   reads none of them. The AppHost's `Setup:Try` opens setup locally ([local development](docs/local-development.md#trying-setup-mode)).
-  The deploy files (the setup secret, `UME_SETUP_REOPEN`, an optional `UME_OIDC_AUTHORITY`) follow in a later step.
 - **The setup wizard in the admin console** (thekim1/llmgateway#100, third step). `/setup` opens without a session,
   outside the menu ([admin UI](docs/admin-ui.md#setup-wizard)): the setup code (with where to find it, and the attempt
   limit's countdown), the redirect URIs to register at the provider (with copy buttons) and who can save, the sign-in values
@@ -55,6 +54,26 @@
   The sign-in page offers the wizard while setup is open, says how to set sign-in up instead of offering a sign-in that
   would be refused, and explains `/?signin=failed`. **Settings › Sign-in** shows the values with their sources, read only.
   The API client reads `Retry-After` and keeps a setup session's 401 apart from the admin session.
+- **Deployment: setup mode in every deploy form** (thekim1/llmgateway#100). `UME_OIDC_AUTHORITY` is optional in
+  `compose.prod.yaml`, `compose.hardening.yaml` and the Portainer stack, and `Oidc__Authority` in the Kubernetes example:
+  set, the sign-in is declared and setup never opens; unset, a new deployment starts for the wizard. A new Portainer stack
+  needs only `UME_DOMAIN` (the release asset pins the images), and its bootstrap's last line names the wizard's address
+  or says sign-in is declared. The Portainer bootstrap and `init-deployment.sh` generate the admin API's setup secret
+  (`Setup__Secret`) once; `create-secrets.sh` carries it to Kubernetes. The new optional `UME_SETUP_REOPEN`
+  (`Setup__Reopen`) re-opens setup. `init-deployment.sh` no longer requires `--oidc-authority` (an interactive first run
+  asks once), keeps the authority, the client id and `UME_SETUP_REOPEN` from `deploy/.env` on a re-run, refuses
+  `--oidc-client-secret-file` without the authority, and its closing notes say where the setup code is; `deploy.sh` says
+  when setup mode is open. A deployment client
+  secret is written only with the authority (`deployment_secret_without_authority`). The client id and claim names are
+  passed only when set, so they no longer lock the wizard's fields; the code's defaults are the old files' defaults, and
+  the old `email` default of `UME_OIDC_EXTRA_SCOPE` is requested anyway. The Data API's token issuer stays
+  `UME_DATA_AUTHORITY`, else `UME_OIDC_AUTHORITY`, never the wizard's. The Portainer stack no longer puts a
+  required-variable form inside a default (`UME_GATEWAY_HOST`, `Gateway__BaseUrl`), which some Compose versions evaluated
+  even with the outer variable set. CI renders every Compose file with and without the authority and runs the bootstrap
+  and `init-deployment.sh` twice (`deploy/tests/setup-mode-deploy.sh`); *Deploy end to end* boots a new Portainer stack
+  into setup mode (`deploy/tests/setup-mode-boot.sh`); the release smoke test checks that a declared deployment prints no
+  code. **Existing deployments change nothing:** they set the authority, so setup counts as completed at the first start.
+  Step by step per deploy form: [upgrade guide](docs/upgrade-guide.md#unreleased).
 
 ## 0.10.3 - 2026-11-15
 

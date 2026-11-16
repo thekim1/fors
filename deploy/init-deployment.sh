@@ -1,16 +1,28 @@
 #!/usr/bin/env bash
 # First-run setup for deploy/compose.prod.yaml: generates an internal CA, service
 # certificates, the Data Protection certificate, database/Redis passwords, the key
-# pepper and deploy/.env. Safe to re-run: existing secrets are never overwritten
-# (regenerating the pepper or Data Protection certificate would break existing data).
+# pepper, the admin API's setup secret and deploy/.env. Safe to re-run: existing secrets are never overwritten
+# (regenerating the pepper or Data Protection certificate would break existing data). A re-run keeps the sign-in
+# values and UME_SETUP_REOPEN from deploy/.env.
 #
 #   ./deploy/init-deployment.sh                      # prompts for what it needs
-#   ./deploy/init-deployment.sh --oidc-authority https://idp.example.se/realms/ume \
-#       --gateway-host llm.example.se --admin-host llm-admin.example.se --yes
-#   ./deploy/init-deployment.sh --oidc-authority https://idp.example.se/realms/ume --domain example.se --yes
+#   ./deploy/init-deployment.sh --gateway-host llm.example.se --admin-host llm-admin.example.se --yes
+#   ./deploy/init-deployment.sh --domain example.se --yes
 #                                                    # the same two names, from the domain (each option overrides its own)
+#   ./deploy/init-deployment.sh --oidc-authority https://idp.example.se/realms/ume --domain example.se --yes
+#                                                    # sign-in declared here instead of in the setup wizard
 #   ./deploy/init-deployment.sh --renew-certs        # re-issue internal certificates only
 #   ./deploy/init-deployment.sh --renew-ca           # new internal CA, then re-issue its certificates
+#
+# Sign-in to the admin console (docs/identity-and-roles.md, "Setup mode"): without --oidc-authority it is set in the
+# setup wizard after the first up (the setup code is in the admin API's log, the wizard at https://<admin host>/setup).
+#   --oidc-authority URL    declare the sign-in instead: the https URL of the OIDC provider. The wizard then never
+#                           opens. Optional; an interactive first run asks once (leave it empty for the wizard). A re-run
+#                           without it keeps the value in deploy/.env (empty the line there to hand sign-in to the wizard)
+#   --oidc-client-id ID     the client as a deployment value (unset: the wizard's, else ume-admin); kept like the authority
+#   --oidc-client-secret-file FILE
+#                           confidential client: install the secret for the admin API (needs the authority; omit it for a
+#                           public client using PKCE only, or to enter the secret in the wizard)
 #
 # Exposure options (see docs/runbook.md, "Reverse proxy and PKI"):
 #   --proxy                 a reverse proxy (nginx, Nginx Proxy Manager, F5...) terminates public
@@ -19,9 +31,6 @@
 #   --rolling               run two gateway and admin API slots (compose.rolling.yaml) for updates without
 #                           downtime; needs a proxy in front (docs/zero-downtime-updates.md)
 #   --no-chown              leave the files owned by you, for deploy/kubernetes/create-secrets.sh
-#   --oidc-client-secret-file FILE
-#                           confidential OIDC client: install the secret for the admin API
-#                           (omit for a public client using PKCE only)
 #   --data-host HOST        hostname clients use for the optional Data API (default: gateway host); with
 #                           --proxy a third distinct name, which enables the Data API in proxy/nginx.conf
 #   --gateway-cert/--gateway-key/--admin-cert/--admin-key/--ca-file FILE
@@ -32,11 +41,11 @@ umask 077
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 certs="$here/certs"; secrets="$here/secrets"; env_file="$here/.env"
-oidc_authority=""; oidc_client="ume-admin"; gateway_host=""; admin_host=""; data_host=""; domain=""
+oidc_authority=""; oidc_client=""; gateway_host=""; admin_host=""; data_host=""; domain=""
 gateway_port=8443; admin_port=9443; bind=""; yes=0; renew=0; renew_ca=0; rolling=0; chown=1
 oidc_secret_file=""; proxy=0; upstream_host=""; gw_cert=""; gw_key=""; adm_cert=""; adm_key=""; ca_file=""
 
-usage() { sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 die() { echo "error: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
@@ -70,6 +79,16 @@ while [ $# -gt 0 ]; do
   esac
 done
 command -v openssl >/dev/null || die "openssl is required"
+env_value() { sed -n "s/^$1=//p" "$env_file" | tail -n 1; } # env_value NAME — its last value in deploy/.env
+# A re-run without --oidc-authority or --oidc-client-id keeps the value in deploy/.env: a declared sign-in does not move to
+# the setup wizard because an option was left out. The deployer's UME_SETUP_REOPEN is kept too (set by hand, never here).
+setup_reopen=""; first_run=1
+if [ -f "$env_file" ]; then
+  first_run=0
+  [ -n "$oidc_authority" ] || oidc_authority="$(env_value UME_OIDC_AUTHORITY)"
+  [ -n "$oidc_client" ] || oidc_client="$(env_value UME_OIDC_CLIENT_ID)"
+  setup_reopen="$(env_value UME_SETUP_REOPEN)"
+fi
 # --domain names both hosts (llm.<domain>, llm-admin.<domain>), as UME_DOMAIN does in compose.portainer.yaml.
 if [ -n "$domain" ]; then
   gateway_host="${gateway_host:-llm.$domain}"; admin_host="${admin_host:-llm-admin.$domain}"
@@ -89,8 +108,9 @@ ask() { # ask VAR "prompt" [default]
 
 if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
   echo "Ume LLM Gateway production setup"
-  ask oidc_authority "OIDC authority URL (https://...)"
-  case "$oidc_authority" in https://*) ;; *) die "OIDC authority must be an https:// URL";; esac
+  if [ "$first_run" = 1 ] && [ -z "$oidc_authority" ] && [ "$yes" = 0 ] && [ -t 0 ]; then
+    read -r -p "OIDC authority URL (https://...; leave empty to set sign-in in the browser): " oidc_authority
+  fi
   ask gateway_host "Public hostname for the gateway API" "$(hostname -f 2>/dev/null || hostname)"
   if [ "$proxy" = 0 ] && [ "$yes" = 0 ] && [ -t 0 ]; then
     read -r -p "Is a reverse proxy (nginx, Nginx Proxy Manager, F5...) in front terminating TLS? [y/N]: " reply
@@ -106,7 +126,12 @@ if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
     ask admin_host "Public hostname for the admin UI" "$gateway_host"
   fi
 fi
+case "$oidc_authority" in ""|https://*) ;; *) die "the OIDC authority must be an https:// URL: $oidc_authority";; esac
 [ -z "$oidc_secret_file" ] || [ -r "$oidc_secret_file" ] || die "cannot read --oidc-client-secret-file $oidc_secret_file"
+# A deployment client secret goes only to the deployment's own provider: without the authority it would make every test
+# sign-in of the setup wizard fail (deployment_secret_without_authority).
+[ -z "$oidc_secret_file" ] || [ -n "$oidc_authority" ] || die "--oidc-client-secret-file needs --oidc-authority \
+(without an authority, enter the client secret in the setup wizard instead)"
 pki=0
 if [ -n "$gw_cert$gw_key$adm_cert$adm_key" ]; then
   pki=1
@@ -225,6 +250,9 @@ printf 'Host=postgres;Database=gatewaydb;Username=ume_data;Password=%s;SSL Mode=
 if [ -n "$oidc_secret_file" ]; then
   tr -d '\r\n' < "$oidc_secret_file" > "$secrets/adminapi/Oidc__ClientSecret"
 fi
+# The admin API's setup secret: the setup code is derived from it (docs/identity-and-roles.md, "Setup mode"). Kept, but
+# not worth backing up: a new one only changes the setup codes printed from then on.
+new_file "$secrets/adminapi/Setup__Secret" && rand | tr -d '\n' > "$secrets/adminapi/Setup__Secret"
 
 # --- Ownership: container UIDs must be able to read their own files -------------------
 own() { # own UID DIR... (needs root; falls back to a printed command)
@@ -262,8 +290,14 @@ if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
 # Non-secret settings for deploy/compose.prod.yaml. Secrets live in UME_SECRETS_DIR.
 UME_CERTS_DIR=$certs
 UME_SECRETS_DIR=$secrets
+# Sign-in (docs/identity-and-roles.md, "Setup mode"): empty is unset, so the setup wizard's value applies, else the
+# code's default (client ume-admin). A set authority declares the sign-in and keeps the wizard closed; every UME_OIDC_*
+# set here is the deployment's value and locks its field in the wizard. A re-run of init-deployment.sh keeps both lines.
 UME_OIDC_AUTHORITY=$oidc_authority
 UME_OIDC_CLIENT_ID=$oidc_client
+# Empty. Any new value without spaces (for example today's date), then \`docker compose ... up -d\`, opens the setup
+# wizard once more, for an hour, with a new setup code in the admin API's log; empty it before restoring a database.
+UME_SETUP_REOPEN=$setup_reopen
 UME_GATEWAY_PUBLIC_URL=https://$gateway_host$public_gw
 UME_ADMIN_PUBLIC_HOST=$admin_host
 # The admin console's address, handed to integrations (/v1/ume/context) for links to a key or budget.
@@ -282,9 +316,11 @@ UME_ADMIN_B_PORT=$((admin_port + 1))
 UME_DATA_HOST=$data_host
 UME_DATA_BIND=$bind
 UME_DATA_PORT=10443
-# UME_DATA_AUTHORITY=   (defaults to UME_OIDC_AUTHORITY; the issuer of the integrations' client-credentials tokens)
+# UME_DATA_AUTHORITY=   (defaults to UME_OIDC_AUTHORITY, never to the setup wizard's; the issuer of the integrations'
+#                       client-credentials tokens. Without either, the Data API accepts only Data API keys)
 # UME_DATA_AUDIENCE=ume-data-api
-# Claims from an existing IdP (Keycloak, AD FS, Entra ID); see docs/runbook.md, "Identity provider".
+# Claims from an existing IdP (Keycloak, AD FS, Entra ID); see docs/runbook.md, "Identity provider". Unset, the setup
+# wizard's value applies, else the default shown here (no extra scope; openid, profile and email are always requested).
 # UME_OIDC_ROLE_CLAIM=roles
 # UME_OIDC_DEPARTMENT_CLAIM=departmentCodes
 # UME_OIDC_TEAM_CLAIM=teamCodes   (or groups: team codes are then the group names)
@@ -342,9 +378,27 @@ update_note=""
 if [ "$rolling" = 1 ]; then
   up_cmd="docker compose -f deploy/compose.prod.yaml -f deploy/compose.rolling.yaml --env-file deploy/.env up -d --wait"
   update_note="
-  5. Update later without downtime with ./deploy/rolling-update.sh (docs/zero-downtime-updates.md)."
+  7. Update later without downtime with ./deploy/rolling-update.sh (docs/zero-downtime-updates.md)."
   [ "$proxy" = 1 ] || update_note="$update_note
      The second slots listen on ports $((gateway_port + 1)) and $((admin_port + 1)): put a proxy in front that uses both."
+fi
+# Sign-in: declared by the authority, or set in the setup wizard after the first up.
+logs_cmd="${up_cmd% up -d --wait} logs adminapi"
+if [ -n "$oidc_authority" ]; then
+  signin_step="  3. Sign-in is declared here (UME_OIDC_AUTHORITY in deploy/.env), so the setup wizard stays closed:
+     sign in at https://$admin_host$public_admin/."
+else
+  signin_step="  3. Set up sign-in in the setup wizard. Read the setup code (valid for an hour; a restart of the admin API
+     prints it again, and while setup was never finished a restart after the hour opens a new hour with a new code):
+       $logs_cmd | grep 'Setup code'
+     and open https://$admin_host$public_admin/setup. The wizard shows the redirect URIs of step 1, takes the provider,
+     client and secret, and tests a sign-in before saving; whoever tests needs the role gateway-admin."
+  [ ! -s "$secrets/adminapi/Oidc__ClientSecret" ] || signin_step="$signin_step
+     $secrets/adminapi/Oidc__ClientSecret is a deployment client secret without an authority: every test
+     sign-in fails with deployment_secret_without_authority. Set UME_OIDC_AUTHORITY in deploy/.env (or re-run with
+     --oidc-authority), or delete the file and enter the secret in the wizard."
+  signin_step="$signin_step
+     The optional Data API takes access tokens only from UME_DATA_AUTHORITY then (never the wizard's provider)."
 fi
 own_step="  0. File ownership is set."
 [ "$chown" = 1 ] || own_step="  0. Files stay owned by you (--no-chown). For Kubernetes, run deploy/kubernetes/create-secrets.sh next."
@@ -359,19 +413,20 @@ cat <<EOF
 Done. Generated:
   $env_file
   $certs   (internal CA, service certificates, Data Protection certificate)
-  $secrets (database/Redis passwords, key pepper, connection strings)
+  $secrets (database/Redis passwords, key pepper, connection strings, setup secret)
 
 Next steps:
 $own_step
-  1. Register these redirect URIs for client '$oidc_client' in your IdP (code + PKCE):
+  1. Register these redirect URIs for client '${oidc_client:-ume-admin}' in your IdP (code + PKCE):
        https://$admin_host$public_admin/signin-oidc
        https://$admin_host$public_admin/signout-callback-oidc
   2. $up_cmd
-  3. Back up $secrets/.pepper and $certs/data-protection.pfx separately from database
-     dumps. Without them a restored database is unusable.
-  4. Internal certificates last 825 days; re-issue with: $0 --renew-certs
-     To use your PKI instead, re-run with --gateway-cert/--gateway-key/--admin-cert/--admin-key.$update_note
-  5. Move $certs/ca.key off this host (with the backups in step 3). Anyone who can read it can
-     issue certificates the services trust; it is only needed again for --renew-certs.
+$signin_step
+  4. Back up $secrets/.pepper and $certs/data-protection.pfx separately from database
+     dumps. Without them a restored database is unusable (and a client secret saved in the setup wizard unreadable).
+  5. Internal certificates last 825 days; re-issue with: $0 --renew-certs
+     To use your PKI instead, re-run with --gateway-cert/--gateway-key/--admin-cert/--admin-key.
+  6. Move $certs/ca.key off this host (with the backups in step 4). Anyone who can read it can
+     issue certificates the services trust; it is only needed again for --renew-certs.$update_note
 $proxy_note
 EOF

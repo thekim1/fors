@@ -5,7 +5,8 @@ organisation has none it wants to use directly, `deploy/keycloak` runs a product
 Compose project of its own, operated with the gateway, with its database in the gateway's Postgres. Other systems can
 share its realm `ume` with their own clients and roles (each system's part is a file), or run without it.
 
-Nothing in the gateway depends on this project. Leave it out and point `UME_OIDC_AUTHORITY` at your own provider.
+Nothing in the gateway depends on this project. Leave it out and point `UME_OIDC_AUTHORITY` at your own provider, or
+enter your provider in the admin console's setup wizard ([identity and roles](identity-and-roles.md#setup-mode)).
 
 | Path | What it is |
 |---|---|
@@ -48,7 +49,12 @@ Run the gateway's `deploy/init-deployment.sh` first; this setup uses its interna
    can use `/realms/ume/.well-known/openid-configuration`; Keycloak's own `/health/ready` is on the management port,
    which is not published.
 5. **Point the gateway at it:** `UME_OIDC_AUTHORITY=https://auth.example.se/realms/ume` in `deploy/.env`, then
-   `docker compose ... up -d adminapi`.
+   `docker compose ... up -d` (the admin API signs in through it, the gateway names it on `/v1/ume/context`). A later
+   re-run of `init-deployment.sh` keeps the line. Declare it here rather than in the admin console's setup wizard:
+   `init-keycloak.sh` has written the `ume-admin` client's secret to `secrets/adminapi/Oidc__ClientSecret`, a deployment
+   value that goes only to the deployment's own authority, so without the variable every test sign-in in the wizard fails
+   with `deployment_secret_without_authority`. If the admin API already printed a setup code, the restart with the
+   variable completes setup and the code is void.
 6. **Admins of Keycloak itself.** Sign in to `https://auth.example.se/admin` as `bootstrap-admin` (password in
    `secrets/keycloak/admin_password`), create personal admin users in the *master* realm, then delete
    `bootstrap-admin`. Keep the client `ume-realm-import` in *master*: the import job signs in with it.

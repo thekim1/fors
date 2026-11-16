@@ -161,7 +161,7 @@ already verified on its merge with `main`; a merge followed by a tag therefore r
 | Workflow | Runs on | Not on |
 |---|---|---|
 | *Verify* (about 3 min) | ready pull requests (their merge with `main`), release tags | draft pull requests; pushes to `main`; changes to Markdown, `docs/`, `site/`, `benchmarks/compare/` or the design prototype only |
-| *Deploy end to end* (about 6 min) | ready pull requests that change `deploy/` or ServiceDefaults | drafts |
+| *Deploy end to end* (about 7 min) | ready pull requests that change `deploy/` or ServiceDefaults | drafts |
 | *Website* (1 min) | pull requests and pushes to `main` that change the site, `docs/`, the CHANGELOG or the design tokens (on `main` it builds and publishes in one job) | drafts |
 | *Release* | `v*.*.*` tags: verifies the tag again, then builds and publishes | |
 | *Flake hunt* | Mondays, or by hand (also scans the base image for new CVEs) | |
