@@ -11,7 +11,7 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
-## Unreleased
+## 0.11.0: setup mode and integration manifests without an owner
 
 The admin console's sign-in (authority, client id, client secret, claim names) can be set in a browser wizard, **setup
 mode**, instead of the deployment's variables ([identity and roles](identity-and-roles.md#setup-mode)); the Portainer

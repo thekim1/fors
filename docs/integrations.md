@@ -10,7 +10,8 @@ the gateway's values, without the Data API.
 > budget status (phase 3). After the RAG platform's review: the credential key's residencies bound every key it acts
 > as, the scope `organisation.read`, the contract as an OpenAPI document, and department member groups; in 0.10.2 the organisation name and the
 > Integration API's address in the context, and provisioning from a manifest (on deploy, or from a preset in the admin
-> console). Webhooks (phase 4) are not planned yet. Decided by the gateway owner: a chatbot
+> console); in 0.11.0 the sign-in provider in the context, manifests without an owner, and moving an integration to
+> another team with its credential keys. Webhooks (phase 4) are not planned yet. Decided by the gateway owner: a chatbot
 > (assistant) is configured with a gateway key of its own, set up in the gateway; gateway keys are reused on the
 > Integration API; settings are entered once; streamed cost is wanted. It replaces the delegation design kept in the
 > RAG platform's repository (`plans/gateway-changes/design.md` §5, draft ADR 020). The gateway still never depends
@@ -221,7 +222,7 @@ chatbot's model picker and the check on save.
 ```json
 {
   "object": "ume.context",
-  "gateway": { "version": "0.10.2", "admin_url": "https://…", "integration_api_url": "https://adminapi:8443/integration/v1",
+  "gateway": { "version": "0.11.0", "admin_url": "https://…", "integration_api_url": "https://adminapi:8443/integration/v1",
                "organisation_name": "Umeå kommun", "oidc_authority": "https://idp.example.se/realms/ume", "features": ["max-residency", "model-facts", "integrations"] },
   "key": { "id": "…", "name": "Ume.Rag api", "prefix": "ume-sk-AbC1", "team_id": "…", "integration_role": "Credential",
            "integration_scopes": ["usage.read"], "require_max_residency": true, "allowed_residencies": [] },

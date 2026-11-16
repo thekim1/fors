@@ -160,7 +160,7 @@ The wizard does not set the Data API's token issuer: set `UME_DATA_AUTHORITY` fo
 the admin API (`up -d`, *Update the stack*, `deploy.sh`): setup opens once more for an hour with a new code, and the
 existing sign-in keeps working meanwhile. Values the deployment sets stay locked. Re-opening needs the setup secret
 (`Setup__Secret`), which the Portainer bootstrap and `init-deployment.sh` generate; an installation from before setup
-mode gets it as the [upgrade guide](upgrade-guide.md#unreleased) describes.
+mode gets it as the [upgrade guide](upgrade-guide.md#0110-setup-mode-and-integration-manifests-without-an-owner) describes.
 
 **Local development against an existing provider.** Set `Oidc:Authority` (and `Oidc:ClientId`,
 `Oidc:ClientSecret`, any mapping settings above) in AppHost user secrets. The AppHost then does not start
