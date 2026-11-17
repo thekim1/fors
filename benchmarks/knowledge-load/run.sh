@@ -125,6 +125,7 @@ for platform in $PLATFORMS; do
   curl -s -X DELETE http://127.0.0.1:18090/stats >/dev/null
   rm -f results/.stop
   sample "$platform" & sampler=$!
+  load_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   log "$platform: $VUS clients, ramp ${RAMP} s, hold ${HOLD} s"
   load "$platform" "$VUS" "$RAMP" "$HOLD" "$HERE/results/$platform.json"
   touch results/.stop; wait "$sampler"
@@ -132,6 +133,10 @@ for platform in $PLATFORMS; do
   for s in $SERVICES; do
     docker logs "knowledge-load-$s-1" 2>&1 | grep -ciE 'too many clients|remaining connection slots|53300|QueuePool limit|TimeoutError' \
       | sed "s/^/$s /" >>"results/$platform-pg-errors.txt" || true
+    # The lines themselves, and every error the platform logged during the load, to find out why requests failed.
+    docker logs --since "$load_started" "knowledge-load-$s-1" 2>&1 \
+      | grep -iE 'too many clients|remaining connection slots|53300|QueuePool|TimeoutError|Traceback|exception|error' \
+      | head -200 | sed "s/^/$s: /" >>"results/$platform-errors.log" || true
   done
   echo "$CHUNKS" >"results/$platform-chunks.txt"
   log "$platform: done"
