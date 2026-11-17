@@ -93,8 +93,11 @@ setup_rag() {
 sample() { # platform
   local names="" s
   for s in $SERVICES; do names+=" knowledge-load-$s-1"; done
-  : >"results/$1-stats.txt"; : >"results/$1-pg.txt"
+  : >"results/$1-stats.txt"; : >"results/$1-pg.txt"; : >"results/$1-harness.txt"
   while [[ ! -e results/.stop ]]; do
+    # Harness check: the fake LLM and the load client must not be the limit (each has 4 threads of its own).
+    docker stats --no-stream --format 'fake-llm,{{.CPUPerc}}' knowledge-load-fake-llm-1 >>"results/$1-harness.txt" 2>/dev/null || true
+    ps -eo pcpu,args | awk '/knowledge-load (eneo|rag) / && !/awk/ {printf "load-client,%s%%\n", $1}' >>"results/$1-harness.txt" || true
     docker stats --no-stream --format '{{.Name}},{{.CPUPerc}},{{.MemUsage}}' $names >>"results/$1-stats.txt" 2>/dev/null || true
     docker exec "$DB" psql -U postgres -d "$DBNAME" -tAc \
       "select count(*), count(*) filter (where state = 'active') from pg_stat_activity where backend_type = 'client backend'" \
