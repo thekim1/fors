@@ -19,11 +19,30 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 var latency = builder.Configuration.GetSection(Ume.LlmGateway.FakeLlm.FakeLatency.SectionName).Get<Ume.LlmGateway.FakeLlm.FakeLatency>()
     ?? new Ume.LlmGateway.FakeLlm.FakeLatency();
+// FakeLlm:EchoPrompt=false: answers don't quote the user message. A RAG platform puts its retrieved sources (markup) in
+// that message, and a quoted fragment of it would be treated as the model writing markup (benchmarks/knowledge-load).
+var echoPrompt = builder.Configuration.GetValue("FakeLlm:EchoPrompt", true);
 var app = builder.Build();
 app.MapDefaultEndpoints();
 app.UseWebSockets();
 
 app.MapGet("/", () => "Ume fake LLM – endast för test och demo.");
+
+// Load tests (benchmarks/knowledge-load): what the platforms send, per model. Chat calls record their prompt size, so a
+// report can tell a platform's own time from the time a real model would take to read its prompt; embedding calls are
+// counted. In memory only; DELETE resets it between runs.
+var calls = new System.Collections.Concurrent.ConcurrentQueue<(string Kind, string Model, long Tokens)>();
+app.MapGet("/stats", () => Results.Json(calls.GroupBy(c => (c.Kind, c.Model)).Select(g =>
+{
+    var tokens = g.Select(c => c.Tokens).Order().ToList();
+    long At(double q) => tokens[Math.Min(tokens.Count - 1, (int)(q * tokens.Count))];
+    return new { kind = g.Key.Kind, model = g.Key.Model, calls = tokens.Count, tokens_p50 = At(0.5), tokens_p95 = At(0.95), tokens_max = tokens[^1], tokens_mean = tokens.Average() };
+})));
+app.MapDelete("/stats", () =>
+{
+    calls.Clear();
+    return Results.NoContent();
+});
 app.MapGet("/v1/models", () => Results.Json(new
 {
     @object = "list",
@@ -41,8 +60,9 @@ app.MapPost("/v1/chat/completions", async (HttpContext ctx) =>
     }
 
     var prompt = LastUserText(body["messages"]);
-    var answer = latency.Pad(Answer(model, prompt));
+    var answer = latency.Pad(Answer(model, echoPrompt ? prompt : ""));
     var promptTokens = Tokens(AllText(body["messages"]));
+    calls.Enqueue(("chat", model, promptTokens));
     var completionTokens = Tokens(answer);
     var id = "chatcmpl-" + Guid.NewGuid().ToString("N")[..12];
     var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -114,6 +134,7 @@ app.MapPost("/v1/embeddings", async (HttpContext ctx) =>
         _ => [string.Empty],
     };
     var tokens = inputs.Sum(Tokens);
+    calls.Enqueue(("embeddings", model, tokens));
     return Results.Json(new
     {
         @object = "list",
@@ -180,7 +201,7 @@ app.MapPost("/v1/responses", async (HttpContext ctx) =>
     }
 
     var input = body["input"] is JsonValue v ? v.ToString() : AllText(body["input"]);
-    var answer = latency.Pad(Answer(model, input));
+    var answer = latency.Pad(Answer(model, echoPrompt ? input : ""));
     var usage = new { input_tokens = Tokens(input), output_tokens = Tokens(answer), total_tokens = Tokens(input) + Tokens(answer), input_tokens_details = new { cached_tokens = 0 } };
     var id = "resp_" + Guid.NewGuid().ToString("N")[..12];
     var response = new
@@ -216,7 +237,7 @@ app.MapPost("/v1/messages", async (HttpContext ctx) =>
     }
 
     var prompt = LastUserText(body["messages"]);
-    var answer = latency.Pad(Answer(model, prompt));
+    var answer = latency.Pad(Answer(model, echoPrompt ? prompt : ""));
     var inputTokens = Tokens(AllText(body["messages"]) + body["system"]);
     var outputTokens = Tokens(answer);
     var id = "msg_" + Guid.NewGuid().ToString("N")[..12];

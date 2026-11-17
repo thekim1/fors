@@ -1,0 +1,290 @@
+# Knowledge load test: eneo vs. the Ume RAG platform behind the Ume LLM gateway, both answering from the same 36 support
+# PDFs, both against the SAME fake LLM (glm-5.3-flash timing and 850-token answers), 60 staff chatting at once.
+# Driven by run.sh, one platform at a time (profiles `eneo` / `rag`). See README.md.
+#
+# The platform under test is one "server": every one of its containers (application, worker, databases, the gateway on
+# the RAG side) shares the same 4 vCPUs (PLATFORM_CPUS, threads 8-11) and memory limits that add up to 18 GB. The fake
+# LLM (0-3), the load client (4-7, run on the host with taskset) and the PDF web server (12-15, ingestion only) stay off
+# those cores, so they are never the limit. Throwaway data: tmpfs databases, test secrets.
+
+name: knowledge-load
+
+x-platform: &platform
+  cpuset: "${PLATFORM_CPUS:-8-11}"
+
+services:
+  fake-llm:
+    image: ume-llm-gateway/fake-llm:knowledge-load
+    cpuset: "${FAKE_CPUS:-0-3}"
+    environment:
+      ASPNETCORE_HTTP_PORTS: "8080"
+      Logging__LogLevel__Default: Warning
+      OTEL_SDK_DISABLED: "true"
+      # Answers don't quote the question: the RAG platform's question carries its sources as markup, which a real model
+      # doesn't write back, and the platform holds back markup until it closes.
+      FakeLlm__EchoPrompt: "false"
+      # glm-5.3-flash as the support chat sees it: run.sh sets these (first token, prefill per 1 000 prompt tokens, pace
+      # per token, jitter, the 850-token answer). 0 = instant, used while ingesting.
+      FakeLlm__Latency__FirstTokenMs: "${FAKE_TTFT_MS:-0}"
+      FakeLlm__Latency__PrefillMsPer1kInputTokens: "${FAKE_PREFILL_MS_PER_1K:-0}"
+      FakeLlm__Latency__TokenIntervalMs: "${FAKE_TOKEN_MS:-0}"
+      FakeLlm__Latency__JitterPercent: "${FAKE_JITTER_PCT:-0}"
+      FakeLlm__Latency__AnswerWords: "${FAKE_ANSWER_WORDS:-0}"
+    ports: ["127.0.0.1:18090:8080"]
+
+  # The 36 PDFs over HTTP for the RAG platform's URL-list source (its admin API needs an OIDC sign-in; seeding a URL list
+  # by SQL is the repo's own dev path). Only while ingesting.
+  pdf-site:
+    profiles: [rag]
+    image: nginx:1.29-alpine
+    cpuset: "${SITE_CPUS:-12-15}"
+    volumes:
+      - "${PDF_DIR:?Set PDF_DIR to the folder of PDFs}:/usr/share/nginx/html:ro"
+
+  # ---------- eneo v2.3.1 (image built from the tag, see README.md) ----------
+  eneo-db:
+    profiles: [eneo]
+    image: pgvector/pgvector:pg13
+    <<: *platform
+    mem_limit: 6g
+    command: ["postgres", "-c", "max_connections=500", "-c", "shared_buffers=1GB"]
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: eneo
+    tmpfs: [/var/lib/postgresql/data]
+    ports: ["127.0.0.1:15433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d eneo"]
+      interval: 2s
+      retries: 30
+
+  eneo-redis:
+    profiles: [eneo]
+    image: redis:7.4-alpine
+    <<: *platform
+    mem_limit: 2g
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  eneo-backend:
+    profiles: [eneo]
+    image: eneo-backend:${ENEO_VERSION:-v2.3.1}
+    <<: *platform
+    mem_limit: 6g
+    depends_on:
+      eneo-db: { condition: service_healthy }
+      eneo-redis: { condition: service_started }
+    environment: &eneo-env
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST: eneo-db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: eneo
+      REDIS_HOST: eneo-redis
+      REDIS_PORT: "6379"
+      API_PREFIX: /api/v1
+      API_KEY_LENGTH: "64"
+      API_KEY_HEADER_NAME: X-API-Key
+      JWT_AUDIENCE: "*"
+      JWT_ISSUER: KNOWLEDGE-LOAD
+      JWT_EXPIRY_TIME: "1440"
+      JWT_ALGORITHM: HS256
+      JWT_SECRET: knowledge-load-jwt-secret-0123456789abcdef
+      JWT_TOKEN_PREFIX: ""
+      URL_SIGNING_KEY: knowledge-load-url-signing-key-0123456789abcdef0123456789
+      ENCRYPTION_KEY: ""
+      TENANT_CREDENTIALS_ENABLED: "false"
+      OPENAI_API_KEY: fake-key
+      USING_ACCESS_MANAGEMENT: "true"
+      USING_CRAWL: "false"
+      LOGLEVEL: INFO
+      # One gunicorn worker per vCPU of the server.
+      NUM_WORKERS: "${NUM_WORKERS:-4}"
+      DEFAULT_TENANT_NAME: LoadTenant
+      DEFAULT_TENANT_QUOTA_LIMIT: "107374182400"
+      DEFAULT_USER_NAME: LoadUser
+      DEFAULT_USER_EMAIL: load@example.com
+      DEFAULT_USER_PASSWORD: LoadPassword123!
+      CHAT_MODEL: glm-5.3-flash
+      # glm-5.3-flash in production: eneo injects up to CONTEXT_WINDOW / CHUNK_SIZE / 2 chunks of knowledge.
+      CONTEXT_WINDOW: "${CONTEXT_WINDOW:-1000000}"
+    # The backend stages uploads in /tmp and the worker reads them from there: one volume for both (eneo's own compose).
+    volumes:
+      - eneo-tmp:/tmp
+      - ./eneo:/bench:ro
+      - "${PDF_DIR:?Set PDF_DIR to the folder of PDFs}:/pdfs:ro"
+    # init_db.py migrates and creates the tenant and user, seed_models.py adds the models, run.sh starts gunicorn.
+    command: ["sh", "-c", "python init_db.py && python /bench/seed_models.py && exec ./run.sh"]
+    ports: ["127.0.0.1:18000:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8000), 2)"]
+      interval: 2s
+      retries: 150
+
+  # eneo's background worker: parses and embeds the uploaded PDFs, and writes the audit events the backend queues.
+  eneo-worker:
+    profiles: [eneo]
+    image: eneo-backend:${ENEO_VERSION:-v2.3.1}
+    <<: *platform
+    mem_limit: 4g
+    depends_on:
+      eneo-backend: { condition: service_healthy }
+    environment:
+      <<: *eneo-env
+      RUN_AS_WORKER: "true"
+    volumes:
+      - eneo-tmp:/tmp
+
+  # ---------- Ume RAG platform + Ume LLM gateway ----------
+  gateway-db:
+    profiles: [rag]
+    image: postgres:17-alpine
+    <<: *platform
+    mem_limit: 1536m
+    command: ["postgres", "-c", "max_connections=300"]
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gatewaydb
+    tmpfs: [/var/lib/postgresql/data]
+    ports: ["127.0.0.1:15432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gatewaydb"]
+      interval: 2s
+      retries: 30
+
+  gateway-redis:
+    profiles: [rag]
+    image: redis:7.4-alpine
+    <<: *platform
+    mem_limit: 512m
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  gateway:
+    profiles: [rag]
+    image: ume-llm-gateway/gateway:knowledge-load
+    <<: *platform
+    mem_limit: 2g
+    depends_on:
+      gateway-db: { condition: service_healthy }
+      gateway-redis: { condition: service_started }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ConnectionStrings__gatewaydb: Host=gateway-db;Database=gatewaydb;Username=postgres;Password=postgres
+      ConnectionStrings__redis: gateway-redis:6379
+      Security__KeyPepper: &gateway-pepper knowledge-load-pepper-0123456789abcdef0123456789abcdef
+    ports: ["127.0.0.1:18080:8080"]
+
+  rag-db:
+    profiles: [rag]
+    image: pgvector/pgvector:0.8.1-pg17
+    <<: *platform
+    mem_limit: 5g
+    command: ["postgres", "-c", "max_connections=300", "-c", "shared_buffers=1GB"]
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ragdb
+    tmpfs: [/var/lib/postgresql/data]
+    ports: ["127.0.0.1:15434:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ragdb"]
+      interval: 2s
+      retries: 30
+
+  rag-migrate:
+    profiles: [rag]
+    image: ume-rag/migrations:knowledge-load
+    <<: *platform
+    depends_on:
+      rag-db: { condition: service_healthy }
+    environment:
+      <<: &rag-env
+        # Not Production, which insists on TLS to Postgres, a non-superuser role and a Data Protection certificate.
+        # Plain hosts (the migrator) read DOTNET_ENVIRONMENT, web hosts ASPNETCORE_ENVIRONMENT.
+        ASPNETCORE_ENVIRONMENT: Staging
+        DOTNET_ENVIRONMENT: Staging
+        ConnectionStrings__ragdb: Host=rag-db;Database=ragdb;Username=postgres;Password=postgres
+        Security__KeyPepper: &rag-pepper knowledge-load-rag-pepper-0123456789abcdef0123
+      Seed__Enabled: "false"
+      # The embedding profile "pilot-embedding": 1024 dimensions, asked of the gateway (the fake LLM honours `dimensions`).
+      EmbeddingProfile__GatewayModel: ume/embed
+      EmbeddingProfile__Dimensions: "1024"
+      EmbeddingProfile__RequestDimensions: "true"
+      EmbeddingProfile__MaxResidency: Eu
+      SettingsSeed__CrawlAllowedPorts__0: "80"
+    restart: "no"
+
+  # The services run as uid 1654 (chiseled images): the shared blob volume is made theirs first, as production's rag-blobs-init.
+  rag-blobs-init:
+    profiles: [rag]
+    image: busybox:1.37
+    command: ["sh", "-c", "mkdir -p /data/blobs/rag /data/blobs/tmp && chown -R 1654:1654 /data/blobs"]
+    volumes:
+      - rag-blobs:/data/blobs
+    restart: "no"
+
+  rag-api:
+    profiles: [rag]
+    image: ume-rag/api:knowledge-load
+    <<: *platform
+    mem_limit: 3g
+    depends_on:
+      rag-migrate: { condition: service_completed_successfully }
+      rag-blobs-init: { condition: service_completed_successfully }
+    environment:
+      <<: *rag-env
+      ASPNETCORE_HTTP_PORTS: "8080"
+      UME_HEALTHCHECK_URL: http://localhost:8080/health/ready
+      Rag__Roles: knowledge,chat,mcp
+      Security__CacheKeyPepper: knowledge-load-cache-pepper-0123456789abcdef01
+      Security__DownloadGrantKeys__k1: knowledge-load-grant-key-0123456789abcdef0123456
+      Knowledge__PublicBaseUrl: http://localhost:18100
+      BlobStore__Root: /data/blobs/rag
+      Gateway__BaseUrl: http://gateway:8080
+      Gateway__Key: ${GATEWAY_KEY:-}
+      Gateway__MaxResidency: Eu
+      # The default (20 per minute, counted per key for a key caller) would refuse the load test.
+      Chat__MessagesPerMinutePerUser: "100000"
+    volumes:
+      - rag-blobs:/data/blobs
+      - ./rag/keys:/run/keys:ro
+    ports: ["127.0.0.1:18100:8080"]
+
+  rag-worker:
+    profiles: [rag]
+    image: ume-rag/worker:knowledge-load
+    <<: *platform
+    mem_limit: 2g
+    depends_on:
+      rag-migrate: { condition: service_completed_successfully }
+      rag-blobs-init: { condition: service_completed_successfully }
+    environment:
+      <<: *rag-env
+      ASPNETCORE_HTTP_PORTS: "8080"
+      UME_HEALTHCHECK_URL: http://localhost:8080/health/ready
+      ConnectionStrings__ragdb-maintenance: Host=rag-db;Database=ragdb;Username=postgres;Password=postgres
+      Parser__BaseUrl: http://rag-parser:8000
+      ClamAv__Mode: "off"
+      BlobStore__Root: /data/blobs/rag
+      TMPDIR: /data/blobs/tmp
+      Gateway__BaseUrl: http://gateway:8080
+      Gateway__Key: ${GATEWAY_KEY:-}
+      # The PDF web server is on this compose network: let the crawler fetch from it.
+      Crawl__AllowedPrivateRanges: 172.16.0.0/12,192.168.0.0/16,10.0.0.0/8
+    volumes:
+      - rag-blobs:/data/blobs
+      - ./rag/keys:/run/keys:ro
+
+  rag-parser:
+    profiles: [rag]
+    image: ume-rag/parser:knowledge-load
+    <<: *platform
+    mem_limit: 4g
+    environment:
+      PARSER_WORKERS: "1"
+      PARSER_THREADS: "2"
+      PARSER_SLOT_MAX_RSS_MB: "2200"
+    tmpfs: [/tmp]
+
+volumes:
+  eneo-tmp:
+  rag-blobs:

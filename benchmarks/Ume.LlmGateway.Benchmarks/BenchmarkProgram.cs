@@ -31,6 +31,12 @@ public static class BenchmarkProgram
                 int.Parse(seconds, System.Globalization.CultureInfo.InvariantCulture), outPath, args.Length > 6 ? args[6] : null);
         }
 
+        if (args is ["knowledge-load", var loadTarget, var loadBase, var loadVus, var ramp, var hold, var questions, var loadOut])
+        {
+            static int N(string v) => int.Parse(v, System.Globalization.CultureInfo.InvariantCulture);
+            return await KnowledgeLoad.RunAsync(loadTarget, loadBase, N(loadVus), N(ramp), N(hold), questions, loadOut);
+        }
+
         if (args is ["compare-seed", var connectionString, var pepper, var upstream])
         {
             return await CompareSeed.RunAsync(connectionString, pepper, upstream);
