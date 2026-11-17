@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support Chat Load Test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap">
+<style>
+/* Layout: one reading column for the argument, wide tables and charts allowed to break out to the container width. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #16202a;
+  --muted: #5a6573;
+  --line: #d9dee5;
+  --eneo: #c2620a;
+  --rag: #0f7d7a;
+  --good: #1f7a3a;
+  --bad: #b3261e;
+  --chip: #eceff3;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --surface: #161d25; --fg: #e3e8ee; --muted: #9aa5b2; --line: #2a3440;
+    --eneo: #f0954a; --rag: #3fc1bc; --good: #5cc97c; --bad: #ff7b72; --chip: #1f2832;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --surface: #161d25; --fg: #e3e8ee; --muted: #9aa5b2; --line: #2a3440;
+  --eneo: #f0954a; --rag: #3fc1bc; --good: #5cc97c; --bad: #ff7b72; --chip: #1f2832;
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15.5px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 44px; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 26px; font-weight: 700; }
+h3 { font-size: 18px; font-weight: 600; }
+p { margin: 0; }
+section { display: flex; flex-direction: column; gap: 16px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 18px; max-width: 64ch; }
+.meta { font-family: var(--mono); font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+a { color: var(--rag); }
+a:focus-visible { outline: 2px solid var(--rag); outline-offset: 2px; }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--chip); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+
+/* The verdict: the two limits side by side. */
+.verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.limit { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.limit .who { font-family: var(--mono); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.limit .big { font-family: var(--display); font-size: 40px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.limit p { color: var(--muted); font-size: 14.5px; }
+.eneo-c { color: var(--eneo); } .rag-c { color: var(--rag); }
+
+/* Charts */
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 16px 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+figcaption { font-weight: 600; font-size: 14.5px; }
+figure .note { font-size: 12.5px; color: var(--muted); }
+svg { width: 100%; height: auto; display: block; }
+svg text { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+.legend { display: flex; gap: 16px; font-family: var(--mono); font-size: 12.5px; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Tables */
+.table { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { padding: 9px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); background: var(--chip); }
+tbody tr:last-child td { border-bottom: none; }
+tr.group td { font-family: var(--mono); font-size: 12px; color: var(--muted); background: var(--bg); text-align: left; letter-spacing: 0.03em; }
+.pill { font-family: var(--mono); font-size: 12px; padding: 1px 8px; border-radius: 999px; display: inline-block; }
+.pill.ok { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+.pill.bad { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+.hot { color: var(--bad); font-weight: 600; }
+
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; }
+.two > div { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.callout { border-left: 3px solid var(--line); padding: 4px 0 4px 16px; color: var(--muted); }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 18px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:14px">
+  <span class="eyebrow">Load test · IT support chat · 17 Nov 2026</span>
+  <h1>Eneo vs. the RAG platform + gateway under load</h1>
+  <p class="lede">Both platforms answered from the same 36 support PDFs ("Vanliga fel") with the same simulated model, on the same 4&nbsp;vCPU server. Eneo ran out of server between 100 and 150 simultaneous users. The RAG platform behind the Ume LLM gateway served 1,000 users with no errors before the server was full.</p>
+  <div class="meta"><span>Eneo v2.3.1</span><span>rag-b47 @ 0ddbf1b1 + llmgateway</span><span>7 runs, 0–16 errors per run</span><span>Branch: <a href="https://github.com/thekim1/llmgateway/tree/bench/eneo-vs-rag-knowledge-load">bench/eneo-vs-rag-knowledge-load</a></span></div>
+</header>
+
+<section>
+  <div class="verdict">
+    <div class="limit">
+      <span class="who"><span class="dot" style="background:var(--eneo)"></span>Eneo v2.3.1</span>
+      <span class="big eneo-c">100–150 users</span>
+      <p>Where the 4 vCPU server is full. At 150 users the first word took 59&nbsp;s at p95, throughput halved and requests started failing (18 errors over 3 runs).</p>
+    </div>
+    <div class="limit">
+      <span class="who"><span class="dot" style="background:var(--rag)"></span>RAG platform + gateway</span>
+      <span class="big rag-c">≈ 1,000 users</span>
+      <p>Where the same server is full. At 1,000 users the first word still came in 4.2&nbsp;s at p95 (the model's own 3&nbsp;s plus queueing), with 0 errors and 3,167 answers a minute.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>How it scales</h2>
+  <div class="legend"><span><span class="dot" style="background:var(--eneo)"></span>Eneo v2.3.1</span><span><span class="dot" style="background:var(--rag)"></span>RAG platform + gateway</span></div>
+  <div class="charts">
+    <figure><figcaption>Answers per minute</figcaption><svg id="c-throughput" viewBox="0 0 360 230" role="img" aria-label="Answers per minute by number of users"></svg><span class="note">More users should mean more answers. Eneo's fell from 231 to 110 between 100 and 150 users.</span></figure>
+    <figure><figcaption>Time to first token, p95 (s)</figcaption><svg id="c-ttft" viewBox="0 0 360 230" role="img" aria-label="Time to first token p95 by number of users"></svg><span class="note">The model alone takes about 3.1 s (RAG) and 4.3 s (Eneo, longer prompt).</span></figure>
+    <figure><figcaption>CPU used, mean (vCPU of 4)</figcaption><svg id="c-cpu" viewBox="0 0 360 230" role="img" aria-label="Mean CPU used by number of users"></svg><span class="note">All of the platform's containers together. The dashed line is the server's 4 vCPU.</span></figure>
+  </div>
+  <p class="note" style="font-size:13px;color:var(--muted)">Runs at glm-5.3-flash speed (100, 150, 500, 1,000 users). 150 users is the mean of 3 runs. Eneo was not run at 500 or 1,000: it had already failed at 150.</p>
+</section>
+
+<section>
+  <h2>Why the difference</h2>
+  <div class="two">
+    <div>
+      <h3 class="eneo-c">Eneo puts the whole knowledge base in every prompt</h3>
+      <p>Eneo takes up to <code>context window ÷ chunk size ÷ 2</code> chunks. With glm-5.3-flash's 1,000,000-token window that is 2,500 chunks, and the 36 PDFs only make 198. So every question sends all of them: <strong>about 20,400 prompt tokens</strong>. Fetching, counting and assembling them costs Eneo's backend CPU on every question, and the model then has to read them before answering.</p>
+    </div>
+    <div>
+      <h3 class="rag-c">The RAG platform sends its top 10 chunks</h3>
+      <p>Retrieval returns the 10 best chunks within a budget of at most 8,000 tokens: <strong>about 3,100 prompt tokens</strong> per question. Query embeddings are cached, so repeated questions skip that call. Its own share of the first-token time stayed at 15–30&nbsp;ms until the server was nearly full.</p>
+    </div>
+  </div>
+  <p class="callout prose">A real provider bills per input token, so with this corpus Eneo's input cost per question would be about 6 times the RAG platform's. That figure is derived from the measured prompt sizes, not measured cost.</p>
+</section>
+
+<section>
+  <h2>All runs</h2>
+  <div class="table">
+    <table>
+      <thead>
+        <tr><th>Run</th><th>Users</th><th>Answers / min</th><th>Errors</th><th>First token p50</th><th>p95</th><th>p99</th><th>Response starts p95</th><th>Longest pause p95</th><th>Whole answer p95</th><th>Prompt tokens p50</th><th>CPU mean / peak</th><th>Memory peak</th><th>Postgres conns peak</th></tr>
+      </thead>
+      <tbody>
+        <tr class="group"><td colspan="14">Fast model (400 ms first token, 25 ms/token) · 60 s measured</td></tr>
+        <tr><td><span class="dot" style="background:var(--eneo)"></span> Eneo</td><td>60</td><td>120</td><td><span class="pill ok">0</span></td><td>2.77 s</td><td>11.51 s</td><td>12.19 s</td><td>–</td><td>0.68 s</td><td>33.97 s</td><td>20,369</td><td>2.06 / 4.02</td><td>4.9 GB</td><td>53</td></tr>
+        <tr><td><span class="dot" style="background:var(--rag)"></span> RAG + gateway</td><td>60</td><td>132</td><td><span class="pill ok">0</span></td><td>0.61 s</td><td>0.80 s</td><td>0.84 s</td><td>–</td><td>0.04 s</td><td>23.07 s</td><td>3,016</td><td>0.43 / 0.88</td><td>2.1 GB</td><td>17</td></tr>
+        <tr class="group"><td colspan="14">glm-5.3-flash speed (3.05 s first token, 17 ms/token) · 90 s measured</td></tr>
+        <tr><td><span class="dot" style="background:var(--eneo)"></span> Eneo</td><td>100</td><td>231</td><td><span class="pill ok">0</span></td><td>6.03 s</td><td>8.26 s</td><td>10.83 s</td><td>3.75 s</td><td>0.54 s</td><td>24.60 s</td><td>20,371</td><td>3.47 / 4.30</td><td>5.6 GB</td><td>64</td></tr>
+        <tr><td><span class="dot" style="background:var(--rag)"></span> RAG + gateway</td><td>100</td><td>315</td><td><span class="pill ok">0</span></td><td>3.26 s</td><td>4.12 s</td><td>4.25 s</td><td>0.01 s</td><td>0.03 s</td><td>19.51 s</td><td>3,233</td><td>0.52 / 0.98</td><td>2.8 GB</td><td>18</td></tr>
+        <tr><td><span class="dot" style="background:var(--eneo)"></span> Eneo <small>(mean of 3)</small></td><td>150</td><td class="hot">110</td><td><span class="pill bad">18 total</span></td><td class="hot">9.71 s</td><td class="hot">59.39 s</td><td class="hot">61.62 s</td><td class="hot">55.10 s</td><td>1.14 s</td><td class="hot">79.02 s</td><td>20,368</td><td class="hot">3.52 / 4.22</td><td>–</td><td>≈135</td></tr>
+        <tr><td><span class="dot" style="background:var(--rag)"></span> RAG + gateway <small>(mean of 3)</small></td><td>150</td><td>473</td><td><span class="pill ok">0</span></td><td>3.25 s</td><td>4.12 s</td><td>4.25 s</td><td>0.01 s</td><td>0.03 s</td><td>19.51 s</td><td>3,115</td><td>0.69 / 1.21</td><td>–</td><td>≈18</td></tr>
+        <tr><td><span class="dot" style="background:var(--rag)"></span> RAG + gateway</td><td>500</td><td>1,603</td><td><span class="pill ok">0</span></td><td>3.23 s</td><td>4.13 s</td><td>4.26 s</td><td>0.02 s</td><td>0.06 s</td><td>19.46 s</td><td>–</td><td>1.80 / 2.86</td><td>3.0 GB</td><td>21</td></tr>
+        <tr><td><span class="dot" style="background:var(--rag)"></span> RAG + gateway</td><td>1,000</td><td>3,167</td><td><span class="pill ok">0</span></td><td>3.34 s</td><td>4.19 s</td><td>4.31 s</td><td>0.12 s</td><td>0.11 s</td><td>19.61 s</td><td>–</td><td class="hot">3.20 / 4.09</td><td>2.5 GB</td><td>24</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--muted)">"Response starts" is the time until the HTTP response begins, before any text: the platform's own queueing and retrieval. "Longest pause" is the biggest gap inside one answer. The 150-user Eneo runs varied: answers per minute 101–116, first token p50 8.5–11.4 s. The RAG runs at 150 varied by under 1 %.</p>
+</section>
+
+<section>
+  <h2>Eneo at 150 users</h2>
+  <div class="two">
+    <div>
+      <p>Errors across the three runs: 13 × HTTP 500 (Eneo's generic "Internal server error"), 1 × HTTP 403, and 4 connections closed by the server mid-request. Eneo's backend log had 5, 16 and 21 lines matching database pool or timeout patterns in the three runs, with Postgres at about 135 connections, about 90 of them active.</p>
+    </div>
+    <div>
+      <p>The likely cause is the backend's database pool timing out while the CPU is saturated, but this isn't confirmed: only the counts were kept that time. <code>run.sh</code> now saves the matching log lines to <code>results/&lt;platform&gt;-errors.log</code>, so a rerun at 150 users would show them.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Setup</h2>
+  <div class="two">
+    <div>
+      <h3>The server and the load</h3>
+      <ul>
+        <li>Each platform is one "server": every container (app, worker, Postgres, Redis, and the gateway on the RAG side) shares <strong>4 pinned vCPUs</strong> and memory limits that add up to 18 GB.</li>
+        <li>The fake LLM and the load client run on their own cores, and each run checks that neither was the bottleneck (at 1,000 users they used 1.1 and 0.5 of their 4 threads).</li>
+        <li><strong>Stress load:</strong> every user asks again as soon as the 850-token answer has streamed. 30 % of messages are follow-ups in the same conversation; questions come from 42 realistic support tickets, one or two per PDF topic.</li>
+        <li>Only requests started in the measured window count, followed to the end of their stream. Each run starts from fresh databases and re-ingests the PDFs.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>The simulated model</h3>
+      <ul>
+        <li><strong>glm-5.3-flash:</strong> 1,000,000-token context window (production's), 850-token answers (the longest support answer).</li>
+        <li><strong>Speed</strong> from Artificial Analysis's measurement of Z.ai's API: 3.05 s to first token, 57 tokens/s (run as 17 ms per token, ±30 %).</li>
+        <li><strong>Prompt reading</strong> adds 60 ms per 1,000 prompt tokens. This is an assumption: there's no published figure for long prompts.</li>
+        <li>Reasoning ("thinking") is assumed off. With it on, Artificial Analysis measured about 86 s to the first answer token.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Caveats</h2>
+  <ul class="prose">
+    <li><strong>Fake embeddings.</strong> The fake model's vectors carry no meaning, so the RAG platform's relevance floor was lifted for this collection: retrieval returns its normal top 10 and the model is always called, as real embeddings would for these on-topic questions. Eneo has no relevance floor, so it was unaffected.</li>
+    <li><strong>Setup by SQL on the RAG side.</strong> Its admin API requires a Keycloak sign-in, so the collection, assistant and key were created in the database the way the repo's own dev seed does.</li>
+    <li><strong>Memory limits didn't bind.</strong> The test machine (WSL2) has 15.4 GB for Docker, below the 18 GB budget. Neither platform came near it (at most 5.6 GB).</li>
+    <li><strong>Few runs.</strong> 150 users was run three times; the others once. The 60-user run used a faster first token (0.4 s), so it isn't directly comparable with the rest.</li>
+    <li><strong>Text-only PDF reading in Eneo.</strong> Most of the 113 MB of PDFs are screenshots. Eneo extracts no text from images (198 chunks); the RAG parser uses OCR where needed (248 chunks).</li>
+    <li><strong>The real model's timing decides much of the gap.</strong> Faster prompt reading would shrink the cost of Eneo's large prompts; slower would widen it. Eneo's CPU limit at 100–150 users doesn't depend on the model.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Rerun it</h2>
+  <p class="prose">Everything is in <a href="https://github.com/thekim1/llmgateway/tree/bench/eneo-vs-rag-knowledge-load/benchmarks/knowledge-load"><code>benchmarks/knowledge-load</code></a> on the <code>bench/eneo-vs-rag-knowledge-load</code> branch of llmgateway (not merged to main). The README lists the images to build. One run of both platforms takes about 10 minutes:</p>
+  <div class="table"><pre style="margin:0;padding:14px 16px;font-family:var(--mono);font-size:13px;line-height:1.5">PDF_DIR=".../Vanliga Fel" VUS=150 HOLD=90 FAKE_TTFT_MS=3050 FAKE_TOKEN_MS=17 \
+  benchmarks/knowledge-load/run.sh
+python3 benchmarks/knowledge-load/summarize_runs.py results-150   # several runs side by side</pre></div>
+  <p class="prose">Each run's report is committed next to the harness: <code>report-2026-11-17*.md</code>.</p>
+</section>
+
+<footer>Measured 17 November 2026 on a developer machine (WSL2, 20 hardware threads). Model speed source: <a href="https://artificialanalysis.ai/models/glm-5-3-flash">Artificial Analysis, GLM-5.3-Flash</a>.</footer>
+</div>
+
+<script>
+// Small line charts, drawn to one scale per chart from the measured runs.
+const runs = {
+  eneo: { tput: [[100, 231], [150, 110]], ttft: [[100, 8.26], [150, 59.39]], cpu: [[100, 3.47], [150, 3.52]] },
+  rag:  { tput: [[100, 315], [150, 473], [500, 1603], [1000, 3167]], ttft: [[100, 4.12], [150, 4.12], [500, 4.13], [1000, 4.19]], cpu: [[100, 0.52], [150, 0.69], [500, 1.80], [1000, 3.20]] },
+};
+const NS = 'http://www.w3.org/2000/svg';
+function el(name, attrs, text) {
+  const e = document.createElementNS(NS, name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  return e;
+}
+function chart(id, key, yMax, yTicks, fmt, limit) {
+  const svg = document.getElementById(id);
+  const W = 360, H = 230, L = 44, R = 14, T = 12, B = 34;
+  const xTicks = [100, 250, 500, 750, 1000];
+  const x = v => L + (v / 1000) * (W - L - R);
+  const y = v => T + (1 - v / yMax) * (H - T - B);
+  for (const t of yTicks) {
+    svg.append(el('line', { x1: L, x2: W - R, y1: y(t), y2: y(t), stroke: 'var(--line)', 'stroke-width': 1 }));
+    svg.append(el('text', { x: L - 6, y: y(t) + 4, 'text-anchor': 'end' }, fmt(t)));
+  }
+  for (const t of xTicks) svg.append(el('text', { x: x(t), y: H - B + 16, 'text-anchor': 'middle' }, t));
+  svg.append(el('text', { x: (L + W - R) / 2, y: H - 4, 'text-anchor': 'middle' }, 'users'));
+  if (limit != null) svg.append(el('line', { x1: L, x2: W - R, y1: y(limit), y2: y(limit), stroke: 'var(--muted)', 'stroke-dasharray': '4 4', 'stroke-width': 1 }));
+  for (const [name, color] of [['eneo', 'var(--eneo)'], ['rag', 'var(--rag)']]) {
+    const pts = runs[name][key];
+    svg.append(el('polyline', { points: pts.map(([a, b]) => `${x(a)},${y(b)}`).join(' '), fill: 'none', stroke: color, 'stroke-width': 2.2, 'stroke-linejoin': 'round' }));
+    for (const [a, b] of pts) {
+      svg.append(el('circle', { cx: x(a), cy: y(b), r: 4, fill: color, stroke: 'var(--surface)', 'stroke-width': 1.5 }));
+    }
+    const [la, lb] = pts[pts.length - 1];
+    const label = el('text', { x: x(la) + (la >= 900 ? -6 : 8), y: y(lb) - 8, 'text-anchor': la >= 900 ? 'end' : 'start' }, fmt(lb));
+    label.style.fill = color;
+    svg.append(label);
+  }
+}
+chart('c-throughput', 'tput', 3500, [0, 1000, 2000, 3000], v => v.toLocaleString('en'));
+chart('c-ttft', 'ttft', 64, [0, 15, 30, 45, 60], v => v + ' s');
+chart('c-cpu', 'cpu', 4.5, [0, 1, 2, 3, 4], v => v.toFixed(1), 4);
+</script>
+
+</body>
+</html>
