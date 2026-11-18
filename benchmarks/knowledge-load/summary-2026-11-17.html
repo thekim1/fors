@@ -211,7 +211,10 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
 <section>
   <h2>Caveats</h2>
   <ul class="prose">
-    <li><strong>Fake embeddings.</strong> The fake model's vectors carry no meaning, so the RAG platform's relevance floor was lifted for this collection: retrieval returns its normal top 10 and the model is always called, as real embeddings would for these on-topic questions. Eneo has no relevance floor, so it was unaffected.</li>
+    <li><strong>Fake embeddings.</strong> The fake model's vectors carry no meaning, so the RAG platform's relevance floor was lifted for this collection: retrieval returns its normal top 10 and the model is always called, as real embeddings would for these on-topic questions. Eneo's relevance floor is off by default and was off here, so it was unaffected.</li>
+    <li><strong>Eneo's retrieval mode.</strong> The POC and the load client both call Eneo with <code>version=2</code>, which fills up to half the context window with knowledge (the ~20,400-token prompts). A call without <code>version</code> defaults to the older mode: at most 30 chunks, trimmed by autocut, so smaller prompts. Eneo's own web UI retrieves like <code>version=2</code>.</li>
+    <li><strong>Eneo's default rate limit.</strong> An assistant-scoped key may make 1,000 requests per hour by default (space key 5,000, organization key 10,000). The test raised the limit so it was never hit. At the 110–231 answers/min measured here, a default assistant key would be refused after about 5–9 minutes: production needs a raised limit or a broader key.</li>
+    <li><strong>Version.</strong> The test ran Eneo v2.3.1. The backend code of v2.3.2 is identical, so the results apply to it too.</li>
     <li><strong>Setup by SQL on the RAG side.</strong> Its admin API requires a Keycloak sign-in, so the collection, assistant and key were created in the database the way the repo's own dev seed does.</li>
     <li><strong>Memory limits didn't bind.</strong> The test machine (WSL2) has 15.4 GB for Docker, below the 18 GB budget. Neither platform came near it (at most 5.6 GB).</li>
     <li><strong>Few runs.</strong> 150 users was run three times; the others once. The 60-user run used a faster first token (0.4 s), so it isn't directly comparable with the rest.</li>

@@ -6,6 +6,15 @@ glm-5.3-flash's production settings and the support chat's longest answer.
 
 - **eneo v2.3.1** (backend, worker, Postgres/pgvector, Redis), through a service API key, the way the support tool's POC
   calls it.
+  - **Retrieval mode.** Both the POC and the load client call `POST /conversations/?version=2`, so Eneo fills up to
+    half the context window with knowledge (`assistants/references.py`). A call without `version` defaults to
+    `version=1`: at most 30 chunks, trimmed by autocut. `version=3` (Eneo's new web UI) retrieves like `version=2`.
+    The relevance floor (`INJECT_KNOWLEDGE_MIN_SCORE`) is off by default and was off here.
+  - **Rate limit.** By default an assistant-scoped key may make 1 000 requests per hour (space key 5 000, organization
+    key 10 000; window `API_KEY_RATE_LIMIT_WINDOW_SECONDS` = 3600, `main/config.py`). The test raises the key's limit so
+    it's never hit. At the throughput measured here (110–231 answers/min), a default assistant key would be refused
+    after about 5–9 minutes, so production needs a raised limit or a broader key.
+  - Checked in the code of v2.3.1 and v2.3.2: the backend source of the two tags is identical.
 - **The Ume RAG platform** (`rag-api`, `rag-worker`, parser, Postgres/pgvector) **behind the Ume LLM gateway**
   (gateway, Postgres, Redis), through a RAG API key.
 
