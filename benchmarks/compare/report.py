@@ -92,7 +92,7 @@ def main(folder: Path) -> None:
                     f"| {vus} | {NAMES[target]} | {run['rps']:.1f} | {d['med']:.2f} | {overhead} | {d['p(95)']:.2f} | {d['p(99)']:.2f} "
                     f"| {t['med']:.2f} | {cpu_ms_per_request(run, APP[target]) if APP[target] else 0:.3f} "
                     f"| {cpu_ms_per_request(run, DATA[target]) if DATA[target] else 0:.3f} "
-                    f"| {per_request(run, 'pg_statements')} | {per_request(run, 'redis_commands')} | {per_request(run, 'records_stored', 2)} "
+                    f"| {per_request(run, 'pg_statements', 2)} | {per_request(run, 'redis_commands')} | {per_request(run, 'records_stored', 2)} "
                     f"| {app_mem:.0f} | {run['checksFailed']} |"
                 )
         print()

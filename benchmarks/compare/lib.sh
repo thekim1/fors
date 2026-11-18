@@ -161,6 +161,7 @@ delta() { # before after correction → after-before-correction, or null if a pr
 warm_up() { # platform
   k6 "$1" false 8 "$WARMUP" "warmup-$1" >/dev/null
   k6 "$1" true 8 "$WARMUP" "warmup-$1" >/dev/null
+  if [[ $1 == bifrost ]]; then sleep 11; fi # its warm-up log rows and counter dump land before the first scenario
 }
 
 stop_all() { "${COMPOSE[@]}" --profile ume --profile eneo --profile bifrost down -v --remove-orphans >/dev/null 2>&1 || true; }
