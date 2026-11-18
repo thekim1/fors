@@ -1,100 +1,102 @@
-# Handover: run the knowledge load test against the Bifrost gateway
+# Handover: benchmark Bifrost against the Ume LLM gateway
 
-**Task for the next chat:** run the same benchmarks as on 2026-11-17 with **Bifrost** (https://github.com/maximhq/bifrost)
-as the LLM gateway in front of the Ume RAG platform, and compare it with the Ume LLM gateway (and Eneo, from the
-existing results). Work on the branch `bench/eneo-vs-rag-knowledge-load` in `repos/llmgateway` (not main). Push the
-results to that branch. Don't change code in the Eneo repo.
+**Goal:** find out how well [Bifrost](https://github.com/maximhq/bifrost) performs **as an LLM gateway compared with the
+Ume LLM gateway**. The RAG platform stays connected to the Ume gateway and **isn't** part of this work.
 
-## What exists
+**How:** reuse the gateway comparison harness that's already in the repo, `benchmarks/compare/` on `main`. Today it
+compares the Ume gateway with Eneo against the same fake LLM. Replace Eneo with Bifrost there, so it compares three
+targets:
+- `ume`: the Ume gateway;
+- `bifrost`;
+- `fake`: requests straight to the fake LLM, as the floor.
 
-Everything lives in `benchmarks/knowledge-load/` on that branch (last commit `9ea9e0c`):
+Work on a new branch from `main` (e.g. `bench/bifrost-vs-gateway`), never on `main` itself. Push the branch when
+results exist and ask before opening a PR.
 
-| File | What it is |
-|---|---|
-| `README.md` | Setup, how to run, how to read the report. **Read it first.** |
-| `compose.yaml` | Eneo v2.3.1, the RAG platform (rag-b47 images) + Ume gateway, fake LLM, PDF site. Platform pinned to threads 8–11, memory limits sum to 18 GB; fake LLM on 0–3, load client on 4–7. |
-| `run.sh` | One run: env `PLATFORMS` (`eneo rag`), `VUS`, `RAMP`, `HOLD`, `FAKE_*`, `KEEP_UP`. Seeds, ingests the 36 PDFs, runs the load, collects docker stats, Postgres connections, error log lines, fake-LLM `/stats`, writes `results/report.md`. |
-| `report.py`, `summarize_runs.py` | One run's report; several runs side by side (mean, spread). |
-| `rag/setup.py`, `rag/seed_assistant.sql` | RAG setup by SQL (admin API needs OIDC); coverage floor lifted to 2.0 because fake embeddings mean nothing. |
-| `eneo/*.py` | Eneo model seed and knowledge/assistant/key setup. |
-| `report-2026-11-17*.md`, `summary-2026-11-17.html` | Results so far. The HTML summary is also published (private) at https://claude.ai/artifact/PxZ5Qsf1huiYq1e4pC5Lzz |
-| `../Ume.LlmGateway.Benchmarks/KnowledgeLoad.cs` | The load client: `knowledge-load <eneo\|rag> <base> <vus> <ramp> <hold> <questions> <out>`. Calls the RAG API's `/v1/chat/completions` (SSE) the way the support chat POC does. |
-| `src/Ume.LlmGateway.FakeLlm` | Fake OpenAI-compatible LLM: `FakeLatency` settings, `GET/DELETE /stats`, `FakeLlm:EchoPrompt=false` in compose (echoing the sources markup stalled rag-api). |
+## What's in the harness (read `benchmarks/compare/README.md` first)
 
-Corpus: `repos/onenotedownloader/pdf/Vanliga Fel` (36 PDFs, 248 chunks on the RAG side).
-
-## The run matrix to repeat
-
-Model faked as glm-5.3-flash: 1 000 000-token context, 850-token answers, first token 3050 ms, 17 ms/token ±30 %,
-prefill 60 ms per 1 000 prompt tokens. 30 s ramp, 90 s measured, stress mode (ask again as soon as the answer ends).
-
-| Run | Ume gateway result (RAG side) | Eneo |
+| Script | Measures | Run for Bifrost? |
 |---|---|---|
-| 100 users, 1 run | 315 answers/min, first token p95 4.1 s | 231/min, p95 8.3 s |
-| 150 users, 3 runs | 473/min, p95 4.1 s, 0 errors | 110/min, p95 59 s, 18 errors |
-| 500 users, 1 run | 1603/min, platform CPU 1.8 | not run |
-| 1000 users, 1 run | 3167/min, p95 4.19 s, 0 errors, CPU mean 3.20 / peak 4.09 of 4 (gateway 1.33, rag-api 1.41) | not run |
+| `run.sh` | Added latency and throughput at 1, 16 and 64 clients, streamed and not, CPU and DB/Redis calls per message | **Yes** |
+| `scale.sh` | Throughput as load grows and as vCPUs go 1 to 6 (streaming) | **Yes** |
+| `latency.sh` | Streaming with real-provider timing (first token, gaps between tokens, stalls) via the stream probe | **Yes** |
+| `sizing/run.sh` | Is a small host enough (fixed request rates, own compose) | **Yes** |
+| `scale-out.sh` | Several instances on shared state | Optional, if Bifrost supports several instances sharing its stores |
+| `gc.sh`, `cores.sh`, `profile.sh` | .NET internals of the Ume gateway | No |
 
-For Bifrost: run 100, 150×3, 500 and 1000 with `PLATFORMS=rag` and the gateway swapped. Eneo needn't be rerun.
-Watch the gateway container's CPU and memory, the extra first-token time it adds and errors. 1000 users was already near the
-4-vCPU limit, so a lighter gateway may show up there.
+Supporting files:
+- `lib.sh`: starts and seeds each platform, the CPU layout, CPU and query sampling.
+- `compose.yaml`: has profiles `ume` and `eneo`.
+- `k6/chat.js`: `TARGET=ume|eneo|fake`.
+- `report.py`, `scale_report.py`, `latency_report.py`.
 
-## How to swap in Bifrost
+The Ume gateway's own results and how to read them are in `docs/performance.md`:
+- *Results (baseline 2026-11-02)*;
+- the `compare/run.sh`, `scale.sh`, `latency.sh` and `sizing` sections;
+- *eneo v2.2.3*, which is the section to mirror for Bifrost.
 
-1. **Image:** use the official image (`maximhq/bifrost`), pinned to a release tag, not `latest`. Record the version in
-   the report.
-2. **Compose:** add a `bifrost` service (or a compose profile/override, e.g. `GATEWAY=bifrost` in `run.sh`) on the
-   same `PLATFORM_CPUS` cpuset. Give it the Ume gateway's budget: 2 GB, plus the 2 GB its Postgres + Redis had, if
-   Bifrost needs no database. Set `GOMAXPROCS=4` explicitly.
-3. **Point the RAG platform at it:** `Gateway__BaseUrl` in rag-api and rag-worker (compose lines ~18, 242, 269), and
-   `Gateway__Key` to a Bifrost key.
-4. **Model names:** the RAG platform asks for `ume/chat` (chat, reranker) and `ume/embed` (embedding profile, 1024
-   dimensions, `EmbeddingProfile__GatewayModel`). Bifrost routes on `provider/model`, so one way is a custom
-   OpenAI-compatible provider named `ume` with base URL `http://fake-llm:8080/v1`. The fake LLM then receives
-   `chat`/`embed` as model names; check that it accepts them and that `/stats` reports them. Embeddings must pass
-   `dimensions` through.
-5. **Comparable features:** the Ume gateway authenticates a virtual key (Postgres), rate-limits (Redis) and tracks
-   cost on every call. Turn on Bifrost's equivalents (governance/virtual keys, logging) for the main runs. Optionally
-   run once with them off to show the bare proxy. State in the report which plugins were on.
+CPU layout (`lib.sh`):
+- fake LLM on threads 0–3;
+- k6 and the stream probe on 4–7;
+- the platform on 8–11 (`APP_CPUS`);
+- Postgres on 12–13;
+- Redis on 14–15.
 
-## Known blocker: the residency headers
+## What to change
 
-The RAG platform's `ResidencyCeilingHandler` (`rag-b47/src/Ume.Rag.Infrastructure/Gateway/ResidencyCeilingHandler.cs`)
-sends `x-ume-max-residency` on every call. It **refuses any model response without an `x-ume-residency` header** at or
-below that ceiling (`GatewayResidencyException`, event 5003). The response to `/v1/models` is the exception. Bifrost won't
-send this header, so every chat and embedding call would fail. Options, in order of preference:
+1. **Bifrost image:** the official one, **pinned to a release tag** (never `latest`). Record the version in every
+   report.
+2. **compose.yaml:** a `bifrost` profile, on `APP_CPUS` like the other platforms. If Bifrost uses Postgres or Redis
+   for its config, log or governance store, run them on the Postgres and Redis cpusets, as the Ume gateway does.
+   Set `GOMAXPROCS` to match the vCPUs given; `scale.sh` varies them.
+3. **lib.sh:** `bifrost` cases in the start/seed function, `db_of`, `redis_of`, the container lists and `stop_all`.
+   - Seed Bifrost with an OpenAI-compatible provider whose base URL is `http://fake-llm:8080/v1`.
+   - Add a model the k6 script asks for.
+   - Add one virtual key if governance is on.
+4. **k6/chat.js (and sizing/k6/mix.js):** `TARGET=bifrost`. Keep the same body as `ume`: the same Swedish question,
+   same streaming switch, auth header as Bifrost expects.
+5. **The stream probe** (`StreamProbe.cs`, used by `latency.sh`) and the report scripts: add the Bifrost target.
+6. **Keep the comparison fair.** The Ume gateway does key auth, rate limits, key/team/department budgets, routing and
+   usage records on every request. Run Bifrost **with its equivalents on** (virtual keys/governance, rate limits or
+   budgets, request logging). Optionally do one extra run with them off to show the bare proxy. State in every report
+   which Bifrost features and stores were on.
+7. **Logging:** production defaults on both (the Ume gateway logs at Information).
+8. **Remove Eneo from the defaults** (`PLATFORMS="fake ume bifrost"`) but keep its profile working, so the earlier Eneo
+   results can still be reproduced.
 
-- A Bifrost setting or plugin that adds a fixed response header (`x-ume-residency: Eu`). Check Bifrost's docs and code
-  for custom response headers or a lightweight plugin hook.
-- A minimal header-adding proxy (e.g. nginx, `add_header x-ume-residency Eu always;`, buffering off for SSE), counted
-  in the platform's cpuset and memory, and reported as overhead.
-- Don't patch rag-api's code for the benchmark unless the user agrees.
+## Rules
 
-Other `x-ume-*` request headers (`run-id`, `step`, `session`, `pii`, `on-behalf-of`) should be ignored harmlessly by
-Bifrost. Verify that it doesn't reject unknown headers. The Ume gateway's `/v1/context` (`OrganisationSync`) is
-admin-api only and isn't part of the run.
-
-## Gotchas from the first round
-
-- Eneo uploads need the shared `eneo-tmp` volume; rag-migrate needs `DOTNET_ENVIRONMENT=Staging`; the blob volume
-  needs the `rag-blobs-init` chown to 1654; `Crawl__AllowedPrivateRanges` is a comma-separated string.
-- `export PDF_DIR` before `run.sh`.
-- WSL2 has ~15.4 GB for Docker, so the 18 GB of limits don't bind. Neither platform came near it.
-- Use docker published ports, not background localhost servers, from WSL.
-- Results folders (`results/`, `results-*/`) are git-ignored. Commit the reports (`report-<date>-<name>.md`) and
-  update or add an HTML summary like `summary-2026-11-17.html`.
-
-## Notes on Eneo, checked in its code (v2.3.1 = v2.3.2 backend)
-
-- The POC and the load client call `POST /conversations/?version=2`: knowledge fills up to half the context window
-  (~20 400 prompt tokens per question vs ~3 100 on RAG). Without `version`, Eneo uses at most 30 chunks with autocut.
-- A default assistant-scoped key allows 1 000 requests/hour (space 5 000, organization 10 000). The test raised it.
-- Every claim about Eneo must be confirmed in the code of a named version, not docs or websites.
+- Every claim about Bifrost (features, defaults, how it stores state) must be **confirmed in its code at the pinned
+  tag**, never only in docs or on its website. Name the file in the report.
+- Don't change the Ume gateway's code to make it look better or worse. If a harness change is needed for Bifrost, keep the
+  `ume` path identical, and rerun `ume` in the same session on the same machine so the numbers are comparable.
+- Each report ends with the harness check (fake LLM, Postgres, Redis, k6 not at their limit). Keep that for Bifrost.
 
 ## Deliverables
 
-1. Bifrost wired in behind a switch, so both gateways stay runnable.
-2. Runs: 100, 150×3, 500, 1000 users, RAG + Bifrost.
-3. A report comparing the Ume gateway and Bifrost (and Eneo from the earlier runs): throughput, first-token p50/p95/p99,
-   gateway CPU/memory, errors, the gateway's share of first-token time. List the caveats, including the residency workaround.
-4. An updated HTML summary, pushed to the branch. Offer to update the published artifact.
+1. Bifrost wired into `benchmarks/compare` as a third target.
+2. Runs: `run.sh`, `scale.sh`, `latency.sh` and `sizing/run.sh` for `fake ume bifrost`, on the same machine and in the
+   same session.
+3. A report comparing the two gateways:
+   - added latency over the fake floor (p50/p95/p99);
+   - throughput per vCPU;
+   - CPU and memory per message;
+   - the scaling curve;
+   - streaming gaps and stalls;
+   - small-host results;
+   - errors;
+   - the features that were on;
+   - caveats.
+4. A shareable HTML summary, like `benchmarks/knowledge-load/summary-2026-11-17.html` on branch
+   `bench/eneo-vs-rag-knowledge-load`. Push it to the new branch, and offer to publish it.
+
+## Background (the earlier round, for reference only)
+
+The knowledge load test (Eneo vs. RAG platform + Ume gateway) is on branch `bench/eneo-vs-rag-knowledge-load` in
+`benchmarks/knowledge-load/`. At 1 000 users, the Ume gateway used 1.33 vCPU on average and peaked at 0.33 GiB, with
+0 errors. That test isn't repeated here.
+
+Practical gotchas from earlier runs on this machine:
+- WSL2 has about 15.4 GB for Docker.
+- Reach containers through Docker's published ports, not background localhost servers.
+- The fake LLM's `/stats` endpoint shows what reached the model.
