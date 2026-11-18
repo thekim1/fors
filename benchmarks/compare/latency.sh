@@ -13,7 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PLATFORMS="${PLATFORMS:-fake ume eneo}"
+PLATFORMS="${PLATFORMS:-fake ume bifrost}" # eneo still works: PLATFORMS=eneo
 VUS="${VUS:-1 16 64 256}"
 DURATION="${DURATION:-30}" # seconds per scenario
 PROFILE="${PROFILE:-realistic}"
@@ -27,7 +27,7 @@ BIN="$REPO/benchmarks/Ume.LlmGateway.Benchmarks/bin/Release/net10.0"
 [[ -f "$BIN/Ume.LlmGateway.Benchmarks.dll" ]] || { echo "Build the benchmarks in Release first" >&2; exit 1; }
 results_dir "results/latency" && results_dir "$OUT"
 
-url_of() { case $1 in fake) echo http://fake-llm:8080 ;; ume) echo http://ume-gateway:8080 ;; eneo) echo http://eneo-backend:8000/api/v1 ;; esac; }
+url_of() { case $1 in fake) echo http://fake-llm:8080 ;; ume) echo http://ume-gateway:8080 ;; bifrost) echo http://bifrost:8080 ;; eneo) echo http://eneo-backend:8000/api/v1 ;; esac; }
 
 # The probe runs as a container on the compose network, on the load generator's cores (like k6).
 probe() { # platform vus seconds out-file

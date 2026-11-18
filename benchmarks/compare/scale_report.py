@@ -6,8 +6,11 @@ import re
 import sys
 from pathlib import Path
 
-NAMES = {"fake": "Fake LLM (floor)", "ume": "Ume gateway", "eneo": f"eneo {os.environ.get('ENEO_VERSION', 'v2.2.3')}"}
-APP = {"ume": ["ume-gateway"], "eneo": ["eneo-backend", "eneo-worker"]}  # the worker writes eneo's audit events
+NAMES = {"fake": "Fake LLM (floor)", "ume": "Ume", "bifrost": f"Bifrost {os.environ.get('BIFROST_VERSION', 'v2.5.1')}",
+         "eneo": f"eneo {os.environ.get('ENEO_VERSION', 'v2.2.3')}"}
+APP = {"ume": ["ume-gateway"], "bifrost": ["bifrost"], "eneo": ["eneo-backend", "eneo-worker"]}  # the worker writes eneo's audit events
+PLATFORMS = ("ume", "bifrost", "eneo")
+HARNESS = {"ume": ("ume-gateway", "fake-llm", "ume-db", "ume-redis"), "bifrost": ("bifrost", "fake-llm", "bifrost-db", None)}
 
 
 def read_runs(folder: Path):
@@ -57,34 +60,37 @@ def main(folder: Path) -> None:
     (folder / "scale-data.json").write_text(json.dumps(data, indent=2))
 
     stream = next((r["stream"] for r in runs), True)
-    print(f"# Scaling: Ume gateway vs. eneo ({'streaming' if stream else 'non-streaming'} chat, same fake LLM)\n")
+    load, cores = data["load"], data["cores"]
+    present = [p for p in PLATFORMS if p in load or p in cores]
+    print(f"# Scaling: {' vs. '.join(NAMES[p] for p in present)} ({'streaming' if stream else 'non-streaming'} chat, same fake LLM)\n")
 
-    load = data["load"]
     print("## Load: concurrent clients on fixed resources (4 hardware threads = 2 physical cores each)\n")
-    print("| Clients | Fake LLM req/s | Ume req/s | Ume median ms | Ume p99 ms | Ume errors | eneo req/s | eneo median ms | eneo p99 ms | eneo errors |")
-    print("|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    head = ["Clients", "Fake LLM req/s"] + [f"{NAMES[p]} {c}" for p in present for c in ("req/s", "median ms", "p99 ms", "errors")]
+    print("| " + " | ".join(head) + " |")
+    print("|" + "---:|" * len(head))
     for vus in sorted({x for p in load.values() for x in p}):
         cells = [str(vus)]
         f = load.get("fake", {}).get(vus)
         cells.append(f"{f['rps']:.0f}" if f else "–")
-        for p in ("ume", "eneo"):
+        for p in present:
             s = load.get(p, {}).get(vus)
             cells += [f"{s['rps']:.0f}", fmt_ms(s["median"]), fmt_ms(s["p99"]), f"{s['errors']:.1%}"] if s else ["–"] * 4
         print("| " + " | ".join(cells) + " |")
 
-    cores = data["cores"]
     print("\n## Resources: peak throughput per number of application hardware threads (vCPUs)\n")
     print("Each row is the best throughput (with < 1 % errors) over several client counts, on a fresh stack. Speed-up is")
     print("relative to one thread; efficiency is speed-up divided by threads (100 % = linear).\n")
-    print("| vCPUs | Ume peak req/s | at clients | Ume speed-up | Ume efficiency | Ume CPU ms/req | Ume median ms | eneo peak req/s | at clients | eneo speed-up | eneo efficiency | eneo CPU ms/req | eneo median ms |")
-    print("|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    cols = ("peak req/s", "at clients", "speed-up", "efficiency", "CPU ms/req", "median ms")
+    head = ["vCPUs"] + [f"{NAMES[p]} {c}" for p in present for c in cols]
+    print("| " + " | ".join(head) + " |")
+    print("|" + "---:|" * len(head))
     for n in sorted({x for p in cores.values() for x in p}):
         cells = [str(n)]
-        for p in ("ume", "eneo"):
+        for p in present:
             s = cores.get(p, {}).get(n)
             base = cores.get(p, {}).get(min(cores.get(p, {}) or [n]))
             if not s:
-                cells += ["–"] * 6
+                cells += ["–"] * len(cols)
                 continue
             speedup = s["rps"] / base["rps"] if base and base["rps"] else 0
             cells += [f"{s['rps']:.0f}", str(s["clients"]), f"{speedup:.2f}×", f"{speedup / n:.0%}",
@@ -93,17 +99,20 @@ def main(folder: Path) -> None:
     print()
 
     # The gateway, not the harness, must be the limit: show how busy the fake LLM, Postgres and Redis were.
-    ume = [(f"{c} clients", s) for c, s in sorted(load.get("ume", {}).items())]
-    ume += [(f"{n} vCPU peak ({s['clients']} clients)", s) for n, s in sorted(cores.get("ume", {}).items())]
-    if ume:
-        print("## Harness check (Ume gateway runs)\n")
+    for p, (app, fake, db, redis) in HARNESS.items():
+        rows = [(f"{c} clients", s) for c, s in sorted(load.get(p, {}).items())]
+        rows += [(f"{n} vCPU peak ({s['clients']} clients)", s) for n, s in sorted(cores.get(p, {}).items())]
+        if not rows:
+            continue
+        print(f"## Harness check ({NAMES[p]} runs)\n")
         print("Hardware threads each container kept busy on average, against its CPU set (lib.sh). Redis runs commands on")
         print("one thread, so 1.0 is its limit. The fake LLM's own load curve above is the ceiling of fake LLM + k6.\n")
-        print("| Run | Req/s | Gateway | Fake LLM (of 4) | Postgres (of 2) | Redis (of 1) |")
-        print("|---|---:|---:|---:|---:|---:|")
-        for label, s in ume:
+        names = [("Platform", app), ("Fake LLM (of 4)", fake), ("Postgres (of 2)", db)] + ([("Redis (of 1)", redis)] if redis else [])
+        print("| Run | Req/s | " + " | ".join(n for n, _ in names) + " |")
+        print("|---|---:|" + "---:|" * len(names))
+        for label, s in rows:
             b = s["busy"]
-            cells = [label, f"{s['rps']:.0f}"] + [f"{b[c]:.2f}" if c in b else "–" for c in ("ume-gateway", "fake-llm", "ume-db", "ume-redis")]
+            cells = [label, f"{s['rps']:.0f}"] + [f"{b[c]:.2f}" if c in b else "–" for _, c in names]
             print("| " + " | ".join(cells) + " |")
         print()
 
