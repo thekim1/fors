@@ -1,9 +1,59 @@
-# Platform comparison: Ume LLM gateway vs. eneo
+# Platform comparison: Ume LLM gateway vs. Bifrost (and eneo)
 
-Runs the Ume LLM gateway and [eneo](https://github.com/eneo-ai/eneo) (latest release, v2.2.3; `ENEO_VERSION` picks another) against **the same fake LLM**
+Runs the Ume LLM gateway, the [Bifrost](https://github.com/maximhq/bifrost) LLM gateway (release v2.5.1, the official
+image; `BIFROST_VERSION` picks another) and, on request, [eneo](https://github.com/eneo-ai/eneo) (v2.2.3; `ENEO_VERSION`
+picks another) against **the same fake LLM**
 (`src/Ume.LlmGateway.FakeLlm`, which answers instantly), so the numbers are the platforms' own cost per chat message.
 A third target sends the same requests straight to the fake LLM: that is the floor, and everything above it is
-platform overhead. Results and interpretation: [docs/performance.md](../../docs/performance.md#comparison-with-eneo).
+platform overhead. The default targets are `fake ume bifrost`; `PLATFORMS=eneo` runs eneo. Results and interpretation:
+[docs/performance.md](../../docs/performance.md) (*Bifrost v2.5.1* and *eneo v2.2.3*) and
+[results-bifrost-2026-11-19.md](results-bifrost-2026-11-19.md).
+
+## Bifrost
+
+| | Ume LLM gateway | Bifrost v2.5.1 |
+|---|---|---|
+| Request | `POST /v1/chat/completions` (`ume/chat` alias), virtual key | `POST /v1/chat/completions`, model `fake-chat` with no provider prefix so the virtual key's providers route it, virtual key `sk-bf-…` as `Authorization: Bearer` |
+| Image | `dotnet publish /t:PublishContainer` (Release, chiseled) | `maximhq/bifrost:v2.5.1` (`sha256:5ec9873a…`), as published |
+| Concurrency model | One process (all cores) | One Go process, `GOMAXPROCS` = the vCPUs given (`NUM_WORKERS`) |
+| Data | Postgres 17, Redis 7.4 | Postgres 17 (config store and logs store); no Redis |
+| Features on the path | Key auth, rate limits, key/team/department budgets, routing with fallback, usage records | Virtual key, rate limit (requests and tokens), key/team/customer budgets, weighted routing with fallback, request log with content, Prometheus telemetry |
+| Logging | Information (production default) | `info`, JSON (the image's default) |
+
+Everything is configured by [`bifrost/config.json`](bifrost/config.json) on first start, the counterpart of the gateway's
+`compare-seed`:
+
+- **Providers:** `openai` with base URL `http://fake-llm:8080` and a second, custom OpenAI-compatible provider `fallback`
+  at the same URL. Both need `network_config.allow_private_network`: by default Bifrost refuses to dial private
+  addresses (`core/providers/utils/utils.go`), and the fake LLM is on the Docker network.
+- **Virtual key** `vk-bench` on team `team-bench` of customer `cust-bench` (Bifrost's counterpart of a department), with
+  `openai` at weight 1 and `fallback` at weight 0: the key's load balancer always picks `openai` and adds `fallback` as the
+  fallback (`plugins/governance/main.go`, `LoadBalanceProvider`), as the gateway's alias has a primary and a fallback.
+- **Rate limit** on the key: 100 000 000 requests and 2 000 000 000 tokens per minute; **budgets** of $1 000 000 000 a
+  month on the key, the team and the customer. All checked on every request and never reached, as in the gateway's seed.
+- **Price** for `fake-chat` ($2.50 / $10 per million input / output tokens, the gateway seed's prices) as a global pricing
+  override: Bifrost only charges budgets when a request has a cost (`plugins/governance/tracker.go`).
+- **Stores:** config store and logs store in Postgres (`bifrost-db`, on the Postgres cores). Request logging is on by
+  default with message content (`client.disable_content_logging` false, `transports/bifrost-http/lib/config.go`).
+
+Variants: `BIFROST_CONFIG=config-no-content.json` logs requests without their content; `BIFROST_CONFIG=config-bare.json`
+is the bare proxy (no stores, no request log, no virtual key required).
+
+What Bifrost does differently, from its code at v2.5.1 (file names relative to its repository):
+
+- **Counters in memory.** Rate-limit and budget counters live in the process (`plugins/governance/store.go`, `sync.Map`),
+  are charged in a goroutine after the response (`plugins/governance/main.go`) and written to the config store every
+  10 s (`plugins/governance/tracker.go`). Several instances do not share them: cluster mode (`cluster_config`) is in the
+  configuration schema but not read by the open-source server (`transports/bifrost-http`), so `scale-out.sh` is not run
+  for Bifrost. The gateway keeps its counters in Redis.
+- **Request log.** Every request is queued for an asynchronous writer that inserts batches of up to 1 000 rows at least
+  every 5 s (`plugins/logging/writer.go`, `transports/config.schema.json` `logs_store.writer`). The queue holds 10 000
+  entries; when it is full the entry is dropped, not waited for (`plugins/logging/writer.go`, `tryEnqueueLogEntry`). The
+  reports therefore show the rows stored per request for both gateways. The `logs` table has full-text indexes over the
+  message content (`framework/logstore/migrations.go`).
+- **No PII detection or content guard** in the open-source server (`guardrails_config` is in the schema but not read by
+  `transports/bifrost-http`), so the sizing test runs Bifrost with governance and logging only.
+- `measure` waits 11 s after each Bifrost scenario (3 s for the gateway) so its log batches and counter dump are counted.
 
 ## What is compared
 
@@ -67,7 +117,9 @@ stores every conversation. The comparison shows what each costs on top of the LL
 
 ## Running
 
-Needs Docker, the .NET SDK, python3 and bash (Linux, macOS or WSL). Build the three images once:
+Needs Docker, the .NET SDK, python3 and bash (Linux, macOS or WSL). On WSL, run from a clone on the Linux file system
+(not `/mnt/c`): long runs there can lose their working directory and the gateway seed then fails. Bifrost's image is
+pulled as published (`docker pull maximhq/bifrost:v2.5.1`). Build the other images once:
 
 ```bash
 # from the repository root
@@ -137,11 +189,13 @@ PROFILE=stalls FAKE_STALL_P=0.01 FAKE_STALL_MS=1500 VUS="16" benchmarks/compare/
 
 It writes `results/latency/<PROFILE>/report.md`.
 
-**Sizing** (`sizing/run.sh`, about 10 minutes): is a small host enough? Its own stack (`sizing/compose.yaml`) limits the
+**Sizing** (`sizing/run.sh`, about 10 minutes per platform): is a small host enough? Its own stack (`sizing/compose.yaml`) limits the
 gateway to 0.5 vCPU and 512 MB, Postgres to 1 vCPU and 1 GB on a disk volume and Redis to 0.25 vCPU and 256 MB, turns on
 PII detection (*Allow*) and the content guard (*Record*), gives the fake LLM real-provider timing and sends mixed traffic
 (`sizing/k6/mix.js`) at fixed rates. It reports CPU, memory, CPU throttling, latency against the fake LLM directly and
-bytes per usage record in `results/sizing/report.txt`.
+bytes per usage record in `results/sizing/report.txt`. Bifrost (`PLATFORMS="ume bifrost"`, the default) gets the same
+budget, its Postgres the same limits, and the same traffic; its report is `results/sizing/report-bifrost.txt` with the
+bytes per request log row.
 
 ```bash
 benchmarks/compare/sizing/run.sh
@@ -194,17 +248,18 @@ the fake LLM's answer, so an error can never pass as a fast response.
 
 | File | Purpose |
 |---|---|
-| `compose.yaml` | Fake LLM, both platforms (profiles `ume`, `eneo`) and k6 (profile `tools`) |
+| `compose.yaml` | Fake LLM, the platforms (profiles `ume`, `bifrost`, `eneo`) and k6 (profile `tools`) |
 | `run.sh` | Starts each platform on fresh databases, seeds it, warms up, runs the scenarios, samples CPU and query counts |
 | `scale.sh` | Load and resource scaling (see above) |
 | `gc.sh` | Memory, throughput and latency per garbage collector configuration (see above) |
 | `cores.sh` | Gateway CPU per message by CPU layout (see above) |
 | `scale-out.sh` | Several gateway instances on shared Postgres and Redis (see above) |
 | `profile.sh`, `profile_report.py` | CPU split, runtime counters and a stack sample inside the gateway at its peak (see above) |
-| `sizing/` | A small host with PII and content guard on (see above) |
+| `sizing/` | A small host: the gateway with PII and content guard on, Bifrost with governance and logging (see above) |
 | `latency.sh`, `latency_report.py` | Streaming latency with real-provider timing (see above), via the stream probe |
 | `lib.sh` | Shared shell helpers (start/seed platforms, k6, CPU and query sampling) |
-| `k6/chat.js` | One chat message per iteration for `TARGET=ume|eneo|fake`, streaming or not |
+| `k6/chat.js` | One chat message per iteration for `TARGET=ume|bifrost|eneo|fake`, streaming or not |
+| `bifrost/config.json` | Bifrost's providers, virtual key, rate limit, budgets, price and stores (variants: `config-no-content.json`, `config-bare.json`) |
 | `eneo/seed.py` | Adds a completion model pointing at the fake LLM (adapted from eneo's own `e2e/seed.py`) |
 | `eneo/seed_api_key.py` | Creates the shared space, assistant and service API key for `ENEO_AUTH=apikey` |
 | `eneo/seed_users.py` | Adds benchmark users with personal spaces and chat history (see above) |

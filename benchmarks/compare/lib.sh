@@ -118,6 +118,7 @@ start_platform() {
       "${COMPOSE[@]}" --profile bifrost up -d bifrost >/dev/null
       wait_http http://127.0.0.1:18100/health '^200$'
       KEY="$BIFROST_KEY"
+      if [[ ${BIFROST_CONFIG:-config.json} == config-bare.json ]]; then KEY=""; fi # no key store: a key would be refused
       ;;
   esac
 }

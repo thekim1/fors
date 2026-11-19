@@ -219,6 +219,8 @@ services:
       # The image's defaults (Dockerfile): info level, JSON lines.
       LOG_LEVEL: "${BIFROST_LOG_LEVEL:-info}"
       LOG_STYLE: json
+      # Set in the shell to read the admin API (e.g. GET /api/logs/dropped with X-Bifrost-Setup-Token); unset by default.
+      BIFROST_SETUP_TOKEN:
     volumes:
       - ./bifrost/${BIFROST_CONFIG:-config.json}:/app/data/config.json:ro
     tmpfs: [/app/data/logs]

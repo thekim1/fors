@@ -50,7 +50,8 @@ export function setup() {
   }
 
   if (TARGET !== 'eneo') {
-    return { headers: TARGET === 'ume' || TARGET === 'bifrost' ? { Authorization: `Bearer ${__ENV.KEY}` } : {} };
+    // Bifrost's bare proxy (bifrost/config-bare.json) has no virtual keys: a key it does not know is refused, so none is sent.
+    return { headers: TARGET === 'ume' || (TARGET === 'bifrost' && __ENV.KEY) ? { Authorization: `Bearer ${__ENV.KEY}` } : {} };
   }
 
   // eneo through a service API key: no login, the key's assistant.

@@ -61,8 +61,9 @@ services:
     profiles: [bifrost]
     image: maximhq/bifrost:${BIFROST_VERSION:-v2.5.1}
     cpuset: "8-11"
-    cpus: 0.5
-    mem_limit: 512m
+    # The gateway's budget by default; BIFROST_SIZING_CPUS / BIFROST_SIZING_MEM find what Bifrost needs instead.
+    cpus: ${BIFROST_SIZING_CPUS:-0.5}
+    mem_limit: ${BIFROST_SIZING_MEM:-512m}
     depends_on: {bifrost-db: {condition: service_healthy}}
     environment:
       # automaxprocs rounds a 0.5 CPU quota up to 1 (its minimum); set explicitly so it never depends on that.

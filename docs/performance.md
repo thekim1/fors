@@ -618,6 +618,46 @@ dependency-injection container of about 230 providers, uses three to four transa
 through litellm's parameter handling and pydantic serialisation per streamed chunk. Caching the space/assistant
 resolution per user would likely remove most of the database work.
 
+### Bifrost v2.5.1 (2026-11-19)
+
+[Bifrost](https://github.com/maximhq/bifrost)'s latest release (`maximhq/bifrost:v2.5.1`, the official image) as an LLM
+gateway, with its counterparts of the gateway's features on: virtual key, rate limit, key/team/customer budgets,
+weighted routing with a fallback provider, and its request log (with message content, its default) and config store in
+Postgres. Set-up, what Bifrost does differently (each point checked in its code at the tag) and every table:
+[benchmarks/compare/results-bifrost-2026-11-19.md](../benchmarks/compare/results-bifrost-2026-11-19.md).
+
+**Not the baseline machine.** This was measured on a laptop with a hybrid CPU (i7-13700H, WSL2), where the gateway
+reaches 68–83 % of its 2026-11-02 baseline throughput. Both gateways ran in the same session on the same CPU layout, so
+the ratios hold; the absolute figures below are this machine's, not the baseline's.
+
+| Chat message, 4 vCPUs each | Ume gateway | Bifrost v2.5.1 |
+|---|---:|---:|
+| Added latency, 1 client, non-streaming / streaming (median) | **0.46 / 0.68 ms** | 0.62 / 1.06 ms |
+| Added latency, 64 clients, streaming (median) / p99 | **3.7 / 9.9 ms** | 27.9 / 85.4 ms |
+| Peak throughput, streaming | **14 369 msg/s** | 2 077 msg/s |
+| Peak throughput, streaming, 1 vCPU | **5 443 msg/s** | 663 msg/s |
+| Throughput, non-streaming, 64 clients | **17 714 msg/s** | 4 316 msg/s |
+| CPU per message, streaming / non-streaming (64 clients) | **0.30 / 0.20 ms** | 2.07 / 0.93 ms |
+| Memory, platform process | **108–198 MB** | 224–510 MB |
+| Per-message record in Postgres | **553 bytes** | 4 978 bytes |
+| Messages recorded, non-streaming at 16 / 64 clients | **100 / 100 %** | 66 / 61 % |
+| Small host (0.5 vCPU, 512 MB), 100 msg/s of realistic streams | **0 failed**, 0.47 vCPU, ≤ 200 MB | out of memory; needs ~1 vCPU and ~620 MB |
+
+- **4–7× the throughput at 5–7× less CPU per message** on the same vCPUs, with the same kinds of work on every request.
+  Bifrost's own process is its limit (4.0 of 4 vCPUs at its plateau; its Postgres under half busy). Even as a bare
+  proxy with no stores, key or log, Bifrost needs 2.7–4.7× the gateway's CPU per message.
+- **Bifrost drops request logs under load** rather than wait: 34 % and 39 % of non-streamed messages at 16 and 64
+  clients went unlogged (its own counter), because its log queue (10 000 entries) was full. Its budgets and rate
+  limits are kept in memory and still enforced, but usage and cost reporting from its logs is incomplete. The gateway
+  recorded every message in every run.
+- **Bifrost's limits are per instance.** Its open-source build keeps rate-limit and budget counters in process memory
+  (written to Postgres every 10 s); cluster mode is not in it, so several instances do not share limits. The gateway's
+  counters are in Redis.
+- **With a real model's timing (400 ms to the first token, 5.6 s streams) neither gateway is noticeable** at 1–256
+  users: no errors, no stalls, first token and stream length within the model's own jitter. Bifrost then needs about
+  1.9× the CPU per stream (14.9 against 8.0 ms at 256 users).
+- No errors for either gateway in any run except Bifrost on the small host.
+
 ### Data protection and resilience (not performance)
 
 Checked in the eneo v2.2.1 source and tested live with the compare stack. The three backports in v2.2.3 (CORS allowlist
