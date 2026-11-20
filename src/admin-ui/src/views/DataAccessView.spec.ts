@@ -30,7 +30,7 @@ const key = (overrides: Partial<DataApiKey> = {}): DataApiKey => ({
   id: 'k1',
   name: 'Power BI finance',
   description: null,
-  prefix: 'ume-dk-Ab12',
+  prefix: 'fors-dk-Ab12',
   permissions: ['usage.aggregate'],
   status: 'Active',
   createdAt: '2026-10-01T08:00:00Z',
@@ -75,7 +75,7 @@ describe('Data API access', () => {
 
   it('creates a key with the ticked permissions and shows the secret once with an example request', async () => {
     const wrapper = await mountView([])
-    create.mockResolvedValue({ key: key({ permissions: ['usage.detail', 'security.read'] }), secret: 'ume-dk-secretvalue' })
+    create.mockResolvedValue({ key: key({ permissions: ['usage.detail', 'security.read'] }), secret: 'fors-dk-secretvalue' })
     await button(wrapper, 'New Data API key').trigger('click')
     await wrapper.find('#data-key-name').setValue('Power BI finance')
     for (const label of ['Security data', 'Usage records']) {
@@ -86,10 +86,10 @@ describe('Data API access', () => {
 
     // Sent in the canonical order, not the order they were ticked in.
     expect(create).toHaveBeenCalledWith({ name: 'Power BI finance', description: null, permissions: ['usage.detail', 'security.read'], expiresAt: null })
-    expect(wrapper.find('[data-testid="secret"]').text()).toBe('ume-dk-secretvalue')
+    expect(wrapper.find('[data-testid="secret"]').text()).toBe('fors-dk-secretvalue')
     expect(wrapper.text()).toContain('https://data.example.se:10443/v1/usage/records?limit=100')
-    expect(wrapper.text()).toContain('$UME_DATA_KEY')
-    expect(JSON.stringify(useDataAccessStore().items)).not.toContain('ume-dk-secretvalue')
+    expect(wrapper.text()).toContain('$FORS_DATA_KEY')
+    expect(JSON.stringify(useDataAccessStore().items)).not.toContain('fors-dk-secretvalue')
   })
 
   it('requires a name and at least one permission', async () => {

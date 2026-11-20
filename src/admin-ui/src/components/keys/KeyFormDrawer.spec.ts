@@ -15,8 +15,8 @@ vi.mock('@/composables/useModelOptions', () => ({
     options: ref([
       { name: 'ollama-cloud/gpt-oss', source: 'model', residencies: ['External'], providers: ['ollama-cloud'] },
       { name: 'openai/gpt-4.1-mini', source: 'model', residencies: ['External'], providers: ['openai'] },
-      { name: 'ume/chat', source: 'route', residencies: ['External'], providers: ['ollama-cloud', 'openai'] },
-      { name: 'ume/openai-only', source: 'route', residencies: ['External'], providers: ['openai'] },
+      { name: 'fors/chat', source: 'route', residencies: ['External'], providers: ['ollama-cloud', 'openai'] },
+      { name: 'fors/openai-only', source: 'route', residencies: ['External'], providers: ['openai'] },
     ]),
     loading: ref(false),
     error: ref(null),
@@ -72,7 +72,7 @@ describe('KeyFormDrawer provider then model selection', () => {
     expect(html.indexOf('Allow all providers')).toBeLessThan(html.indexOf('Allow all models'))
     await checkbox(wrapper, 'Allow all models')
     const models = labels(wrapper, 'Allowed models').join(' ')
-    for (const name of ['ollama-cloud/gpt-oss', 'openai/gpt-4.1-mini', 'ume/chat', 'ume/openai-only']) expect(models).toContain(name)
+    for (const name of ['ollama-cloud/gpt-oss', 'openai/gpt-4.1-mini', 'fors/chat', 'fors/openai-only']) expect(models).toContain(name)
   })
 
   it('only shows models from the selected providers', async () => {
@@ -83,15 +83,15 @@ describe('KeyFormDrawer provider then model selection', () => {
     await checkbox(wrapper, 'Allow all models')
     const models = labels(wrapper, 'Allowed models').join(' ')
     expect(models).toContain('ollama-cloud/gpt-oss')
-    expect(models).toContain('ume/chat') // a route that has a target on the selected provider
+    expect(models).toContain('fors/chat') // a route that has a target on the selected provider
     expect(models).not.toContain('openai/gpt-4.1-mini')
-    expect(models).not.toContain('ume/openai-only')
+    expect(models).not.toContain('fors/openai-only')
   })
 
   it('drops already chosen models when their provider is deselected', async () => {
     update.mockResolvedValue({})
     const existing = {
-      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'App', description: null, prefix: 'ume-sk-x', status: 'Active', isEnabled: true,
+      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'App', description: null, prefix: 'fors-sk-x', status: 'Active', isEnabled: true,
       allowedModels: ['ollama-cloud/gpt-oss', 'openai/gpt-4.1-mini'], allowedResidencies: [], allowedProviders: ['ollama-cloud', 'openai'], piiPolicy: 'Off',
       requestsPerMinute: null, tokensPerMinute: null, expiresAt: null,
     } as unknown as VirtualKey
@@ -120,7 +120,7 @@ describe('KeyFormDrawer provider then model selection', () => {
   it('does not touch providers for roles that cannot list them', async () => {
     update.mockResolvedValue({})
     const existing = {
-      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'App', description: null, prefix: 'ume-sk-x', status: 'Active', isEnabled: true,
+      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'App', description: null, prefix: 'fors-sk-x', status: 'Active', isEnabled: true,
       allowedModels: [], allowedResidencies: [], allowedProviders: ['openai'], piiPolicy: 'Off', requestsPerMinute: null, tokensPerMinute: null, expiresAt: null,
     } as unknown as VirtualKey
     const wrapper = mountForm(existing, 'department-admin')
@@ -148,7 +148,7 @@ describe('KeyFormDrawer provider then model selection', () => {
 
     update.mockResolvedValue({})
     const existing = {
-      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'App', description: null, prefix: 'ume-sk-x', status: 'Active', isEnabled: true,
+      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'App', description: null, prefix: 'fors-sk-x', status: 'Active', isEnabled: true,
       allowedModels: [], allowedResidencies: [], allowedProviders: [], piiPolicy: 'Off', attachmentPolicy: 'ImagesOnly', requestsPerMinute: null, tokensPerMinute: null, expiresAt: null,
     } as unknown as VirtualKey
     const edit = mountForm(existing)
@@ -171,7 +171,7 @@ describe('KeyFormDrawer provider then model selection', () => {
 
     update.mockResolvedValue({})
     const existing = {
-      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'App', description: null, prefix: 'ume-sk-x', status: 'Active', isEnabled: true,
+      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'App', description: null, prefix: 'fors-sk-x', status: 'Active', isEnabled: true,
       allowedModels: [], allowedResidencies: [], allowedProviders: [], piiPolicy: 'Off', attachmentPolicy: 'Allowed', requestsPerMinute: null, tokensPerMinute: null, expiresAt: null,
       allowProviderTools: true, allowProviderStorage: false, requireMaxResidency: true,
     } as unknown as VirtualKey
@@ -192,7 +192,7 @@ describe('KeyFormDrawer client addresses', () => {
   it('sends the address list one entry per line and shows the existing one on edit', async () => {
     update.mockResolvedValue({})
     const existing = {
-      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'App', description: null, prefix: 'ume-sk-x', status: 'Active', isEnabled: true,
+      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'App', description: null, prefix: 'fors-sk-x', status: 'Active', isEnabled: true,
       allowedModels: [], allowedResidencies: [], allowedProviders: [], allowedIpRanges: ['203.0.113.0/24'], piiPolicy: 'Off',
       requestsPerMinute: null, tokensPerMinute: null, expiresAt: null,
     } as unknown as VirtualKey
@@ -230,7 +230,7 @@ describe('KeyFormDrawer client addresses', () => {
 })
 
 describe('KeyFormDrawer integrations', () => {
-  const rag = { id: 'i1', name: 'Ume.Rag', isActive: true, ownerTeamId: 't1', ownerTeamName: 'Team' }
+  const rag = { id: 'i1', name: 'Källa', isActive: true, ownerTeamId: 't1', ownerTeamName: 'Team' }
 
   beforeEach(() => {
     create.mockReset()
@@ -250,7 +250,7 @@ describe('KeyFormDrawer integrations', () => {
     const wrapper = mountForm(null, 'department-admin')
     await flushPromises()
     const options = wrapper.findAll('#key-integration option').map((o) => o.text())
-    expect(options).toEqual(['No integration', 'Ume.Rag']) // not the deactivated one
+    expect(options).toEqual(['No integration', 'Källa']) // not the deactivated one
     await wrapper.find('#key-team').setValue('t1')
     await wrapper.find('input[autocomplete=off]').setValue('Chatbot')
     await wrapper.find('#key-integration').setValue('i1')
@@ -267,7 +267,7 @@ describe('KeyFormDrawer integrations', () => {
   it('lets a gateway admin make a credential key in the owner team with scopes', async () => {
     const wrapper = mountForm()
     await flushPromises()
-    await wrapper.find('input[autocomplete=off]').setValue('Ume.Rag api')
+    await wrapper.find('input[autocomplete=off]').setValue('Källa api')
     await wrapper.find('#key-integration').setValue('i1')
     await wrapper.findAll('[role=radiogroup][aria-label="Role in the integration"] [role=radio]').find((b) => b.text() === 'Credential')!.trigger('click')
     await flushPromises()
@@ -285,13 +285,13 @@ describe('KeyFormDrawer integrations', () => {
   it('shows an assigned key’s integration on edit and does not send it again', async () => {
     update.mockResolvedValue({})
     const existing = {
-      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'Chatbot', description: null, prefix: 'ume-sk-x', status: 'Active', isEnabled: true,
+      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'Chatbot', description: null, prefix: 'fors-sk-x', status: 'Active', isEnabled: true,
       allowedModels: [], allowedResidencies: [], allowedProviders: [], piiPolicy: 'Off', requestsPerMinute: null, tokensPerMinute: null, expiresAt: null,
-      integrationId: 'i1', integrationName: 'Ume.Rag', integrationRole: 'Assigned', integrationScopes: [],
+      integrationId: 'i1', integrationName: 'Källa', integrationRole: 'Assigned', integrationScopes: [],
     } as unknown as VirtualKey
     const wrapper = mountForm(existing, 'department-admin')
     await flushPromises()
-    expect(wrapper.text()).toContain('Used through Ume.Rag as assigned key')
+    expect(wrapper.text()).toContain('Used through Källa as assigned key')
     expect(wrapper.find('#key-integration').exists()).toBe(false)
     await wrapper.find('form').trigger('submit')
     await flushPromises()
@@ -302,9 +302,9 @@ describe('KeyFormDrawer integrations', () => {
 
   it('does not let a department admin save an integration’s credential key', async () => {
     const existing = {
-      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'Ume.Rag api', description: null, prefix: 'ume-sk-x', status: 'Active', isEnabled: true,
+      id: 'k1', teamId: 't1', teamName: 'Team', departmentName: 'Dept', name: 'Källa api', description: null, prefix: 'fors-sk-x', status: 'Active', isEnabled: true,
       allowedModels: [], allowedResidencies: [], allowedProviders: [], piiPolicy: 'Off', requestsPerMinute: null, tokensPerMinute: null, expiresAt: null,
-      integrationId: 'i1', integrationName: 'Ume.Rag', integrationRole: 'Credential', integrationScopes: ['usage.read'],
+      integrationId: 'i1', integrationName: 'Källa', integrationRole: 'Credential', integrationScopes: ['usage.read'],
     } as unknown as VirtualKey
     const wrapper = mountForm(existing, 'department-admin')
     await flushPromises()

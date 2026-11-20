@@ -1,7 +1,7 @@
 // Everything the website says that is not a Markdown page. The documentation pages themselves are the Markdown files
 // listed in DOCS; the build renders them, so the repository and the website never disagree.
 
-export const GH = 'https://github.com/thekim1/llmgateway'
+export const GH = 'https://github.com/thekim1/fors'
 
 /**
  * Documentation sidebar, grouped by what the reader came to do: try or install it, call it from an application, set it
@@ -64,40 +64,40 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="https://gateway.example.se/v1",
-    api_key=os.environ["UME_API_KEY"],   # a virtual key
+    api_key=os.environ["FORS_API_KEY"],   # a virtual key
 )
 
 reply = client.chat.completions.create(
-    model="ume/chat-standard",           # an alias, not a vendor model
+    model="fors/chat-standard",           # an alias, not a vendor model
     messages=[{"role": "user", "content": "Sammanfatta ärendet"}],
 )` },
   { id: 'node', label: 'Node.js', code: `import OpenAI from "openai";
 
 const client = new OpenAI({
   baseURL: "https://gateway.example.se/v1",
-  apiKey: process.env.UME_API_KEY,
+  apiKey: process.env.FORS_API_KEY,
 });
 
 const reply = await client.chat.completions.create({
-  model: "ume/chat-standard",
+  model: "fors/chat-standard",
   messages: [{ role: "user", content: "Sammanfatta ärendet" }],
 });` },
   { id: 'dotnet', label: '.NET', code: `using OpenAI;
 using System.ClientModel;
 
 var client = new OpenAIClient(
-    new ApiKeyCredential(Environment.GetEnvironmentVariable("UME_API_KEY")!),
+    new ApiKeyCredential(Environment.GetEnvironmentVariable("FORS_API_KEY")!),
     new OpenAIClientOptions { Endpoint = new Uri("https://gateway.example.se/v1") });
 
-var chat = client.GetChatClient("ume/chat-standard");
+var chat = client.GetChatClient("fors/chat-standard");
 var reply = await chat.CompleteChatAsync("Sammanfatta ärendet");` },
   { id: 'curl', label: 'curl', code: `curl https://gateway.example.se/v1/chat/completions \\
-  -H "Authorization: Bearer $UME_API_KEY" \\
+  -H "Authorization: Bearer $FORS_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"ume/chat-standard",
+  -d '{"model":"fors/chat-standard",
        "messages":[{"role":"user","content":"Hej"}]}'
 
-# x-ume-rule, x-ume-residency, x-ume-fallbacks
+# x-fors-rule, x-fors-residency, x-fors-fallbacks
 # come back as response headers` },
 ]
 
@@ -125,7 +125,7 @@ export const UI_SHOTS = [
 export const DEPLOYS = [
   { icon: 'deployed_code', title: 'Docker Compose', body: 'Hardened production file: read-only, non-root, internal data network. One script creates certificates and secrets.', meta: 'deploy/compose.prod.yaml', href: 'docs/production-setup/' },
   { icon: 'web', title: 'Portainer', body: 'No shell access? The same stack, configured only with environment variables. Certificates are generated on first start.', meta: 'compose.portainer.yaml', href: 'docs/runbook/#portainer-and-other-hosts-without-shell-access' },
-  { icon: 'badge', title: 'Your identity provider', body: 'Keycloak, AD FS or Entra ID. Roles, department codes and AD groups are mapped from claims.', meta: 'UME_OIDC_AUTHORITY', href: 'docs/runbook/#identity-provider-existing-keycloak-ad-fs-entra-id-active-directory' },
+  { icon: 'badge', title: 'Your identity provider', body: 'Keycloak, AD FS or Entra ID. Roles, department codes and AD groups are mapped from claims.', meta: 'FORS_OIDC_AUTHORITY', href: 'docs/runbook/#identity-provider-existing-keycloak-ad-fs-entra-id-active-directory' },
 ]
 
 export const PATHS = [
@@ -133,27 +133,27 @@ export const PATHS = [
     prereqs: ['.NET SDK 10.0.401', 'Aspire 13.6', 'Docker 28+', 'Node 24.15+'],
     steps: [
       { title: 'Install the admin UI packages', body: 'Clone the repository, then install the UI dependencies once.', shell: 'PowerShell', code: `git clone ${GH}.git
-Set-Location llmgateway\\src\\admin-ui
+Set-Location fors\\src\\admin-ui
 npm ci
 Set-Location ..\\..` },
       { title: 'Start the stack', body: 'Aspire starts Postgres, Redis, Keycloak, the fake LLM, the gateway and the admin UI. Demo data is on by default.', shell: 'PowerShell', code: `.\\scripts\\Start-Dev.ps1          # with demo data
-.\\scripts\\Start-Dev.ps1 -Empty   # empty database, only login users`, note: 'Prefer Visual Studio? Open UmeLlmGateway.slnx, set Ume.LlmGateway.AppHost as the startup project and press F5.' },
+.\\scripts\\Start-Dev.ps1 -Empty   # empty database, only login users`, note: 'Prefer Visual Studio? Open Fors.slnx, set Fors.AppHost as the startup project and press F5.' },
       { title: 'Sign in and create a key', body: 'Open https://localhost:5173 and sign in as the gateway-admin test user (the password is the dev-user-password secret in the AppHost user secrets). Under Keys, choose New key. The secret is shown once, so copy it now.', shot: 'secret-dialog', shotAlt: 'The “Copy your secret now” dialog after creating a key' },
       { title: 'Send your first request', body: 'Use the key with any OpenAI-compatible client. The fake LLM answers instantly.', shell: 'bash', code: `curl https://localhost:7212/v1/chat/completions \\
-  -H "Authorization: Bearer $UME_API_KEY" \\
+  -H "Authorization: Bearer $FORS_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"model":"ume/chat-standard","messages":[{"role":"user","content":"Hej"}]}'` },
+  -d '{"model":"fors/chat-standard","messages":[{"role":"user","content":"Hej"}]}'` },
     ] },
   { id: 'production', title: 'Deploy to production', body: 'A Linux Docker host with your own login provider.', icon: 'dns',
     prereqs: ['Linux + Docker 28+', 'Compose v2.24+', '2 vCPU, 4 GB RAM', 'An OIDC client', 'Two hostnames'],
     steps: [
-      { title: 'Download a release', body: 'Each release bundle has Compose files that point at its images on GHCR, pinned by digest.', shell: 'bash', code: `curl -fsSLO ${GH}/releases/download/vX.Y.Z/ume-llm-gateway-X.Y.Z.tar.gz
-tar -xzf ume-llm-gateway-X.Y.Z.tar.gz && cd ume-llm-gateway-X.Y.Z` },
+      { title: 'Download a release', body: 'Each release bundle has Compose files that point at its images on GHCR, pinned by digest.', shell: 'bash', code: `curl -fsSLO ${GH}/releases/download/vX.Y.Z/fors-X.Y.Z.tar.gz
+tar -xzf fors-X.Y.Z.tar.gz && cd fors-X.Y.Z` },
       { title: 'Generate secrets and certificates', body: 'The script asks for your OIDC authority and public hostnames, then creates an internal CA, certificates, passwords, the key pepper and deploy/.env. It is safe to re-run.', shell: 'bash', code: `./deploy/init-deployment.sh
 # behind nginx, NPM or F5:  --proxy
 # with your own PKI:        --gateway-cert … --admin-cert …`, note: 'Back up deploy/secrets/.pepper and deploy/certs/data-protection.pfx separately from database dumps. Losing the pepper invalidates every key.' },
       { title: 'Start it', body: 'The production file is hardened: read-only, non-root, on an internal data network. It never seeds data and never runs Keycloak or the fake LLM.', shell: 'bash', code: 'docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait' },
-      { title: 'Connect your identity provider and providers', body: 'Point UME_OIDC_AUTHORITY at your Keycloak, AD FS or Entra ID. Roles, department codes and AD groups are mapped from claims. Then add providers under Providers & models and use Discover models.', shot: 'providers-discover', shotAlt: 'The Discover models dialog listing models from a provider' },
+      { title: 'Connect your identity provider and providers', body: 'Point FORS_OIDC_AUTHORITY at your Keycloak, AD FS or Entra ID. Roles, department codes and AD groups are mapped from claims. Then add providers under Providers & models and use Discover models.', shot: 'providers-discover', shotAlt: 'The Discover models dialog listing models from a provider' },
     ] },
 ]
 
@@ -179,11 +179,11 @@ export const ERROR_CODES = [
 
 export const GLOSSARY = [
   ['Key', 'A secret that identifies an application and controls its access, limits and budget.'],
-  ['Alias', 'A model name such as ume/chat-standard that the gateway maps to one or more provider models.'],
+  ['Alias', 'A model name such as fors/chat-standard that the gateway maps to one or more provider models.'],
   ['Fallback', 'The next provider tried when a call fails before the response starts.'],
   ['Budget', 'The most an owner may spend during a calendar period.'],
   ['Residency', 'Where a provider runs: on-prem, EU or external. A key lists the residencies it may use.'],
-  ['Routing rule', 'A condition on the request, such as a header or how much of the budget is left, that sends it to a different model. The x-ume-rule response header shows which rule applied.'],
+  ['Routing rule', 'A condition on the request, such as a header or how much of the budget is left, that sends it to a different model. The x-fors-rule response header shows which rule applied.'],
 ]
 
 /** docs/performance.md, Results (baseline 2026-11-02). All gateway figures on the site come from that one run. */
@@ -232,19 +232,19 @@ export const COST_ROWS = [
 
 /** docs/performance.md, Comparison with eneo, eneo v2.2.3 (2026-11-02, same run as the baseline; streaming, 4 vCPUs each). */
 export const COMPARE = [
-  { label: 'Time per streamed answer, 1 client (median)', max: 66.7, rows: [['Ume gateway', 1.21, '1.2 ms'], ['eneo v2.2.3', 66.7, '66.7 ms']] },
-  { label: 'CPU per message, 16 clients', max: 80.7, rows: [['Ume gateway', 0.41, '0.41 ms'], ['eneo v2.2.3', 80.7, '80.7 ms']] },
-  { label: 'Postgres statements per message', max: 78, rows: [['Ume gateway', 0.6, '0.6, batched'], ['eneo v2.2.3', 78, '78']] },
+  { label: 'Time per streamed answer, 1 client (median)', max: 66.7, rows: [['Fors', 1.21, '1.2 ms'], ['eneo v2.2.3', 66.7, '66.7 ms']] },
+  { label: 'CPU per message, 16 clients', max: 80.7, rows: [['Fors', 0.41, '0.41 ms'], ['eneo v2.2.3', 80.7, '80.7 ms']] },
+  { label: 'Postgres statements per message', max: 78, rows: [['Fors', 0.6, '0.6, batched'], ['eneo v2.2.3', 78, '78']] },
 ]
 
 export const BENCH_CODE = `# All BenchmarkDotNet benchmarks (~10 min)
-dotnet run -c Release --project benchmarks\\Ume.LlmGateway.Benchmarks -- --filter *
+dotnet run -c Release --project benchmarks\\Fors.Benchmarks -- --filter *
 
 # Postgres/Redis calls per request + load test
-dotnet run -c Release --project benchmarks\\Ume.LlmGateway.Benchmarks -- audit
+dotnet run -c Release --project benchmarks\\Fors.Benchmarks -- audit
 
 # Throughput and scaling against a fake LLM, pinned cores
-cd benchmarks/compare && PLATFORMS="fake ume" ./run.sh && PLATFORMS="fake ume" ./scale.sh`
+cd benchmarks/compare && PLATFORMS="fake fors" ./run.sh && PLATFORMS="fake fors" ./scale.sh`
 
 export const REPORTS = [
   { title: 'Performance', body: 'Every benchmark result, what a request costs and how to measure it.', href: 'docs/performance/' },

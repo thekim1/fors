@@ -1,0 +1,161 @@
+using System.Security.Cryptography.X509Certificates;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using Npgsql;
+using StackExchange.Redis;
+using Fors.Domain.Keys;
+using Fors.Infrastructure.Persistence;
+using Fors.Infrastructure.Providers;
+using Fors.Infrastructure.Providers.Anthropic;
+using Fors.Infrastructure.Providers.OpenAI;
+using Fors.Infrastructure.Security;
+using Fors.Infrastructure.Stores;
+
+namespace Fors.Infrastructure;
+
+public static class InfrastructureExtensions
+{
+    public const string DatabaseResourceName = "gatewaydb";
+    public const string RedisResourceName = "redis";
+    public const string DataProtectionApplicationName = "Fors";
+
+    public static IHostApplicationBuilder AddDeploymentSecrets(this IHostApplicationBuilder builder)
+    {
+        var directory = builder.Configuration["Security:SecretsDirectory"];
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            builder.Configuration.AddKeyPerFile(directory, optional: false, reloadOnChange: false);
+        }
+        return builder;
+    }
+
+    /// <summary>EF Core (Npgsql) via the Aspire integration: pooling, retries, health check and tracing.</summary>
+    public static IHostApplicationBuilder AddGatewayDatabase(this IHostApplicationBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        if (builder.Environment.IsProduction())
+        {
+            var connection = new NpgsqlConnectionStringBuilder(builder.Configuration.GetConnectionString(DatabaseResourceName));
+            if (connection.SslMode != SslMode.VerifyFull || string.IsNullOrWhiteSpace(connection.RootCertificate) ||
+                connection.Username is null or "postgres")
+            {
+                throw new InvalidOperationException("Production gatewaydb requires a non-superuser role and SSL Mode=VerifyFull with a Root Certificate.");
+            }
+        }
+        builder.AddNpgsqlDbContext<GatewayDbContext>(DatabaseResourceName);
+        return builder;
+    }
+
+    /// <summary>Key hashing pepper + Data Protection (provider credential encryption) shared by gateway and admin API.</summary>
+    public static IHostApplicationBuilder AddGatewaySecurity(this IHostApplicationBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.Services.AddOptions<GatewaySecurityOptions>()
+            .Bind(builder.Configuration.GetSection(GatewaySecurityOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        builder.Services.TryAddSingleton(sp => KeyHasherFactory.Create(sp.GetRequiredService<IOptions<GatewaySecurityOptions>>().Value));
+
+        var dp = builder.Services.AddDataProtection()
+            .SetApplicationName(DataProtectionApplicationName)
+            .PersistKeysToDbContext<GatewayDbContext>();
+
+        // On-prem: protect the key ring at rest with a certificate (e.g. mounted secret). Without it the key ring is
+        // stored unencrypted in Postgres (acceptable for local dev only – see docs/security-and-compliance.md).
+        var certPath = builder.Configuration["DataProtection:CertificatePath"];
+        if (builder.Environment.IsProduction() && string.IsNullOrWhiteSpace(certPath))
+        {
+            throw new InvalidOperationException("Production requires DataProtection:CertificatePath to protect the shared key ring.");
+        }
+        if (!string.IsNullOrWhiteSpace(certPath))
+        {
+            var cert = X509CertificateLoader.LoadPkcs12FromFile(certPath, builder.Configuration["DataProtection:CertificatePassword"]);
+            dp.ProtectKeysWithCertificate(cert);
+        }
+
+        builder.Services.TryAddSingleton<CredentialProtector>();
+        return builder;
+    }
+
+    /// <summary>Set to <c>false</c> to trace Redis commands (Aspire's own setting; off by default here, see below).</summary>
+    public const string RedisTracingSetting = "Aspire:StackExchange:Redis:DisableTracing";
+
+    /// <summary>
+    /// Shared counters/state. Uses Redis when a <c>redis</c> connection string is configured, otherwise
+    /// single-instance in-memory stores (local tests only – not suitable for multiple gateway replicas).
+    /// </summary>
+    public static IHostApplicationBuilder AddGatewayStores(this IHostApplicationBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.Services.TryAddSingleton(TimeProvider.System);
+        builder.Services.AddOptions<CircuitBreakerOptions>().Bind(builder.Configuration.GetSection(CircuitBreakerOptions.SectionName)).ValidateDataAnnotations().ValidateOnStart();
+
+        if (builder.Environment.IsProduction())
+        {
+            var connection = builder.Configuration.GetConnectionString(RedisResourceName);
+            if (string.IsNullOrWhiteSpace(connection) || !ConfigurationOptions.Parse(connection).Ssl ||
+                ConfigurationOptions.Parse(connection).User is not "gateway")
+            {
+                throw new InvalidOperationException("Production Redis requires TLS and the restricted gateway ACL user.");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString(RedisResourceName)))
+        {
+            // Redis command tracing is off unless configured (Aspire:StackExchange:Redis:DisableTracing=false): the
+            // instrumentation records every command into a session per traced request and drains them only every 10 s,
+            // so under load it keeps hundreds of thousands of requests' activities alive (about 400 MB at 16 000
+            // requests/s, enough for an out-of-memory crash in a 1 GiB container). Requests and provider calls are
+            // still traced; Redis time shows as the gap between them.
+            builder.AddRedisClient(RedisResourceName, settings =>
+                settings.DisableTracing = builder.Configuration.GetValue<bool?>(RedisTracingSetting) ?? true);
+            builder.Services.TryAddSingleton<IRateLimiter, RedisRateLimiter>();
+            builder.Services.TryAddSingleton<ISpendLedger, RedisSpendLedger>();
+            builder.Services.TryAddSingleton<IAdmissionStore, RedisAdmissionStore>();
+            builder.Services.TryAddSingleton<IInvalidationBus, RedisInvalidationBus>();
+            builder.Services.TryAddSingleton<ICircuitBreakerStore, RedisCircuitBreakerStore>();
+            builder.Services.TryAddSingleton<IRealtimeSessionRegistry, RedisRealtimeSessionRegistry>();
+            builder.Services.TryAddSingleton<IAdminSessionStore, RedisAdminSessionStore>();
+            builder.Services.TryAddSingleton<IUsageJournal, RedisUsageJournal>();
+        }
+        else
+        {
+            builder.Services.TryAddSingleton<IRateLimiter, InMemoryRateLimiter>();
+            builder.Services.TryAddSingleton<ISpendLedger, InMemorySpendLedger>();
+            builder.Services.TryAddSingleton<IAdmissionStore, SequentialAdmissionStore>();
+            builder.Services.TryAddSingleton<IInvalidationBus, InMemoryInvalidationBus>();
+            builder.Services.TryAddSingleton<ICircuitBreakerStore, InMemoryCircuitBreakerStore>();
+            builder.Services.TryAddSingleton<IRealtimeSessionRegistry, InMemoryRealtimeSessionRegistry>();
+            builder.Services.TryAddSingleton<IAdminSessionStore, InMemoryAdminSessionStore>();
+            builder.Services.TryAddSingleton<IUsageJournal, InMemoryUsageJournal>();
+        }
+
+        return builder;
+    }
+
+    public static IServiceCollection AddProviderAdapters(this IServiceCollection services)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton(sp => new ProviderHttpClient(sp.GetRequiredService<IHostEnvironment>().IsProduction())
+        {
+            Time = sp.GetRequiredService<TimeProvider>(),
+        });
+        services.AddSingleton<IProviderAdapter, AnthropicAdapter>();
+        services.AddSingleton<IProviderAdapter, OpenAICompatibleAdapter>();
+        services.TryAddSingleton<IRealtimeConnector, RealtimeConnector>();
+        return services;
+    }
+
+    /// <summary>Helper exposed for reuse by the seeding worker.</summary>
+    public static VirtualKeyHasher CreateKeyHasher(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var options = new GatewaySecurityOptions();
+        configuration.GetSection(GatewaySecurityOptions.SectionName).Bind(options);
+        return KeyHasherFactory.Create(options);
+    }
+}

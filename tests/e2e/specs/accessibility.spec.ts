@@ -41,7 +41,7 @@ for (const theme of themes) {
     const { teamId, teamName, departmentName } = await testTeam(page)
     const ruleName = `Browser a11y rule ${crypto.randomUUID().slice(0, 8)}`
     const rule = await (await mutate(page, '/api/routing-rules', {
-      name: ruleName, scope: 'Team', scopeIds: [teamId], condition: 'headers["x-e2e"] == "a11y"', targets: [{ model: 'ume/chat-onprem', weight: 1 }],
+      name: ruleName, scope: 'Team', scopeIds: [teamId], condition: 'headers["x-e2e"] == "a11y"', targets: [{ model: 'fors/chat-onprem', weight: 1 }],
     })).json()
     const open = async (label: string, trigger: () => Promise<void>, dialogName: string | RegExp) => {
       await trigger()

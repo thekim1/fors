@@ -1,18 +1,26 @@
 #!/bin/sh
 # One-shot bootstrap for compose.portainer.yaml: creates the internal CA, service certificates,
-# Data Protection certificate, passwords, key pepper, the admin API's setup secret and Redis ACL in the ume-certs /
-# ume-secrets volumes. Idempotent: existing secrets are never overwritten (a new pepper or Data Protection
+# Data Protection certificate, passwords, key pepper, the admin API's setup secret and Redis ACL in the fors-certs /
+# fors-secrets volumes. Idempotent: existing secrets are never overwritten (a new pepper or Data Protection
 # certificate would break existing data); service certificates are re-issued when they expire
 # within 30 days or the hostnames change. Inputs come from environment variables; the host names arrive resolved from
-# the stack file (UME_DOMAIN's defaults unless a UME_*_HOST is set). Its last lines say how sign-in is set up: declared
-# by the stack's UME_OIDC_AUTHORITY, or in the setup wizard.
+# the stack file (FORS_DOMAIN's defaults unless a FORS_*_HOST is set). Its last lines say how sign-in is set up: declared
+# by the stack's FORS_OIDC_AUTHORITY, or in the setup wizard.
 set -eu
 umask 077
 C=/certs
 S=/secrets
-: "${UME_GATEWAY_HOST:?Set UME_DOMAIN or UME_GATEWAY_HOST (public hostname of the gateway API)}"
-ADMIN_HOST="${UME_ADMIN_HOST:-$UME_GATEWAY_HOST}"
-DATA_HOST="${UME_DATA_HOST:-$UME_GATEWAY_HOST}"
+: "${FORS_GATEWAY_HOST:?Set FORS_DOMAIN or FORS_GATEWAY_HOST (public hostname of the gateway API)}"
+ADMIN_HOST="${FORS_ADMIN_HOST:-$FORS_GATEWAY_HOST}"
+DATA_HOST="${FORS_DATA_HOST:-$FORS_GATEWAY_HOST}"
+# A stack from before the rename to Fors kept its certificates and secrets in the volumes ume-certs and ume-secrets:
+# they are copied once, before anything is generated, so the key pepper and the Data Protection certificate carry over
+# (a new pepper would invalidate every key). Until 0.13.
+if [ ! -f "$S/.pepper" ] && [ -f /legacy-secrets/.pepper ]; then
+  echo "bootstrap: copying the certificates and secrets from the volumes ume-certs and ume-secrets (upgrade to Fors 0.12)"
+  cp -a /legacy-certs/. "$C/"
+  cp -a /legacy-secrets/. "$S/"
+fi
 for d in postgres redis gateway adminapi dataapi migrations; do mkdir -p "$C/$d" "$S/$d"; done
 rand() { openssl rand -hex 32; }
 quiet() { "$@" >/dev/null 2>&1; }
@@ -24,7 +32,7 @@ if [ -f "$C/ca.pem" ] && ! openssl x509 -noout -text -in "$C/ca.pem" | grep -q "
   mv "$C/ca.pem" "$C/ca.pem.old"; rm -f "$C/ca.key"
 fi
 if [ ! -f "$C/ca.pem" ]; then
-  quiet openssl req -x509 -newkey rsa:3072 -nodes -keyout "$C/ca.key" -out "$C/ca.pem" -days 3650 -subj /CN=ume-gateway-internal-ca \
+  quiet openssl req -x509 -newkey rsa:3072 -nodes -keyout "$C/ca.key" -out "$C/ca.pem" -days 3650 -subj /CN=fors-gateway-internal-ca \
     -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
 fi
 
@@ -45,12 +53,12 @@ issue() {
 }
 issue postgres "DNS:postgres,DNS:localhost"
 issue redis "DNS:redis,DNS:localhost"
-issue gateway "DNS:gateway,DNS:localhost,DNS:$UME_GATEWAY_HOST"
+issue gateway "DNS:gateway,DNS:localhost,DNS:$FORS_GATEWAY_HOST"
 issue adminapi "DNS:adminapi,DNS:localhost,DNS:$ADMIN_HOST"
 issue dataapi "DNS:dataapi,DNS:localhost,DNS:$DATA_HOST"
 
 if [ ! -f "$C/data-protection.pfx" ]; then
-  quiet openssl req -x509 -newkey rsa:3072 -nodes -keyout /tmp/dp.key -out /tmp/dp.crt -days 3650 -subj /CN=ume-gateway-data-protection
+  quiet openssl req -x509 -newkey rsa:3072 -nodes -keyout /tmp/dp.key -out /tmp/dp.crt -days 3650 -subj /CN=fors-gateway-data-protection
   quiet openssl pkcs12 -export -inkey /tmp/dp.key -in /tmp/dp.crt -out "$C/data-protection.pfx" -passout pass:
 fi
 for d in gateway adminapi migrations; do cp "$C/data-protection.pfx" "$C/$d/data-protection.pfx"; done
@@ -68,7 +76,7 @@ sed "s/REPLACE_WITH_SHA256_PASSWORD_HASH/$hash/" /config/users.acl.example > "$S
 for svc in gateway adminapi migrations; do
   role="$svc"; case "$svc" in adminapi) role=admin;; migrations) role=migrator;; esac
   printf '%s' "$(cat "$S/.pepper")" > "$S/$svc/Security__KeyPepper"
-  printf 'Host=postgres;Database=gatewaydb;Username=ume_%s;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
+  printf 'Host=postgres;Database=gatewaydb;Username=fors_%s;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
     "$role" "$(cat "$S/postgres/${role}_password")" > "$S/$svc/ConnectionStrings__gatewaydb"
   if [ "$svc" != migrations ]; then
     printf 'redis:6379,user=gateway,password=%s,ssl=true,sslHost=redis,abortConnect=false' \
@@ -76,7 +84,7 @@ for svc in gateway adminapi migrations; do
   fi
 done
 # Data API (optional, profile "data"): read-only role, no pepper, no Redis.
-printf 'Host=postgres;Database=gatewaydb;Username=ume_data;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
+printf 'Host=postgres;Database=gatewaydb;Username=fors_data;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
   "$(cat "$S/postgres/data_password")" > "$S/dataapi/ConnectionStrings__gatewaydb"
 # The admin API's setup secret: the setup code is derived from it (docs/identity-and-roles.md, "Setup mode"). Kept, but
 # not worth backing up: a new one only changes the setup codes printed from then on.
@@ -87,19 +95,19 @@ printf 'Host=postgres;Database=gatewaydb;Username=ume_data;Password=%s;SSL Mode=
 notes=""
 note() { notes="$notes
 bootstrap: $*"; }
-if [ -n "${UME_OIDC_CLIENT_SECRET:-}" ] && [ -n "${UME_OIDC_AUTHORITY:-}" ]; then
-  printf '%s' "$UME_OIDC_CLIENT_SECRET" > "$S/adminapi/Oidc__ClientSecret"
+if [ -n "${FORS_OIDC_CLIENT_SECRET:-}" ] && [ -n "${FORS_OIDC_AUTHORITY:-}" ]; then
+  printf '%s' "$FORS_OIDC_CLIENT_SECRET" > "$S/adminapi/Oidc__ClientSecret"
 else
   rm -f "$S/adminapi/Oidc__ClientSecret"
-  [ -z "${UME_OIDC_CLIENT_SECRET:-}" ] || note "UME_OIDC_CLIENT_SECRET is left out: it is used only with UME_OIDC_AUTHORITY. Set the authority too, or remove the secret and enter it in the setup wizard"
+  [ -z "${FORS_OIDC_CLIENT_SECRET:-}" ] || note "FORS_OIDC_CLIENT_SECRET is left out: it is used only with FORS_OIDC_AUTHORITY. Set the authority too, or remove the secret and enter it in the setup wizard"
 fi
 # An example value left in a sign-in variable declares a wrong provider or secret, and the wizard stays closed.
-case "${UME_OIDC_AUTHORITY:-}" in
+case "${FORS_OIDC_AUTHORITY:-}" in
   "" | https://*) ;;
-  *) note "UME_OIDC_AUTHORITY must be the https URL of your OIDC provider (the admin API refuses to start with it)" ;;
+  *) note "FORS_OIDC_AUTHORITY must be the https URL of your OIDC provider (the admin API refuses to start with it)" ;;
 esac
-case "${UME_OIDC_AUTHORITY:-}${UME_OIDC_CLIENT_SECRET:-}" in
-  *example.se* | *example.com* | *CHANGE*) note "UME_OIDC_AUTHORITY or UME_OIDC_CLIENT_SECRET still holds an example value: set the real one, or remove both for the setup wizard" ;;
+case "${FORS_OIDC_AUTHORITY:-}${FORS_OIDC_CLIENT_SECRET:-}" in
+  *example.se* | *example.com* | *CHANGE*) note "FORS_OIDC_AUTHORITY or FORS_OIDC_CLIENT_SECRET still holds an example value: set the real one, or remove both for the setup wizard" ;;
 esac
 
 # Static configuration files (services run read-only, so they get them from a volume).
@@ -107,8 +115,8 @@ F=/conf
 mkdir -p "$F/postgres-init" "$F/postgres" "$F/redis" "$F/migrations" "$F/migrations/integration-manifests"
 # Integration manifest (optional): rewritten from the variable on every start, so removing it provisions nothing more.
 rm -f "$F/migrations/integration-manifests/"*.json
-if [ -n "${UME_INTEGRATION_MANIFEST:-}" ]; then
-  printf '%s' "$UME_INTEGRATION_MANIFEST" > "$F/migrations/integration-manifests/manifest.json"
+if [ -n "${FORS_INTEGRATION_MANIFEST:-}" ]; then
+  printf '%s' "$FORS_INTEGRATION_MANIFEST" > "$F/migrations/integration-manifests/manifest.json"
 fi
 cp /config/postgres-init.sql "$F/postgres-init/10-roles.sql"
 cp /config/pg_hba.conf "$F/postgres/pg_hba.conf"
@@ -125,13 +133,13 @@ chown 1654:1654 /integration-secrets && chmod 700 /integration-secrets
 echo "bootstrap: certificates and secrets ready"
 # How sign-in is set up. The bootstrap has no network and cannot see whether setup was finished, so this is printed on
 # every run.
-if [ -n "${UME_OIDC_AUTHORITY:-}" ]; then
-  echo "bootstrap: sign-in to the admin console is declared by the stack's variables (UME_OIDC_AUTHORITY), so the setup wizard stays closed: sign in at https://$ADMIN_HOST:${UME_ADMIN_PORT:-9443}/ (behind a reverse proxy https://$ADMIN_HOST/)"
+if [ -n "${FORS_OIDC_AUTHORITY:-}" ]; then
+  echo "bootstrap: sign-in to the admin console is declared by the stack's variables (FORS_OIDC_AUTHORITY), so the setup wizard stays closed: sign in at https://$ADMIN_HOST:${FORS_ADMIN_PORT:-9443}/ (behind a reverse proxy https://$ADMIN_HOST/)"
 else
-  echo "bootstrap: sign-in to the admin console is set in the setup wizard: https://$ADMIN_HOST:${UME_ADMIN_PORT:-9443}/setup (behind a reverse proxy https://$ADMIN_HOST/setup), with the setup code from the adminapi container's log (printed at its first start, and after a new UME_SETUP_REOPEN); skip this if you can already sign in"
+  echo "bootstrap: sign-in to the admin console is set in the setup wizard: https://$ADMIN_HOST:${FORS_ADMIN_PORT:-9443}/setup (behind a reverse proxy https://$ADMIN_HOST/setup), with the setup code from the adminapi container's log (printed at its first start, and after a new FORS_SETUP_REOPEN); skip this if you can already sign in"
 fi
 case ",${COMPOSE_PROFILES:-}," in
-  *,data,*) [ -n "${UME_DATA_AUTHORITY:-}${UME_OIDC_AUTHORITY:-}" ] ||
-    note "the Data API has no token issuer (UME_DATA_AUTHORITY, else UME_OIDC_AUTHORITY), so it accepts only Data API keys; the setup wizard's provider does not apply to it" ;;
+  *,data,*) [ -n "${FORS_DATA_AUTHORITY:-}${FORS_OIDC_AUTHORITY:-}" ] ||
+    note "the Data API has no token issuer (FORS_DATA_AUTHORITY, else FORS_OIDC_AUTHORITY), so it accepts only Data API keys; the setup wizard's provider does not apply to it" ;;
 esac
 [ -z "$notes" ] || printf '%s\n' "${notes#?}"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end test of the optional Keycloak (deploy/keycloak, docs/keycloak.md), with Docker only:
 #   - init-keycloak.sh against a stand-in gateway deployment (internal CA, secrets, deploy/.env);
-#   - the gateway's Postgres image with postgres/init.sql and pg_hba.conf (TLS, role ume_keycloak, database keycloak);
+#   - the gateway's Postgres image with postgres/init.sql and pg_hba.conf (TLS, role fors_keycloak, database keycloak);
 #   - compose.yaml in production mode (optimized build, HTTPS, read-only file system) and the realm import;
 #   - a second system's realm file in additions/: both systems' clients carry only their own roles in tokens, and
 #     departmentCodes reaches the gateway's token;
@@ -41,18 +41,18 @@ openssl x509 -req -in "$work/pg.csr" -CA "$work/certs/ca.pem" -CAkey "$work/cert
 cp "$work/certs/ca.pem" "$work/certs/postgres/ca.pem"
 for role in bootstrap migrator gateway admin; do openssl rand -hex 16 > "$work/secrets/postgres/${role}_password"; done
 cat > "$work/deploy/.env" <<EOF
-UME_CERTS_DIR=$work/certs
-UME_SECRETS_DIR=$work/secrets
-UME_ADMIN_PUBLIC_HOST=admin.test.invalid
-UME_ADMIN_BIND=127.0.0.1
-UME_ADMIN_PORT=9443
+FORS_CERTS_DIR=$work/certs
+FORS_SECRETS_DIR=$work/secrets
+FORS_ADMIN_PUBLIC_HOST=admin.test.invalid
+FORS_ADMIN_BIND=127.0.0.1
+FORS_ADMIN_PORT=9443
 EOF
 
 step "init-keycloak.sh"
 "$work/deploy/keycloak/init-keycloak.sh" --host "localhost:$port" --port "$port" --no-chown >/dev/null
-grep -q "UME_ADMIN_PUBLIC_URL=https://admin.test.invalid:9443" "$work/deploy/keycloak/.env" || fail "admin URL not derived from deploy/.env"
+grep -q "FORS_ADMIN_PUBLIC_URL=https://admin.test.invalid:9443" "$work/deploy/keycloak/.env" || fail "admin URL not derived from deploy/.env"
 [ -s "$work/secrets/adminapi/Oidc__ClientSecret" ] || fail "admin API client secret not created"
-cmp -s <(tr -d '\n' < "$work/secrets/adminapi/Oidc__ClientSecret") "$work/secrets/keycloak-import/ume-admin-client-secret" || fail "client secrets differ"
+cmp -s <(tr -d '\n' < "$work/secrets/adminapi/Oidc__ClientSecret") "$work/secrets/keycloak-import/admin-client-secret" || fail "client secrets differ"
 first_secret="$(cat "$work/secrets/keycloak/db_password")"
 "$work/deploy/keycloak/init-keycloak.sh" --no-chown >/dev/null
 [ "$first_secret" = "$(cat "$work/secrets/keycloak/db_password")" ] || fail "a re-run replaced an existing secret"
@@ -61,7 +61,7 @@ chmod -R a+rX "$work/certs" "$work/secrets"
 chmod 600 "$work/certs/postgres/postgres.key"
 docker run --rm --user 0 --entrypoint chown -v "$work/certs/postgres:/c" "$postgres_image" 70:70 /c/postgres.key
 
-step "Postgres with init.sql (TLS, ume_keycloak, database keycloak)"
+step "Postgres with init.sql (TLS, fors_keycloak, database keycloak)"
 docker network create --internal "$net" >/dev/null
 # Labelled like a Compose service, so Backup-Database.ps1 and Restore-Database.ps1 find it.
 docker run -d --name "$pg" --network "$net" --network-alias postgres --user 70:70 \
@@ -125,7 +125,7 @@ step "Keycloak and the realm import (production mode)"
 mkdir -p "$work/additions"
 cat > "$work/additions/20-other.json" <<'EOF'
 {
-  "realm": "ume",
+  "realm": "fors",
   "roles": { "realm": [ { "name": "other-admin" }, { "name": "other-viewer" } ] },
   "clients": [
     {
@@ -147,9 +147,9 @@ cat > "$work/additions/05-upstream-realm.json" <<'EOF2'
   "groups": [ { "name": "GG-Llm-Admins" } ],
   "clients": [
     {
-      "clientId": "ume-broker", "enabled": true, "protocol": "openid-connect", "publicClient": false, "secret": "broker-secret",
+      "clientId": "fors-broker", "enabled": true, "protocol": "openid-connect", "publicClient": false, "secret": "broker-secret",
       "standardFlowEnabled": true, "directAccessGrantsEnabled": false,
-      "redirectUris": [ "$(env:KC_PUBLIC_URL)/realms/ume/broker/upstream/endpoint" ],
+      "redirectUris": [ "$(env:KC_PUBLIC_URL)/realms/fors/broker/upstream/endpoint" ],
       "protocolMappers": [
         { "name": "groups", "protocol": "openid-connect", "protocolMapper": "oidc-group-membership-mapper",
           "config": { "claim.name": "groups", "full.path": "false", "id.token.claim": "true", "access.token.claim": "true", "userinfo.token.claim": "true" } },
@@ -176,7 +176,7 @@ cat > "$work/additions/05-upstream-realm.json" <<'EOF2'
 EOF2
 cat > "$work/additions/30-broker.json" <<'EOF2'
 {
-  "realm": "ume",
+  "realm": "fors",
   "identityProviders": [
     {
       "alias": "upstream", "displayName": "Organisation (stand-in)", "providerId": "oidc", "enabled": true, "trustEmail": true,
@@ -186,7 +186,7 @@ cat > "$work/additions/30-broker.json" <<'EOF2'
         "authorizationUrl": "$(env:KC_PUBLIC_URL)/realms/upstream/protocol/openid-connect/auth",
         "tokenUrl": "https://keycloak:8443/realms/upstream/protocol/openid-connect/token",
         "jwksUrl": "https://keycloak:8443/realms/upstream/protocol/openid-connect/certs",
-        "validateSignature": "true", "useJwksUrl": "true", "clientId": "ume-broker", "clientSecret": "broker-secret",
+        "validateSignature": "true", "useJwksUrl": "true", "clientId": "fors-broker", "clientSecret": "broker-secret",
         "clientAuthMethod": "client_secret_post", "defaultScope": "openid email profile", "syncMode": "FORCE", "pkceEnabled": "true", "pkceMethod": "S256"
       }
     }
@@ -202,7 +202,7 @@ EOF2
 # Read-only LDAP user federation, as for Active Directory (vendor "other" here: the test directory is OpenLDAP).
 cat > "$work/additions/25-ldap.json" <<'EOF2'
 {
-  "realm": "ume",
+  "realm": "fors",
   "components": {
     "org.keycloak.storage.UserStorageProvider": [
       {
@@ -234,9 +234,9 @@ upstream_password="Up-$(openssl rand -hex 8)"
 printf 'OTHER_APP_SECRET=other-secret\nUPSTREAM_PASSWORD=%s\nKC_PUBLIC_URL=https://localhost:%s\nLDAP_BIND_PASSWORD=%s\n' "$upstream_password" "$port" "$ldap_admin_password" > "$work/additions/import.env"
 chmod -R a+rX "$work/additions"
 cat >> "$work/deploy/keycloak/.env" <<EOF
-UME_GATEWAY_DATA_NETWORK=$net
-UME_KEYCLOAK_ADDITIONS_DIR=$work/additions
-UME_KEYCLOAK_IMPORT_ENV=$work/additions/import.env
+FORS_GATEWAY_DATA_NETWORK=$net
+FORS_KEYCLOAK_ADDITIONS_DIR=$work/additions
+FORS_KEYCLOAK_IMPORT_ENV=$work/additions/import.env
 EOF
 compose() { docker compose -p "$id" -f "$work/deploy/keycloak/compose.yaml" --env-file "$work/deploy/keycloak/.env" "$@"; }
 compose up -d --build --wait keycloak >/dev/null 2>&1 || { compose logs keycloak | tail -40; fail "Keycloak did not become healthy"; }
@@ -251,7 +251,7 @@ token() {
   token_once
 }
 token_once() {
-  curl -s --cacert "$work/certs/ca.pem" -d grant_type=client_credentials -d client_id=ume-realm-import -d "client_secret=$(cat "$work/secrets/keycloak/import_client_secret")" \
+  curl -s --cacert "$work/certs/ca.pem" -d grant_type=client_credentials -d client_id=fors-realm-import -d "client_secret=$(cat "$work/secrets/keycloak/import_client_secret")" \
     "$kc/realms/master/protocol/openid-connect/token" \
     | python3 -I -c 'import json,sys; t=sys.stdin.read(); print(json.loads(t)["access_token"]) if "access_token" in t else sys.exit("no token: " + t)'
 }
@@ -259,36 +259,36 @@ api() { local t; t="$(token)"; curl_kc -H "Authorization: Bearer $t" -H 'Content
 json() { python3 -I -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
 
 step "realm checks"
-[ "$(api "$kc/admin/realms/ume" | json 'd["bruteForceProtected"], d["passwordPolicy"].startswith("length(12)"), d["registrationAllowed"]')" = "True True False" ] \
+[ "$(api "$kc/admin/realms/fors" | json 'd["bruteForceProtected"], d["passwordPolicy"].startswith("length(12)"), d["registrationAllowed"]')" = "True True False" ] \
   || fail "realm settings not applied"
-api "$kc/admin/realms/ume/users/profile" | json '[a["name"] for a in d["attributes"]]' | grep -q "'teamCodes'" || fail "user profile lacks teamCodes"
-admin_client="$(api "$kc/admin/realms/ume/clients?clientId=ume-admin" | json 'd[0]["id"]')"
-other_client="$(api "$kc/admin/realms/ume/clients?clientId=other-app" | json 'd[0]["id"]')"
-[ "$(api "$kc/admin/realms/ume/clients/$admin_client" | json 'd["fullScopeAllowed"], d["redirectUris"]')" = "False ['https://admin.test.invalid:9443/signin-oidc']" ] \
-  || fail "ume-admin client wrong"
-[ "$(api "$kc/admin/realms/ume/clients/$admin_client/client-secret" | json 'd["value"]')" = "$(cat "$work/secrets/keycloak-import/ume-admin-client-secret")" ] \
-  || fail "ume-admin secret not the admin API's"
-[ "$(api "$kc/admin/realms/ume/authentication/required-actions/CONFIGURE_TOTP" | json 'd["defaultAction"]')" = "False" ] || fail "OTP is enforced"
+api "$kc/admin/realms/fors/users/profile" | json '[a["name"] for a in d["attributes"]]' | grep -q "'teamCodes'" || fail "user profile lacks teamCodes"
+admin_client="$(api "$kc/admin/realms/fors/clients?clientId=fors-admin" | json 'd[0]["id"]')"
+other_client="$(api "$kc/admin/realms/fors/clients?clientId=other-app" | json 'd[0]["id"]')"
+[ "$(api "$kc/admin/realms/fors/clients/$admin_client" | json 'd["fullScopeAllowed"], d["redirectUris"]')" = "False ['https://admin.test.invalid:9443/signin-oidc']" ] \
+  || fail "fors-admin client wrong"
+[ "$(api "$kc/admin/realms/fors/clients/$admin_client/client-secret" | json 'd["value"]')" = "$(cat "$work/secrets/keycloak-import/admin-client-secret")" ] \
+  || fail "fors-admin secret not the admin API's"
+[ "$(api "$kc/admin/realms/fors/authentication/required-actions/CONFIGURE_TOTP" | json 'd["defaultAction"]')" = "False" ] || fail "OTP is enforced"
 
 step "a user with roles of both systems: each token carries only its own system's roles"
-api -X POST "$kc/admin/realms/ume/users" -d '{"username":"pilot.user","enabled":true,"email":"pilot.user@test.invalid","firstName":"Pilot","lastName":"User","attributes":{"departmentCodes":["1000"],"teamCodes":["T1"]}}' >/dev/null
-user="$(api "$kc/admin/realms/ume/users?username=pilot.user&exact=true" | json 'd[0]["id"]')"
-roles="$(api "$kc/admin/realms/ume/roles" | json 'json.dumps([r for r in d if r["name"] in ("gateway-admin","other-admin")])')"
-api -X POST "$kc/admin/realms/ume/users/$user/role-mappings/realm" -d "$roles" >/dev/null
-claims() { api "$kc/admin/realms/ume/clients/$1/evaluate-scopes/generate-example-access-token?scope=openid&userId=$user"; }
+api -X POST "$kc/admin/realms/fors/users" -d '{"username":"pilot.user","enabled":true,"email":"pilot.user@test.invalid","firstName":"Pilot","lastName":"User","attributes":{"departmentCodes":["1000"],"teamCodes":["T1"]}}' >/dev/null
+user="$(api "$kc/admin/realms/fors/users?username=pilot.user&exact=true" | json 'd[0]["id"]')"
+roles="$(api "$kc/admin/realms/fors/roles" | json 'json.dumps([r for r in d if r["name"] in ("gateway-admin","other-admin")])')"
+api -X POST "$kc/admin/realms/fors/users/$user/role-mappings/realm" -d "$roles" >/dev/null
+claims() { api "$kc/admin/realms/fors/clients/$1/evaluate-scopes/generate-example-access-token?scope=openid&userId=$user"; }
 [ "$(claims "$admin_client" | json 'sorted(d.get("roles", [])), d.get("departmentCodes"), d.get("teamCodes")')" = "['gateway-admin'] ['1000'] ['T1']" ] \
   || fail "gateway token: $(claims "$admin_client")"
 [ "$(claims "$other_client" | json 'sorted(d.get("roles", []))')" = "['other-admin']" ] || fail "other token: $(claims "$other_client")"
 
 step "one group for both systems: its role mappings give each system its own role, and the gateway sees the group's name"
-api -X POST "$kc/admin/realms/ume/groups" -d '{"name":"ume-admins"}' >/dev/null
-group="$(api "$kc/admin/realms/ume/groups?search=ume-admins&exact=true" | json 'd[0]["id"]')"
-api -X POST "$kc/admin/realms/ume/groups/$group/role-mappings/realm" -d "$roles" >/dev/null
-api -X POST "$kc/admin/realms/ume/users" -d '{"username":"group.user","enabled":true,"email":"group.user@test.invalid","firstName":"Group","lastName":"User","attributes":{"departmentCodes":["1000"]}}' >/dev/null
-group_user="$(api "$kc/admin/realms/ume/users?username=group.user&exact=true" | json 'd[0]["id"]')"
-api -X PUT "$kc/admin/realms/ume/users/$group_user/groups/$group" >/dev/null
-id_claims() { api "$kc/admin/realms/ume/clients/$1/evaluate-scopes/generate-example-id-token?scope=openid&userId=$group_user"; }
-[ "$(id_claims "$admin_client" | json 'sorted(d.get("roles", [])), d.get("groups")')" = "['gateway-admin'] ['ume-admins']" ] \
+api -X POST "$kc/admin/realms/fors/groups" -d '{"name":"fors-admins"}' >/dev/null
+group="$(api "$kc/admin/realms/fors/groups?search=fors-admins&exact=true" | json 'd[0]["id"]')"
+api -X POST "$kc/admin/realms/fors/groups/$group/role-mappings/realm" -d "$roles" >/dev/null
+api -X POST "$kc/admin/realms/fors/users" -d '{"username":"group.user","enabled":true,"email":"group.user@test.invalid","firstName":"Group","lastName":"User","attributes":{"departmentCodes":["1000"]}}' >/dev/null
+group_user="$(api "$kc/admin/realms/fors/users?username=group.user&exact=true" | json 'd[0]["id"]')"
+api -X PUT "$kc/admin/realms/fors/users/$group_user/groups/$group" >/dev/null
+id_claims() { api "$kc/admin/realms/fors/clients/$1/evaluate-scopes/generate-example-id-token?scope=openid&userId=$group_user"; }
+[ "$(id_claims "$admin_client" | json 'sorted(d.get("roles", [])), d.get("groups")')" = "['gateway-admin'] ['fors-admins']" ] \
   || fail "gateway ID token for a group member: $(id_claims "$admin_client")"
 [ "$(id_claims "$other_client" | json 'sorted(d.get("roles", []))')" = "['other-admin']" ] || fail "other ID token for a group member: $(id_claims "$other_client")"
 
@@ -307,37 +307,37 @@ signin() { # signin USER PASSWORD LOGIN-REALM [extra auth parameters]: prints th
   local user="$1" password="$2" realm="$3" extra="${4:-}" verifier challenge url action final code id_token
   jar="$work/cookies-$user"; rm -f "$jar"; verifier="$(openssl rand -hex 32)"
   challenge="$(printf '%s' "$verifier" | openssl dgst -binary -sha256 | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
-  url="$kc/realms/ume/protocol/openid-connect/auth?client_id=ume-admin&response_type=code&scope=openid$extra&redirect_uri=$(python3 -I -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$redirect")&code_challenge=$challenge&code_challenge_method=S256&state=s1&nonce=n1"
+  url="$kc/realms/fors/protocol/openid-connect/auth?client_id=fors-admin&response_type=code&scope=openid$extra&redirect_uri=$(python3 -I -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$redirect")&code_challenge=$challenge&code_challenge_method=S256&state=s1&nonce=n1"
   [ "$(follow "$url")" = PAGE ] || fail "$user: expected a login page"
   action="$(python3 -I -c 'import html,re,sys; print(html.unescape(re.search(r"action=\"([^\"]+)\"", open(sys.argv[1]).read()).group(1)))' "$work/page")"
   case "$action" in "$kc/realms/$realm/"*) ;; *) fail "$user: the login form is not realm $realm's: $action";; esac
   final="$(follow "$action" --data-urlencode "username=$user" --data-urlencode "password=$password")"
   case "$final" in "$redirect?"*code=*) ;; *) fail "$user: sign-in did not come back with a code: $final $(head -c 400 "$work/page")";; esac
   code="$(python3 -I -c 'import sys,urllib.parse; print(urllib.parse.parse_qs(urllib.parse.urlparse(sys.argv[1]).query)["code"][0])' "$final")"
-  id_token="$(curl_kc -d grant_type=authorization_code -d client_id=ume-admin -d "client_secret=$(cat "$work/secrets/keycloak-import/ume-admin-client-secret")" \
-    -d "code=$code" -d "redirect_uri=$redirect" -d "code_verifier=$verifier" "$kc/realms/ume/protocol/openid-connect/token" | json 'd["id_token"]')"
+  id_token="$(curl_kc -d grant_type=authorization_code -d client_id=fors-admin -d "client_secret=$(cat "$work/secrets/keycloak-import/admin-client-secret")" \
+    -d "code=$code" -d "redirect_uri=$redirect" -d "code_verifier=$verifier" "$kc/realms/fors/protocol/openid-connect/token" | json 'd["id_token"]')"
   python3 -I -c 'import base64,json,sys; p=sys.argv[1].split(".")[1]; d=json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4))); print(sorted(d.get("roles",[])), d.get("departmentCodes"), d["iss"])' "$id_token"
 }
 
 step "brokered sign-in: an organisation's user gets the gateway's roles and departmentCodes"
 claims="$(signin anna.admin "$upstream_password" upstream "&kc_idp_hint=upstream")"
-[ "$claims" = "['gateway-admin'] ['2000'] $kc/realms/ume" ] || fail "brokered token: $claims"
+[ "$claims" = "['gateway-admin'] ['2000'] $kc/realms/fors" ] || fail "brokered token: $claims"
 
 step "LDAP federation: a directory user signs in with roles from LDAP groups and departmentCodes from an attribute"
-claims="$(signin lars.ldap "$ldap_user_password" ume)"
-[ "$claims" = "['department-admin'] ['3000'] $kc/realms/ume" ] || fail "LDAP token: $claims"
+claims="$(signin lars.ldap "$ldap_user_password" fors)"
+[ "$claims" = "['department-admin'] ['3000'] $kc/realms/fors" ] || fail "LDAP token: $claims"
 
 step "local account: a password sign-in with roles and departmentCodes set in Keycloak"
-api -X PUT "$kc/admin/realms/ume/users/$user/reset-password" -d "{\"type\":\"password\",\"value\":\"$local_password\",\"temporary\":false}" >/dev/null
-claims="$(signin pilot.user "$local_password" ume)"
-[ "$claims" = "['gateway-admin'] ['1000'] $kc/realms/ume" ] || fail "local token: $claims"
+api -X PUT "$kc/admin/realms/fors/users/$user/reset-password" -d "{\"type\":\"password\",\"value\":\"$local_password\",\"temporary\":false}" >/dev/null
+claims="$(signin pilot.user "$local_password" fors)"
+[ "$claims" = "['gateway-admin'] ['1000'] $kc/realms/fors" ] || fail "local token: $claims"
 
 step "a second import changes nothing and deletes nothing"
-api -X POST "$kc/admin/realms/ume/clients" -d '{"clientId":"made-by-hand","enabled":true}' >/dev/null
+api -X POST "$kc/admin/realms/fors/clients" -d '{"clientId":"made-by-hand","enabled":true}' >/dev/null
 compose run --rm realm-import > "$work/import2.log" 2>&1 || { tail -40 "$work/import2.log"; fail "second import failed"; }
-api "$kc/admin/realms/ume/clients?clientId=made-by-hand" | json 'len(d)' | grep -qx 1 || fail "the import deleted a client made by hand"
-api "$kc/admin/realms/ume/clients?clientId=other-app" | json 'len(d)' | grep -qx 1 || fail "the import deleted the other system's client"
-api "$kc/admin/realms/ume/users?username=pilot.user&exact=true" | json 'len(d)' | grep -qx 1 || fail "the import deleted a user"
+api "$kc/admin/realms/fors/clients?clientId=made-by-hand" | json 'len(d)' | grep -qx 1 || fail "the import deleted a client made by hand"
+api "$kc/admin/realms/fors/clients?clientId=other-app" | json 'len(d)' | grep -qx 1 || fail "the import deleted the other system's client"
+api "$kc/admin/realms/fors/users?username=pilot.user&exact=true" | json 'len(d)' | grep -qx 1 || fail "the import deleted a user"
 
 step "backup and restore of the keycloak database"
 # With PowerShell, the operators' scripts; without, the same pg_dump/pg_restore calls.
@@ -347,7 +347,7 @@ if command -v pwsh >/dev/null; then
 else
   pg_exec pg_dump -U postgres -d keycloak -Fc -f /tmp/keycloak.dump
 fi
-api -X DELETE "$kc/admin/realms/ume/users/$user" >/dev/null
+api -X DELETE "$kc/admin/realms/fors/users/$user" >/dev/null
 if command -v pwsh >/dev/null; then
   pwsh -NoProfile -File "$repo/deploy/Restore-Database.ps1" -ComposeProject "${id}gw" -Database keycloak -KeycloakProject "$id" \
     -Backup "$work/keycloak.dump" -ConfirmRestore >/dev/null 2>&1 && fail "restore ran while Keycloak was running"
@@ -360,7 +360,7 @@ else
   pg_exec pg_restore -U postgres -d keycloak --clean --if-exists --exit-on-error /tmp/keycloak.dump || fail "restore failed"
 fi
 compose up -d --wait keycloak >/dev/null 2>&1 || fail "Keycloak did not start after the restore"
-api "$kc/admin/realms/ume/users?username=pilot.user&exact=true" | json 'len(d)' | grep -qx 1 || fail "restore did not bring the user back"
+api "$kc/admin/realms/fors/users?username=pilot.user&exact=true" | json 'len(d)' | grep -qx 1 || fail "restore did not bring the user back"
 pg_exec psql -U postgres -d gatewaydb -tAc "SELECT 1" | grep -qx 1 || fail "gatewaydb affected"
 
 step "hardening"

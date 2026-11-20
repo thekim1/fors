@@ -36,7 +36,7 @@ container_stats() {
 
 # Rows the platform has stored per message so far: the gateway's usage records, Bifrost's request logs. Bifrost drops a
 # log entry when its write queue is full (plugins/logging/writer.go), so rows per request show whether all were logged.
-records_of() { case "$1" in ume) echo 'SELECT count(*) FROM "UsageRecords"' ;; bifrost) echo 'SELECT count(*) FROM logs' ;; esac; }
+records_of() { case "$1" in fors) echo 'SELECT count(*) FROM "UsageRecords"' ;; bifrost) echo 'SELECT count(*) FROM logs' ;; esac; }
 stored_records() {
   local q; q=$(records_of "$1"); [[ -n "$q" ]] || return 1
   read -r svc db < <(db_of "$1")
@@ -44,8 +44,8 @@ stored_records() {
 }
 
 # Postgres statements and Redis commands executed so far (everything: request path and background work).
-db_of() { case "$1" in ume) echo "ume-db gatewaydb" ;; eneo) echo "eneo-db eneo" ;; bifrost) echo "bifrost-db bifrost" ;; esac; }
-redis_of() { case "$1" in ume) echo ume-redis ;; eneo) echo eneo-redis ;; esac; } # Bifrost has no Redis: reported as null
+db_of() { case "$1" in fors) echo "fors-db gatewaydb" ;; eneo) echo "eneo-db eneo" ;; bifrost) echo "bifrost-db bifrost" ;; esac; }
+redis_of() { case "$1" in fors) echo fors-redis ;; eneo) echo eneo-redis ;; esac; } # Bifrost has no Redis: reported as null
 pg_calls() {
   read -r svc db < <(db_of "$1")
   "${COMPOSE[@]}" exec -T "$svc" psql -U postgres -d "$db" -tAc \
@@ -58,7 +58,7 @@ redis_calls() {
 
 services_for() {
   case "$1" in
-    ume) echo "ume-gateway $(for i in $(seq 2 "${REPLICAS:-1}"); do printf 'ume-gateway-%s ' "$i"; done)ume-db ume-redis fake-llm" ;;
+    fors) echo "fors-gateway $(for i in $(seq 2 "${REPLICAS:-1}"); do printf 'fors-gateway-%s ' "$i"; done)fors-db fors-redis fake-llm" ;;
     eneo) echo "eneo-backend eneo-worker eneo-db eneo-redis fake-llm" ;;
     bifrost) echo "bifrost bifrost-db fake-llm" ;;
     fake) echo "fake-llm" ;;
@@ -66,7 +66,7 @@ services_for() {
 }
 
 k6() { # target stream vus duration out
-  "${COMPOSE[@]}" --profile tools run --rm -e TARGET="$1" -e STREAM="$2" -e VUS="$3" -e DURATION="$4" -e OUT="$5" -e KEY="${KEY:-}" -e NO_REUSE="${NO_REUSE:-false}" -e UME_TARGETS="${UME_TARGETS:-}" \
+  "${COMPOSE[@]}" --profile tools run --rm -e TARGET="$1" -e STREAM="$2" -e VUS="$3" -e DURATION="$4" -e OUT="$5" -e KEY="${KEY:-}" -e NO_REUSE="${NO_REUSE:-false}" -e FORS_TARGETS="${FORS_TARGETS:-}" \
     -e ENEO_ASSISTANT="${ENEO_ASSISTANT:-}" -e ENEO_KEY="${ENEO_KEY:-}" -e BIFROST_MODEL="${BIFROST_MODEL:-fake-chat}" \
     k6 run -q /scripts/chat.js 2>&1 | grep -vE '^\s*$|level=warn' || true
 }
@@ -75,26 +75,26 @@ k6() { # target stream vus duration out
 BIFROST_KEY="sk-bf-compare-0123456789abcdef"
 
 start_platform() {
-  "${COMPOSE[@]}" --profile ume --profile eneo --profile bifrost down -v --remove-orphans >/dev/null 2>&1 || true
+  "${COMPOSE[@]}" --profile fors --profile eneo --profile bifrost down -v --remove-orphans >/dev/null 2>&1 || true
   case "$1" in
     fake)
       "${COMPOSE[@]}" up -d fake-llm >/dev/null
       wait_http http://127.0.0.1:18090/ '^200$'
       ;;
-    ume)
-      "${COMPOSE[@]}" --profile ume up -d --wait ume-db ume-redis fake-llm >/dev/null
-      "${COMPOSE[@]}" exec -T ume-db psql -U postgres -d gatewaydb -qc "CREATE EXTENSION IF NOT EXISTS pg_stat_statements" >/dev/null
+    fors)
+      "${COMPOSE[@]}" --profile fors up -d --wait fors-db fors-redis fake-llm >/dev/null
+      "${COMPOSE[@]}" exec -T fors-db psql -U postgres -d gatewaydb -qc "CREATE EXTENSION IF NOT EXISTS pg_stat_statements" >/dev/null
       # Postgres is healthy inside Docker a moment before the host port forwards connections: retry the seed.
       KEY=""
       for attempt in 1 2 3 4 5; do
-        KEY=$(dotnet run -c Release --project "$REPO/benchmarks/Ume.LlmGateway.Benchmarks" -- compare-seed \
+        KEY=$(dotnet run -c Release --project "$REPO/benchmarks/Fors.Benchmarks" -- compare-seed \
           "Host=127.0.0.1;Port=15432;Database=gatewaydb;Username=postgres;Password=postgres" "$PEPPER" http://fake-llm:8080/v1 \
           2>results/seed-error.log | tail -1) || true
-        [[ "$KEY" == ume-sk-* ]] && break
+        [[ "$KEY" == fors-sk-* ]] && break
         sleep 3
       done
-      [[ "$KEY" == ume-sk-* ]] || { echo "Seeding the gateway database failed:" >&2; tail -20 results/seed-error.log >&2; exit 1; }
-      "${COMPOSE[@]}" --profile ume up -d ume-gateway >/dev/null
+      [[ "$KEY" == fors-sk-* ]] || { echo "Seeding the gateway database failed:" >&2; tail -20 results/seed-error.log >&2; exit 1; }
+      "${COMPOSE[@]}" --profile fors up -d fors-gateway >/dev/null
       wait_http http://127.0.0.1:18080/v1/models '^401$' # up: answers, but wants a key
       ;;
     eneo)
@@ -165,4 +165,4 @@ warm_up() { # platform
   if [[ $1 == bifrost ]]; then sleep 11; fi # its warm-up log rows and counter dump land before the first scenario
 }
 
-stop_all() { "${COMPOSE[@]}" --profile ume --profile eneo --profile bifrost down -v --remove-orphans >/dev/null 2>&1 || true; }
+stop_all() { "${COMPOSE[@]}" --profile fors --profile eneo --profile bifrost down -v --remove-orphans >/dev/null 2>&1 || true; }

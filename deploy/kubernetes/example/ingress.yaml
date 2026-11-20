@@ -18,7 +18,7 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts: [llm.example.se]           # change
-      secretName: ume-gateway-public-tls  # your certificate (or cert-manager's)
+      secretName: fors-gateway-public-tls  # your certificate (or cert-manager's)
   rules:
     - host: llm.example.se              # change
       http:
@@ -37,7 +37,7 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts: [llm-admin.example.se]     # change
-      secretName: ume-admin-public-tls
+      secretName: fors-admin-public-tls
   rules:
     - host: llm-admin.example.se        # change
       http:

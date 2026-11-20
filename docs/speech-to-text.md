@@ -5,15 +5,15 @@ Speaches or Azure OpenAI) are served at `POST /v1/audio/transcriptions`, and Eng
 `POST /v1/audio/translations`. Clients use the OpenAI SDKs unchanged:
 
 ```bash
-curl https://<gateway>/v1/audio/transcriptions -H "Authorization: Bearer $UME_API_KEY" \
-  -F model=ume/transcribe -F language=sv -F file=@samtal.mp3
+curl https://<gateway>/v1/audio/transcriptions -H "Authorization: Bearer $FORS_API_KEY" \
+  -F model=fors/transcribe -F language=sv -F file=@samtal.mp3
 ```
 
 **Setting it up.** OpenAI, Azure OpenAI and Foundry providers serve speech to text; an OpenAI-compatible server needs
 *Speech to text* under *Endpoints this server offers*. Add the model with kind
 *Speech to text* (`Transcription`; discovery does this for `whisper*` and `*-transcribe` models) and put it behind an
 alias with the same kind. Fallback, residency, provider allow-lists, rate limits, budgets and routing rules
-(`endpoint == "audio_transcriptions"`) work as for chat. The dev seed has `ume/transcribe` on FakeLlm.
+(`endpoint == "audio_transcriptions"`) work as for chat. The dev seed has `fors/transcribe` on FakeLlm.
 
 **Prices.** Whisper-style models are priced by the duration of the audio (*Audio input by duration (USD)* in the price
 form, with the unit second, minute or hour; stored per minute as `audioPerMinuteUsd`). Such a model's audio tokens, if

@@ -1,6 +1,9 @@
-# Umeå kommun LLM gateway
+# Fors
 
-**Website and documentation: <https://thekim1.github.io/llmgateway/>**
+An LLM gateway for Swedish municipalities and other organisations. Until 0.11 it was called the Umeå kommun LLM
+gateway (`ume-llm-gateway`); upgrading from it: [upgrade guide](docs/upgrade-guide.md#unreleased-0120-the-rename-to-fors).
+
+**Website and documentation: <https://thekim1.github.io/fors/>**
 
 One gateway between an organisation's applications and every language model: virtual keys that teams can manage themselves, department/team/key budgets (in USD, or token quotas for on-prem capacity),
 routing rules that keep personal data on-prem, residency restrictions, provider fallback and retries, request policies
@@ -33,8 +36,8 @@ Up to about 50 messages/s, one host with 2 vCPU, 4 GB RAM and 20 GB disk plus us
 ([Sizing](docs/production-setup.md#sizing)):
 
 ```bash
-curl -fsSLO https://github.com/thekim1/llmgateway/releases/download/vX.Y.Z/ume-llm-gateway-X.Y.Z.tar.gz
-tar -xzf ume-llm-gateway-X.Y.Z.tar.gz && cd ume-llm-gateway-X.Y.Z
+curl -fsSLO https://github.com/thekim1/fors/releases/download/vX.Y.Z/fors-X.Y.Z.tar.gz
+tar -xzf fors-X.Y.Z.tar.gz && cd fors-X.Y.Z
 ./deploy/init-deployment.sh        # asks for the public hostnames and, optionally, the OIDC authority
 docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait
 ```
@@ -55,9 +58,9 @@ Upgrades: [Upgrade guide](docs/upgrade-guide.md).
 Stop the running AppHost before backend or AppHost builds:
 
 ```powershell
-aspire stop --apphost src\Ume.LlmGateway.AppHost\Ume.LlmGateway.AppHost.csproj --non-interactive
-dotnet build UmeLlmGateway.slnx -v q -nologo
-dotnet test --solution UmeLlmGateway.slnx
+aspire stop --apphost src\Fors.AppHost\Fors.AppHost.csproj --non-interactive
+dotnet build Fors.slnx -v q -nologo
+dotnet test --solution Fors.slnx
 Set-Location src\admin-ui
 npm run lint
 npm run typecheck
@@ -75,7 +78,7 @@ Browser tests, benchmarks and the pre-commit hook: [Local development](docs/loca
 
 ## Documentation
 
-Every page below is also on the [website](https://thekim1.github.io/llmgateway/docs/), built from these files by
+Every page below is also on the [website](https://thekim1.github.io/fors/docs/), built from these files by
 `site/` (see [Website](docs/local-development.md#website)).
 
 | Get started | Guides | Operate and reference |
@@ -103,7 +106,7 @@ the [Demo script](docs/demo-script.md) and the [comparison with agentgateway](do
 
 ## Licence
 
-Copyright © 2026 Kim Vallén, Nichlas Löfdahl and Umeå kommun. Licensed under the European Union Public Licence v. 1.2
-(EUPL-1.2), see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). The EUPL is published in every official EU language, Swedish included, and each
-version is equally valid (<https://interoperable-europe.ec.europa.eu/collection/eupl/eupl-text-eupl-12>). Third-party
-components keep their own licences.
+Copyright © 2026 Kim Vallén and Nichlas Löfdahl. Licensed under the Apache License, Version 2.0 (Apache-2.0), see
+[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). Fors is built by two private developers for Swedish municipalities; the
+examples use Umeå kommun, where we work by day. Releases up to and including 0.11.0 were published under the European
+Union Public Licence v. 1.2 (EUPL-1.2) and stay available under it. Third-party components keep their own licences.

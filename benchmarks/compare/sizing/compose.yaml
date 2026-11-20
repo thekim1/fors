@@ -3,7 +3,7 @@
 name: compare-sizing
 services:
   fake-llm:
-    image: ume-llm-gateway/fake-llm:compare
+    image: fors/fake-llm:compare
     cpuset: "0-3"
     environment:
       ASPNETCORE_HTTP_PORTS: "8080"
@@ -31,7 +31,7 @@ services:
     mem_limit: 256m
     command: ["redis-server", "--save", "", "--appendonly", "no"]
   gateway:
-    image: ume-llm-gateway/gateway:compare
+    image: fors/gateway:compare
     cpuset: "8-11"
     cpus: 0.5
     mem_limit: 512m

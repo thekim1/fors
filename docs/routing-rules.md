@@ -15,15 +15,15 @@ asking for the same model name; the rules decide where the request goes. The scr
 
 ### Example 1: use another model if the main model doesn't answer
 
-*Ask for `ume/chat-advanced`. If every provider behind it fails or times out, try `ume/chat-standard` instead.*
+*Ask for `fors/chat-advanced`. If every provider behind it fails or times out, try `fors/chat-standard` instead.*
 
 | Field | Value |
 |---|---|
 | Name | Advanced model with fallback |
 | Applies to | Global |
-| Condition | `model == "ume/chat-advanced"` |
-| Send to | `ume/chat-advanced` (weight 1) |
-| Fallbacks | 1. `ume/chat-standard` |
+| Condition | `model == "fors/chat-advanced"` |
+| Send to | `fors/chat-advanced` (weight 1) |
+| Fallbacks | 1. `fors/chat-standard` |
 
 ![The new rule form with the condition, the target and one fallback](images/routing-fallback-form.png)
 
@@ -33,8 +33,8 @@ After **Create rule** the rule shows up in the list, in the order the gateway ch
 
 How it behaves: the target is tried first (with its own provider order from the route). The fallbacks are tried only when the call fails
 in a way that can be retried (a timeout, 408, 409, 429, a 5xx or a provider configuration error), and never after the response has started
-streaming. Other client errors (such as 400) are returned as they are. The response header `x-ume-fallbacks` counts the extra attempts and
-`x-ume-rule` names the rule. Providers whose circuit breaker is open are moved last, so the fallback is tried before a known-broken primary.
+streaming. Other client errors (such as 400) are returned as they are. The response header `x-fors-fallbacks` counts the extra attempts and
+`x-fors-rule` names the rule. Providers whose circuit breaker is open are moved last, so the fallback is tried before a known-broken primary.
 Only transient failures (timeouts, connection errors, 408, 409, 429, 5xx) count toward the circuit breaker; a provider configuration
 error (such as an upstream 401, 403 or 404) falls back to the next provider without opening the circuit.
 A failure that says when to come back (`Retry-After` or `retry-after-ms`, as Azure OpenAI and OpenAI send with a 429) puts that
@@ -44,7 +44,7 @@ so it does not count toward the provider's circuit, and the provider's other dep
 is `CircuitBreaker:MaxRetryAfter` (default 5 minutes, at most 1 hour; `00:00:00` ignores `Retry-After`).
 The **last** candidate is also retried once after a passing failure (a connection error or 502/503/504 without
 `Retry-After`; not a timeout, a 429 or a client error), after a short jittered delay: a route with a single target no longer
-fails on one network blip. Earlier candidates are not retried, the next candidate is their retry. `x-ume-fallbacks` and the
+fails on one network blip. Earlier candidates are not retried, the next candidate is their retry. `x-fors-fallbacks` and the
 usage record count every extra attempt. Settings: `Gateway:Retry:MaxRetries` (default 1, 0–3; 0 turns it off) and
 `Gateway:Retry:BaseDelayMs` (default 250, doubled per retry).
 A model whose context window (set on the model, or found by discovery) the prompt clearly exceeds is skipped, so a route
@@ -57,14 +57,14 @@ arrays are counted exactly).
 ### Example 2 (advanced): chats with personal data go to an on-prem model
 
 *When the gateway finds personal data in a chat (a personnummer, an email address, a phone number, an IBAN), send the request to
-`ume/chat-onprem` instead of an EU or external provider.*
+`fors/chat-onprem` instead of an EU or external provider.*
 
 | Field | Value |
 |---|---|
 | Name | Personal data stays on-prem |
 | Applies to | Global |
 | Condition | `pii_detected && endpoint == "chat_completions"` |
-| Send to | `ume/chat-onprem` |
+| Send to | `fors/chat-onprem` |
 | Fallbacks | none, on purpose |
 
 ![The new rule form with the pii_detected condition and the on-prem route as target](images/routing-pii-form.png)
@@ -72,7 +72,7 @@ arrays are counted exactly).
 Three things make this safe:
 
 1. **Order matters: the first matching rule wins.** New rules are added last, so use **Check earlier** (the arrow buttons next to *Order*) until the
-   rule is number 1. Otherwise a request with personal data that also matches *Premium via header* would go to `ume/chat-advanced`.
+   rule is number 1. Otherwise a request with personal data that also matches *Premium via header* would go to `fors/chat-advanced`.
 2. **No fallbacks.** If the on-prem model is down the call fails with `503 no_eligible_provider` or `502 all_providers_failed` instead of
    quietly sending the chat to an EU or external provider. Add a fallback only if it is also on-prem.
 3. **Rules never widen access.** A key's allowed providers and residencies are applied after the rules, so the rule cannot send a chat anywhere the
@@ -80,17 +80,17 @@ Three things make this safe:
 
 ![The rule at the top of the list, checked first](images/routing-pii-rule.png)
 
-Check the rule before relying on it with **Test a request**: ask for `ume/chat-standard`, open *Usage values* and set *Personal data* to
+Check the rule before relying on it with **Test a request**: ask for `fors/chat-standard`, open *Usage values* and set *Personal data* to
 *Personal data found*:
 
 ![The Test a request dialog with "Personal data found" selected](images/routing-pii-test-input.png)
 
 The result says which rule applies, which models the request is tried against and why each condition was true or false:
 
-![The test result: Personal data stays on-prem applies, request goes to ume/chat-onprem](images/routing-pii-test-result.png)
+![The test result: Personal data stays on-prem applies, request goes to fors/chat-onprem](images/routing-pii-test-result.png)
 
 On the real gateway (checked with the demo data and a synthetic personnummer): a chat containing `19121212-1212` was served by
-`fake-onprem` (`x-ume-residency: OnPrem`, `x-ume-rule` set), while a chat without personal data went to the EU provider as before.
+`fake-onprem` (`x-fors-residency: OnPrem`, `x-fors-rule` set), while a chat without personal data went to the EU provider as before.
 
 Notes:
 
@@ -115,7 +115,7 @@ how typical rules are written; nothing happens until an administrator switches o
 | Template | Condition | Sends to |
 |---|---|---|
 | Personal data to a local model | `pii_detected && endpoint == "chat_completions"` | `local` (no fallbacks, checked first among global rules) |
-| Opt in to the local model with a header | `headers["x-ume-route"] == "local"` | `local` |
+| Opt in to the local model with a header | `headers["x-fors-route"] == "local"` | `local` |
 | Large prompts to a long-context model | `prompt_tokens > 30000` | `long-context` |
 | Budget nearly used: cheaper model | `budget_used > 90` | `cheap` |
 
@@ -144,7 +144,7 @@ and the migration skips a template if a global rule with the same name already e
 | Owners (`scopeIds`) | For a non-global rule: **one or more** keys, teams or departments of that kind. The rule is shared: it applies to each of them, and changing it changes it for all |
 | Priority | Lower is checked first within a scope (default 0) |
 | Condition | An expression, see below. Empty = always matches |
-| Targets | One or more model names (a route alias such as `ume/chat-advanced`, or a deployment such as `azure-swc/gpt-4o-mini`) with a relative weight (1-1,000,000) |
+| Targets | One or more model names (a route alias such as `fors/chat-advanced`, or a deployment such as `azure-swc/gpt-4o-mini`) with a relative weight (1-1,000,000) |
 | Fallbacks | Further models tried, in order, after all targets |
 | Chain | Route the rewritten model through the rules again |
 
@@ -165,7 +165,7 @@ each gateway instance keeps moving averages of every deployment's latency and su
 flight, and prefers the faster, healthier, less busy one. Use it for the same model on several regions or GPU servers;
 keep the default `Weighted` when the shares must follow the weights exactly (a 90/10 canary), because the scores move
 traffic away from the weights.
-A request with the header `x-ume-session` (any id of the conversation, at most 200 characters), or OpenAI's
+A request with the header `x-fors-session` (any id of the conversation, at most 200 characters), or OpenAI's
 `prompt_cache_key` body parameter, goes first to the same target of each priority every time (rendezvous hashing, by
 weight), whatever the balancing mode, so a vLLM or Ollama server's prompt (prefix) cache is reused across the turns of a
 conversation. Sessions are spread over the targets by weight; when a target goes away only its sessions move.
@@ -175,8 +175,8 @@ move to the next candidate, and nothing is retried once streaming has started.
 ### Chaining
 
 With **Chain** on, the rule's result becomes the new model and all rules are checked again. Use it to
-normalise names before routing, for example `gpt-4` to `ume/chat-standard` and then a tier rule on
-`ume/chat-standard`. Chaining stops when no rule matches, a rule without Chain matches, the model
+normalise names before routing, for example `gpt-4` to `fors/chat-standard` and then a tier rule on
+`fors/chat-standard`. Chaining stops when no rule matches, a rule without Chain matches, the model
 does not change, a model repeats, or after 8 steps. A rule is applied at most once per request. The
 last matching rule decides the final models and fallbacks.
 
@@ -203,11 +203,11 @@ rule chain that exists; if no rule matches, it is `404 model_not_found`, just la
 ### Rules never widen access
 
 Rules only choose among destinations. A key's allowed providers, allowed residencies, the PII
-on-prem restriction, the request's residency ceiling (`x-ume-max-residency`, see the
+on-prem restriction, the request's residency ceiling (`x-fors-max-residency`, see the
 [API reference](admin-api.md#residency-ceiling-per-request)), endpoint compatibility and disabled or drained providers
 are applied **after** the rules, so a rule cannot send a request somewhere the key or the request does not allow. A rule
 whose targets are all above the ceiling ends in `403 max_residency_not_met`, not in the model the client asked for. A
-condition can read the header like any other, for example `headers["x-ume-max-residency"] == "OnPrem"` (the value as
+condition can read the header like any other, for example `headers["x-fors-max-residency"] == "OnPrem"` (the value as
 the client sent it). A key's model allow-list
 applies to the model the client asks for.
 
@@ -318,8 +318,8 @@ written: `headers["x-nope"] != "a"` and `!(headers["x-nope"] == "a")` are both f
 ### Examples
 
 ```text
-headers["x-ume-tier"] == "premium"
-budget_used > 90 && model == "ume/chat-standard"
+headers["x-fors-tier"] == "premium"
+budget_used > 90 && model == "fors/chat-standard"
 team_name == "ml-research" && model.startsWith("claude-")
 pii_detected && endpoint == "chat_completions"
 model in ["gpt-4", "gpt-4-turbo"]
@@ -330,9 +330,9 @@ prompt_tokens > 20000 || params["max_tokens"] > 8000
 
 | Where | What |
 |---|---|
-| Response header `x-ume-rule` | Id(s) of the rule(s) that applied, comma-separated in chain order. Absent when no rule matched. `x-ume-model` still shows the deployment that served the request |
+| Response header `x-fors-rule` | Id(s) of the rule(s) that applied, comma-separated in chain order. Absent when no rule matched. `x-fors-model` still shows the deployment that served the request |
 | Usage records | `RoutingRuleId` and `RoutingRuleName` of the last rule that applied (the name is stored so reports stay readable after a rename or delete); `RequestedModel` stays what the client asked for |
-| Metric `ume.gateway.routing.rule_routed` | Count of rule-routed requests by endpoint (no per-rule label, to keep cardinality bounded) |
+| Metric `fors.gateway.routing.rule_routed` | Count of rule-routed requests by endpoint (no per-rule label, to keep cardinality bounded) |
 | Gateway log | A rule that fails validation is logged as a warning when the catalogue loads and is ignored |
 
 ### What conditions can and cannot see
@@ -348,18 +348,18 @@ The seeded demo environment (see [Local development](local-development.md#demo-d
 
 | Rule | Condition | Effect |
 |---|---|---|
-| Äldre alias gpt-4 (chain) | `model == "gpt-4"` | Rewrites to `ume/chat-standard` |
-| Premium via header | `headers["x-ume-tier"] == "premium" && model == "ume/chat-standard"` | `ume/chat-advanced`, falling back to `ume/chat-standard` |
-| Budgeten nästan slut | `budget_used > 90 && model == "ume/chat-standard"` | `ume/chat-onprem` |
+| Äldre alias gpt-4 (chain) | `model == "gpt-4"` | Rewrites to `fors/chat-standard` |
+| Premium via header | `headers["x-fors-tier"] == "premium" && model == "fors/chat-standard"` | `fors/chat-advanced`, falling back to `fors/chat-standard` |
+| Budgeten nästan slut | `budget_used > 90 && model == "fors/chat-standard"` | `fors/chat-onprem` |
 
 ## Where this lives in the code
 
 | Part | Location |
 |---|---|
-| Expression engine | `src/Ume.LlmGateway.Domain/Routing/Expressions/` |
-| Rule evaluation | `src/Ume.LlmGateway.Domain/Routing/RoutingRuleSet.cs` (enabled rules are indexed by owner id when the set is built, so a request only looks at the rules of its own key, team and department plus the global ones) |
+| Expression engine | `src/Fors.Domain/Routing/Expressions/` |
+| Rule evaluation | `src/Fors.Domain/Routing/RoutingRuleSet.cs` (enabled rules are indexed by owner id when the set is built, so a request only looks at the rules of its own key, team and department plus the global ones) |
 | Rule storage | `RoutingRule` / `RoutingRuleTarget` entities, migrations `RoutingRules` and `RoutingRuleScopeSets` (owner sets `ScopeIds uuid[]`, `IsTemplate`, the templates) |
 | Budget and token signals | `BudgetService.PeekUsedPercentAsync`, `IRateLimiter.PeekTokensUsedPercentAsync`; `RoutingRuleSet.References(variable)` tells the gateway which ones to fetch |
 | Loading and caching | `GatewayCatalog` compiles the rules once per catalogue snapshot; invalid rules are skipped and logged as warnings |
-| Admin API | `src/Ume.LlmGateway.AdminApi/RoutingRules/` (`RoutingRuleEndpoints`, `RoutingRuleService`, request and response records) |
-| Request routing seam | `IRouteResolver` in `src/Ume.LlmGateway.Gateway/Routing/RouteResolver.cs` |
+| Admin API | `src/Fors.AdminApi/RoutingRules/` (`RoutingRuleEndpoints`, `RoutingRuleService`, request and response records) |
+| Request routing seam | `IRouteResolver` in `src/Fors.Gateway/Routing/RouteResolver.cs` |

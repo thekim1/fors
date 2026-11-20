@@ -27,7 +27,7 @@ test('create, validate, test, reorder, disable and delete a rule, and see it app
     await drawer.locator('#rule-condition').fill(condition)
     await expect(drawer.getByRole('status').filter({ hasText: 'Valid' })).toBeVisible()
 
-    await drawer.locator('#rule-target-0').fill('ume/chat-onprem')
+    await drawer.locator('#rule-target-0').fill('fors/chat-onprem')
     const created = page.waitForResponse(r => r.url().endsWith('/api/routing-rules') && r.request().method() === 'POST')
     await drawer.getByRole('button', { name: 'Create rule' }).click()
     const rule = await (await created).json()
@@ -38,7 +38,7 @@ test('create, validate, test, reorder, disable and delete a rule, and see it app
     // Test a request: the rule applies to a request with the marker header and is not chosen without it.
     await page.getByRole('button', { name: 'Test a request' }).click()
     const test = page.getByRole('dialog', { name: 'Test a request' })
-    await test.getByLabel('Model the client asks for').fill('ume/chat-standard')
+    await test.getByLabel('Model the client asks for').fill('fors/chat-standard')
     await test.getByText('Headers and request parameters').click()
     await test.getByRole('button', { name: 'Add header' }).click()
     await test.getByLabel('Header 1 name').fill('x-e2e')
@@ -51,7 +51,7 @@ test('create, validate, test, reorder, disable and delete a rule, and see it app
     await test.getByRole('button', { name: 'Close', exact: true }).click()
     await expect(test).toBeHidden()
 
-    // The real gateway applies the rule and says which one in x-ume-rule.
+    // The real gateway applies the rule and says which one in x-fors-rule.
     await expect.poll(() => appliedRule(page, key.secret, suffix)).toBe(ruleId)
     expect(await appliedRule(page, key.secret, 'not-the-marker')).toBeNull()
 
@@ -92,7 +92,7 @@ test('deleting a team keeps its rules switched off until they are given a new ow
   expect(keyResponse.status()).toBe(201)
   const key = await keyResponse.json()
   const ruleResponse = await mutate(page, '/api/routing-rules', {
-    name, scope: 'Team', scopeIds: [oldTeam.teamId], condition: `headers["x-e2e"] == "${suffix}"`, targets: [{ model: 'ume/chat-onprem', weight: 1 }],
+    name, scope: 'Team', scopeIds: [oldTeam.teamId], condition: `headers["x-e2e"] == "${suffix}"`, targets: [{ model: 'fors/chat-onprem', weight: 1 }],
   })
   expect(ruleResponse.status()).toBe(201)
   const rule = await ruleResponse.json()

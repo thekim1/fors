@@ -63,8 +63,8 @@ A provider's **residency** (on-prem, EU, external) is where its models process d
 One Azure AI Foundry resource can hold global, data zone and regional deployments, which do not all process data in the
 same place, so every model has a **Residency** of its own in the model drawer: *Provider's* (the default) or on-prem,
 EU or external. Everything that decides where a request may go uses the model's residency when it has one: a key's
-allowed residencies, the PII on-prem restriction, the residency ceiling (`x-ume-max-residency`), `GET /v1/models`, the
-`x-ume-residency` answer header, token quotas for one residency, the catalogue key holders see and the Data API's usage
+allowed residencies, the PII on-prem restriction, the residency ceiling (`x-fors-max-residency`), `GET /v1/models`, the
+`x-fors-residency` answer header, token quotas for one residency, the catalogue key holders see and the Data API's usage
 aggregate. One provider per location is no longer needed.
 
 *Discover models* suggests it for a Foundry deployment from its deployment type (`sku.name`), and you confirm or change

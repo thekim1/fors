@@ -6,7 +6,7 @@ detection, set the key's policy (*Keys*, edit the key) to one of:
 | Policy | What happens when the gateway finds personal data in the text |
 |---|---|
 | Off | Nothing; no scanning. |
-| Allow | Detected and recorded (category and count), sent on unchanged. Response header `x-ume-pii: detected`. |
+| Allow | Detected and recorded (category and count), sent on unchanged. Response header `x-fors-pii: detected`. |
 | Redact | Values are replaced with `[PERSONNUMMER]`, `[SAMORDNINGSNUMMER]`, `[E-POST]`, `[TELEFON]` or `[IBAN]` before the request leaves the gateway. |
 | Block | The request is refused with `pii_blocked`. |
 | On-prem (`RerouteToOnPrem`) | The request may only go to on-prem models. |

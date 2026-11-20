@@ -1,13 +1,13 @@
-// One chat message per iteration, against the Ume gateway, Bifrost, eneo, or the fake LLM directly (the floor).
+// One chat message per iteration, against Fors, Bifrost, eneo, or the fake LLM directly (the floor).
 //
-//   TARGET   ume | bifrost | eneo | fake
+//   TARGET   fors | bifrost | eneo | fake
 //   STREAM   true | false
 //   VUS      concurrent clients        DURATION  e.g. 30s
-//   OUT      results file name         KEY       Ume or Bifrost virtual key (TARGET=ume|bifrost)
+//   OUT      results file name         KEY       Fors or Bifrost virtual key (TARGET=fors|bifrost)
 //   BIFROST_MODEL  model sent to Bifrost (default fake-chat: no provider prefix, so the virtual key's providers route it)
 //   ENEO_KEY, ENEO_ASSISTANT   eneo service API key and its assistant (lib.sh with ENEO_AUTH=apikey): messages are sent
 //            the way an external application sends them. Without them: as the signed-in default user, like eneo's web app.
-//   UME_TARGETS  comma-separated gateway base URLs (scale-out.sh): client n sends to URL n mod count. Default: one gateway.
+//   FORS_TARGETS  comma-separated gateway base URLs (scale-out.sh): client n sends to URL n mod count. Default: one gateway.
 //   NO_REUSE true: a new connection per message. eneo's gunicorn workers each accept a burst of new connections, so
 //            with kept-alive connections a few workers can end up with every client while the rest stay idle.
 //
@@ -22,13 +22,13 @@ const QUESTION = 'Vilka handlingar behöver jag skicka in för att ansöka om by
 const ANSWER_MARKER = 'testsvar'; // one word: streamed answers arrive one word per event
 
 const BASE = {
-  ume: 'http://ume-gateway:8080',
+  fors: 'http://fors-gateway:8080',
   bifrost: 'http://bifrost:8080',
   eneo: 'http://eneo-backend:8000/api/v1',
   fake: 'http://fake-llm:8080',
 }[TARGET];
 
-const UME_BASES = (__ENV.UME_TARGETS || '').split(',').filter(Boolean);
+const FORS_BASES = (__ENV.FORS_TARGETS || '').split(',').filter(Boolean);
 
 export const options = {
   scenarios: {
@@ -51,7 +51,7 @@ export function setup() {
 
   if (TARGET !== 'eneo') {
     // Bifrost's bare proxy (bifrost/config-bare.json) has no virtual keys: a key it does not know is refused, so none is sent.
-    return { headers: TARGET === 'ume' || (TARGET === 'bifrost' && __ENV.KEY) ? { Authorization: `Bearer ${__ENV.KEY}` } : {} };
+    return { headers: TARGET === 'fors' || (TARGET === 'bifrost' && __ENV.KEY) ? { Authorization: `Bearer ${__ENV.KEY}` } : {} };
   }
 
   // eneo through a service API key: no login, the key's assistant.
@@ -80,10 +80,10 @@ export default function (data) {
   const body = TARGET === 'eneo'
     // A new conversation per message, like a single gateway call (continuing one would grow the prompt every turn).
     ? { assistant_id: data.assistantId, question: QUESTION, stream: STREAM }
-    : { model: { ume: 'ume/chat', bifrost: __ENV.BIFROST_MODEL || 'fake-chat' }[TARGET] || 'fake-chat', messages: [{ role: 'user', content: QUESTION }], max_tokens: 400, stream: STREAM };
+    : { model: { fors: 'fors/chat', bifrost: __ENV.BIFROST_MODEL || 'fake-chat' }[TARGET] || 'fake-chat', messages: [{ role: 'user', content: QUESTION }], max_tokens: 400, stream: STREAM };
   const path = TARGET === 'eneo' ? '/conversations/' : '/v1/chat/completions';
 
-  const base = TARGET === 'ume' && UME_BASES.length > 0 ? UME_BASES[(__VU - 1) % UME_BASES.length] : BASE;
+  const base = TARGET === 'fors' && FORS_BASES.length > 0 ? FORS_BASES[(__VU - 1) % FORS_BASES.length] : BASE;
   const res = http.post(`${base}${path}`, JSON.stringify(body), { headers, timeout: '60s' });
   check(res, {
     'status 200': (r) => r.status === 200,

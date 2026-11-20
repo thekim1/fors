@@ -1,0 +1,27 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.6.5">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AspireUseCliBundle>true</AspireUseCliBundle>
+    <UserSecretsId>fors-apphost-dev</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.Docker" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
+    <PackageReference Include="Aspire.Hosting.Redis" />
+    <PackageReference Include="Aspire.Hosting.Keycloak" />
+    <PackageReference Include="Aspire.Hosting.JavaScript" />
+    <PackageReference Include="CommunityToolkit.Aspire.Hosting.Ollama" />
+    <PackageReference Include="MessagePack" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Health endpoint paths, shared with the services without referencing ServiceDefaults (the type is internal on both sides). -->
+    <Compile Include="..\Fors.ServiceDefaults\HealthEndpoints.cs" Link="HealthEndpoints.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fors.AdminApi\Fors.AdminApi.csproj" />
+    <ProjectReference Include="..\Fors.DataApi\Fors.DataApi.csproj" />
+    <ProjectReference Include="..\Fors.FakeLlm\Fors.FakeLlm.csproj" />
+    <ProjectReference Include="..\Fors.Gateway\Fors.Gateway.csproj" />
+    <ProjectReference Include="..\Fors.MigrationService\Fors.MigrationService.csproj" />
+  </ItemGroup>
+</Project>

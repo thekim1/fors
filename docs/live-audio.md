@@ -5,19 +5,19 @@ Live transcription, live interpreting and realtime sessions use WebSockets with 
 
 | Endpoint | Use | Model kind | Dev seed |
 |---|---|---|---|
-| `wss://<gateway>/v1/realtime?model=<alias>` | Live transcription (speech-to-text models such as gpt-realtime-whisper, gpt-4o-transcribe, Whisper on vLLM) | *Speech to text* (`Transcription`) | `ume/live-transcribe` |
-| `wss://<gateway>/v1/realtime?model=<alias>` | Realtime sessions with a model (gpt-realtime, Foundry Voice Live) | *Realtime (live)* (`Realtime`) | `ume/realtime` |
-| `wss://<gateway>/v1/realtime/translations?model=<alias>` | Live interpreting into another language (gpt-realtime-translate) | *Live interpreting* (`SpeechTranslation`) | `ume/interpret` |
+| `wss://<gateway>/v1/realtime?model=<alias>` | Live transcription (speech-to-text models such as gpt-realtime-whisper, gpt-4o-transcribe, Whisper on vLLM) | *Speech to text* (`Transcription`) | `fors/live-transcribe` |
+| `wss://<gateway>/v1/realtime?model=<alias>` | Realtime sessions with a model (gpt-realtime, Foundry Voice Live) | *Realtime (live)* (`Realtime`) | `fors/realtime` |
+| `wss://<gateway>/v1/realtime/translations?model=<alias>` | Live interpreting into another language (gpt-realtime-translate) | *Live interpreting* (`SpeechTranslation`) | `fors/interpret` |
 
 Connect **from a backend** with the key in the `Authorization` header (browsers cannot set it; let them talk to your
 backend). Then send events as with OpenAI: `session.update`, audio as base64 24 kHz 16-bit mono PCM in
 `input_audio_buffer.append` (`session.input_audio_buffer.append` for interpreting), and read the transcript events.
 
 ```python
-async with websockets.connect("wss://<gateway>/v1/realtime?model=ume/live-transcribe",
+async with websockets.connect("wss://<gateway>/v1/realtime?model=fors/live-transcribe",
                               additional_headers={"Authorization": f"Bearer {key}"}) as ws:
     await ws.send(json.dumps({"type": "session.update", "session": {"type": "transcription",
-        "audio": {"input": {"transcription": {"model": "ume/live-transcribe", "language": "sv"}}}}}))
+        "audio": {"input": {"transcription": {"model": "fors/live-transcribe", "language": "sv"}}}}}))
     await ws.send(json.dumps({"type": "input_audio_buffer.append", "audio": base64.b64encode(chunk).decode()}))
 ```
 

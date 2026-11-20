@@ -3,9 +3,9 @@
 The gateway signs admins in through any OpenID Connect provider ([identity and roles](identity-and-roles.md)). If an
 organisation has none it wants to use directly, `deploy/keycloak` runs a production Keycloak next to the gateway: a
 Compose project of its own, operated with the gateway, with its database in the gateway's Postgres. Other systems can
-share its realm `ume` with their own clients and roles (each system's part is a file), or run without it.
+share its realm `fors` with their own clients and roles (each system's part is a file), or run without it.
 
-Nothing in the gateway depends on this project. Leave it out and point `UME_OIDC_AUTHORITY` at your own provider, or
+Nothing in the gateway depends on this project. Leave it out and point `FORS_OIDC_AUTHORITY` at your own provider, or
 enter your provider in the admin console's setup wizard ([identity and roles](identity-and-roles.md#setup-mode)).
 
 | Path | What it is |
@@ -13,9 +13,9 @@ enter your provider in the admin console's setup wizard ([identity and roles](id
 | `deploy/keycloak/compose.yaml` | Keycloak (production mode) and `realm-import`, the job that applies the realm files |
 | `deploy/keycloak/Dockerfile` | The pinned Keycloak image, built with `kc.sh build` so it starts optimized with a read-only file system |
 | `deploy/keycloak/init-keycloak.sh` | Certificate from the gateway's internal CA, secrets, `deploy/keycloak/.env` |
-| `deploy/keycloak/realm/10-gateway.json` | The gateway's part of realm `ume` and the realm-wide settings (below) |
+| `deploy/keycloak/realm/10-gateway.json` | The gateway's part of realm `fors` and the realm-wide settings (below) |
 | `deploy/keycloak/additions/` | Other systems' realm files, applied after the gateway's (empty in this repository) |
-| `deploy/postgres/add-keycloak-database.sql` | Adds role `ume_keycloak` and database `keycloak` to an existing installation |
+| `deploy/postgres/add-keycloak-database.sql` | Adds role `fors_keycloak` and database `keycloak` to an existing installation |
 | `deploy/tests/keycloak-e2e.sh` | End-to-end test with Docker only (below) |
 
 ## Set up
@@ -28,7 +28,7 @@ Run the gateway's `deploy/init-deployment.sh` first; this setup uses its interna
    ```
    It issues Keycloak's certificate (names `keycloak` and the host) from the gateway's CA, creates the database password,
    a temporary admin password and the import job's client secret, and uses the admin API's OIDC client secret
-   (`secrets/adminapi/Oidc__ClientSecret`, created if missing) for the `ume-admin` client. Re-running keeps every
+   (`secrets/adminapi/Oidc__ClientSecret`, created if missing) for the `fors-admin` client. Re-running keeps every
    existing secret and setting. Options: `--port` (default 11443), `--bind`, `--admin-url`, `--renew-certs`.
 2. **Database.** A new installation gets it when Postgres is first created, as long as step 1 ran before (`init.sql`
    reads `secrets/postgres/keycloak_password`). An existing one adds it once (idempotent):
@@ -46,27 +46,27 @@ Run the gateway's `deploy/init-deployment.sh` first; this setup uses its interna
 4. **Reverse proxy.** Forward `https://auth.example.se` to the HTTPS port (re-encrypting, like the gateway's hosts in
    `deploy/proxy/nginx.conf.example`) with `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host`; Keycloak
    trusts them (`proxy-headers=xforwarded`), so the port must only be reachable from the proxy. A proxy health check
-   can use `/realms/ume/.well-known/openid-configuration`; Keycloak's own `/health/ready` is on the management port,
+   can use `/realms/fors/.well-known/openid-configuration`; Keycloak's own `/health/ready` is on the management port,
    which is not published.
-5. **Point the gateway at it:** `UME_OIDC_AUTHORITY=https://auth.example.se/realms/ume` in `deploy/.env`, then
-   `docker compose ... up -d` (the admin API signs in through it, the gateway names it on `/v1/ume/context`). A later
+5. **Point the gateway at it:** `FORS_OIDC_AUTHORITY=https://auth.example.se/realms/fors` in `deploy/.env`, then
+   `docker compose ... up -d` (the admin API signs in through it, the gateway names it on `/v1/fors/context`). A later
    re-run of `init-deployment.sh` keeps the line. Declare it here rather than in the admin console's setup wizard:
-   `init-keycloak.sh` has written the `ume-admin` client's secret to `secrets/adminapi/Oidc__ClientSecret`, a deployment
+   `init-keycloak.sh` has written the `fors-admin` client's secret to `secrets/adminapi/Oidc__ClientSecret`, a deployment
    value that goes only to the deployment's own authority, so without the variable every test sign-in in the wizard fails
    with `deployment_secret_without_authority`. If the admin API already printed a setup code, the restart with the
    variable completes setup and the code is void.
 6. **Admins of Keycloak itself.** Sign in to `https://auth.example.se/admin` as `bootstrap-admin` (password in
    `secrets/keycloak/admin_password`), create personal admin users in the *master* realm, then delete
-   `bootstrap-admin`. Keep the client `ume-realm-import` in *master*: the import job signs in with it.
+   `bootstrap-admin`. Keep the client `fors-realm-import` in *master*: the import job signs in with it.
 
 ### Production settings
 
 `compose.yaml` follows Keycloak's production guide: `start --optimized` on the image built from the `Dockerfile`
 (PostgreSQL, local caches for one instance, health and metrics on the management port), a fixed hostname
 (`KC_HOSTNAME`), TLS on 8443 only, the database over TLS with the CA checked, `http-max-queued-requests` (default
-1000, `UME_KEYCLOAK_MAX_QUEUED_REQUESTS`) so overload answers 503 instead of queueing without bound, and the same
+1000, `FORS_KEYCLOAK_MAX_QUEUED_REQUESTS`) so overload answers 503 instead of queueing without bound, and the same
 container hardening as the gateway (read-only file system, no capabilities). Memory: Keycloak's sizing guide asks
-about 1.25 GB for one instance; the limit is 1.5 GB (`UME_KEYCLOAK_MEMORY`). Secrets are files; the three Keycloak can
+about 1.25 GB for one instance; the limit is 1.5 GB (`FORS_KEYCLOAK_MEMORY`). Secrets are files; the three Keycloak can
 only read from its environment are set for the process at start and do not show in `docker inspect`.
 
 **Updates.** The image is pinned by digest in the `Dockerfile`, like every image in this repository: update only to
@@ -75,12 +75,12 @@ a build at least 7 days old, then `up -d --build --wait`. Keycloak migrates its 
 ## Realm files
 
 `realm-import` is [keycloak-config-cli](https://github.com/adorsys/keycloak-config-cli). On every `up` it applies
-`realm/*.json`, then `additions/*.json` (or `UME_KEYCLOAK_ADDITIONS_DIR`), in name order. A file is a Keycloak realm
-representation with `"realm": "ume"` and only the parts it owns: roles, clients, scope mappings, identity providers,
+`realm/*.json`, then `additions/*.json` (or `FORS_KEYCLOAK_ADDITIONS_DIR`), in name order. A file is a Keycloak realm
+representation with `"realm": "$(env:FORS_KEYCLOAK_REALM)"` (the realm's name: `fors`, or `ume` in an installation that kept it) and only the parts it owns: roles, clients, scope mappings, identity providers,
 mappers, groups.
 
 - **Placeholders:** `$(env:NAME)` and `$(env:NAME:-default)` from the job's environment (variables for other systems'
-  files go in a file named by `UME_KEYCLOAK_IMPORT_ENV`), and `$(file:UTF-8:/path)` for a secret file mounted into the
+  files go in a file named by `FORS_KEYCLOAK_IMPORT_ENV`), and `$(file:UTF-8:/path)` for a secret file mounted into the
   job. Keycloak's own `${...}` texts (such as `${username}`) are left alone. A placeholder without a value fails the import.
 - **Adds and updates, never deletes.** Every resource type is imported with `no-delete`: a file cannot remove what
   another file or an administrator made. When a file drops a client or role, remove it in the admin console.
@@ -90,17 +90,17 @@ mappers, groups.
   `userProfile` (it replaces the whole profile) or realm settings. A system that runs its own Keycloak declares the
   same settings in its own file.
 - **Each client sees only its system's roles.** Set `"fullScopeAllowed": false` on every client and list the roles
-  its tokens may carry in `scopeMappings`, as `10-gateway.json` does for `ume-admin`. A user with roles in two systems
+  its tokens may carry in `scopeMappings`, as `10-gateway.json` does for `fors-admin`. A user with roles in two systems
   then gets each system's roles only in that system's tokens (tested).
-- **One group for several systems.** To set a person up for the gateway and another system at once (such as Ume.Rag),
-  create a Keycloak group and give it realm-role mappings in both systems, for example `ume-admins` with
+- **One group for several systems.** To set a person up for the gateway and another system at once (such as Källa),
+  create a Keycloak group and give it realm-role mappings in both systems, for example `fors-admins` with
   `gateway-admin` and `rag-platform-admin`. A member gets each system's role in that system's tokens only (tested). The
   groups and their role mappings are the operator's: create them in the admin console, or in a site file of your own
   in the additions directory. Neither system's file declares them, since one system's file cannot refer to the other's
   roles and still import into a Keycloak that runs without it.
-- **The `groups` claim.** `ume-admin` also puts the user's group names (without path) in the ID token, as other systems'
+- **The `groups` claim.** `fors-admin` also puts the user's group names (without path) in the ID token, as other systems'
   clients may. Roles granted through group role mappings need nothing more. To grant a gateway role by group name
-  instead, list the group in `UME_OIDC_GROUPS_*` ([claim mapping](identity-and-roles.md#claim-mapping)), the same way as
+  instead, list the group in `FORS_OIDC_GROUPS_*` ([claim mapping](identity-and-roles.md#claim-mapping)), the same way as
   with AD FS or Entra ID. The admin API uses the names only to derive roles and team codes, then drops them, so many
   group memberships do not enlarge the session cookie.
 - **Keeping another system's part in step.** That system delivers its file; the gateway operator puts a released
@@ -133,7 +133,7 @@ second Keycloak realm standing in for the organisation's provider (`deploy/tests
 organisation's token gives the role `gateway-admin` and its `department` claim becomes `departmentCodes`.
 
 **Entra ID (documented, not yet verified against a tenant):**
-1. App registration (single tenant), *Web* redirect URI `https://auth.example.se/realms/ume/broker/entra/endpoint`,
+1. App registration (single tenant), *Web* redirect URI `https://auth.example.se/realms/fors/broker/entra/endpoint`,
    a client secret; *Token configuration*: optional claim `email`, and a groups claim (*Security groups*, emitted as
    object ids) or app roles.
 2. Identity provider `entra`, type *OpenID Connect v1.0*, discovery
@@ -154,7 +154,7 @@ discovery at `https://adfs.example.se/adfs/.well-known/openid-configuration`).
 ## Accounts
 
 The realm is administered by whoever runs the gateway unless the organisation decides otherwise. In the admin console
-(`https://auth.example.se/admin`, realm `ume`, *Users*):
+(`https://auth.example.se/admin`, realm `fors`, *Users*):
 
 | Task | How |
 |---|---|
@@ -176,9 +176,9 @@ The `keycloak` database is backed up separately from `gatewaydb`, so either can 
 other (`docs/runbook.md`, *Backup and restore*):
 
 ```powershell
-deploy\Backup-Database.ps1 -ComposeProject ume-gateway -Database keycloak -Destination D:\backups\keycloak-2026-11-06.dump
+deploy\Backup-Database.ps1 -ComposeProject fors-gateway -Database keycloak -Destination D:\backups\keycloak-2026-11-06.dump
 # restore: stop Keycloak first (docker compose -f deploy/keycloak/compose.yaml stop keycloak)
-deploy\Restore-Database.ps1 -ComposeProject ume-gateway -Database keycloak -Backup D:\backups\keycloak-2026-11-06.dump -ConfirmRestore
+deploy\Restore-Database.ps1 -ComposeProject fors-gateway -Database keycloak -Backup D:\backups\keycloak-2026-11-06.dump -ConfirmRestore
 ```
 
 The dump holds the realm, accounts, password hashes and OTP secrets: protect it like the gateway's. The secrets in

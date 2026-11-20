@@ -1,0 +1,82 @@
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.Options;
+using Scalar.AspNetCore;
+using Fors.Gateway;
+using Fors.Gateway.Authentication;
+using Fors.Gateway.Operations;
+using Fors.Gateway.Requests;
+using Fors.Infrastructure;
+
+if (await WebDefaults.ExitIfHealthProbeAsync(args))
+{
+    return;
+}
+
+var builder = WebApplication.CreateBuilder(args);
+builder.AddDeploymentSecrets();
+
+builder.AddServiceDefaults();
+builder.AddGatewayDatabase();
+builder.AddGatewaySecurity();
+// The gateway only decrypts (provider credentials). The admin API creates and rotates the Data Protection keys; the
+// gateway's database role may not add any (deploy/postgres/app-roles.sql).
+builder.Services.AddDataProtection().DisableAutomaticKeyGeneration();
+builder.AddGatewayStores();
+builder.Services.AddProviderAdapters();
+
+builder.Services.AddGatewayServices();
+
+// Client addresses come only from the trusted proxies set in the admin UI (ClientAddressMiddleware).
+// ASPNETCORE_FORWARDEDHEADERS_ENABLED would believe X-Forwarded-For from any caller, so it is switched off here.
+builder.Services.PostConfigure<ForwardedHeadersOptions>(o => o.ForwardedHeaders = ForwardedHeaders.None);
+
+builder.Services.AddOpenApi(o => o.AddDocumentTransformer((doc, _, _) =>
+{
+    doc.Info.Title = "Fors";
+    doc.Info.Description = "OpenAI- and Anthropic-compatible API. Authenticate with a virtual key: `Authorization: Bearer fors-sk-…`.";
+    return Task.CompletedTask;
+}));
+
+// From the validated options, so Kestrel's limit and the gateway's own body check never disagree.
+builder.Services.AddOptions<KestrelServerOptions>().Configure<IOptions<GatewayOptions>>((kestrel, gateway) =>
+{
+    kestrel.UseForsDefaults(gateway.Value.MaxRequestBodyBytes);
+    kestrel.Limits.MaxRequestHeadersTotalSize = 32 * 1024;
+});
+
+var app = builder.Build();
+
+app.UseForsHsts();
+
+app.UseMiddleware<RequestIdMiddleware>();
+// Before anything reads the client address; only the client API, so health probes never wait on the catalogue.
+app.UseWhen(http => http.Request.Path.StartsWithSegments("/v1", StringComparison.OrdinalIgnoreCase),
+    branch => branch.UseMiddleware<ClientAddressMiddleware>());
+// Only on the live audio paths: the middleware would otherwise add a handshake object to every request.
+app.UseWhen(http => http.Request.Path.StartsWithSegments("/v1/realtime", StringComparison.OrdinalIgnoreCase),
+    branch => branch.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) }));
+// The client API answers are JSON for programs: nothing may frame, render or cache them.
+app.UseForsSecurityHeaders(o =>
+{
+    o.ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'";
+    o.ContentSecurityPolicyPrefixes.Add("/v1");
+    o.NoStorePrefixes.Add("/v1");
+});
+app.UseApiReferencePolicy("/scalar", ScalarOptions.NonceHttpContextItemKey);
+
+app.MapDefaultEndpoints();
+app.MapGatewayOperations();
+if (app.Configuration.GetValue($"{GatewayOptions.SectionName}:{nameof(GatewayOptions.PublishApiReference)}", true))
+{
+    app.MapOpenApi();
+    app.MapScalarApiReference(o => o.WithTitle("Fors").WithNonce().DisableDefaultFonts());
+    app.MapGet("/", () => Results.Redirect("/scalar")).ExcludeFromDescription();
+}
+
+app.MapGatewayEndpoints();
+
+await app.RunAsync();
+
+public partial class Program;

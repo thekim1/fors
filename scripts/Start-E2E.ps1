@@ -2,7 +2,7 @@
 .SYNOPSIS
   Starts the local Aspire stack on a separate, disposable test database for the browser tests (tests/e2e).
 .DESCRIPTION
-  Uses its own Docker volume (ume-e2e-postgres), so your development database is never touched.
+  Uses its own Docker volume (fors-e2e-postgres), so your development database is never touched.
   Every start deletes that test volume first and seeds the demo data again, so the tests always begin
   from the same state. The fake LLM is always on, whatever the user secrets say. The stack uses the same ports as the dev stack: stop the dev stack first.
   -Stop stops the stack and removes the test volume.
@@ -13,8 +13,8 @@ param([switch]$Stop, [switch]$Keep)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$apphost = Join-Path $root 'src\Ume.LlmGateway.AppHost\Ume.LlmGateway.AppHost.csproj'
-$volume = 'ume-e2e-postgres'
+$apphost = Join-Path $root 'src\Fors.AppHost\Fors.AppHost.csproj'
+$volume = 'fors-e2e-postgres'
 
 function Remove-TestVolume {
     # The database container can take a few seconds to go away after "aspire stop".

@@ -5,7 +5,7 @@ runs each of its chatbots on a gateway key of the department that owns it, and f
 the gateway's values, without the Data API.
 
 > **Status.** Design accepted 2026-11-11. **Phases 1 to 3 are implemented**: integrations, credential and assigned
-> keys, `/v1/ume/context`, the model facts on `/v1/models`, the model output limit (phase 1); acting as an assigned key,
+> keys, `/v1/fors/context`, the model facts on `/v1/models`, the model output limit (phase 1); acting as an assigned key,
 > run metadata, the cost of streamed answers and the Data API fields (phase 2); the Integration API with usage and
 > budget status (phase 3). After the RAG platform's review: the credential key's residencies bound every key it acts
 > as, the scope `organisation.read`, the contract as an OpenAPI document, and department member groups; in 0.10.2 the organisation name and the
@@ -32,8 +32,8 @@ the gateway's values, without the Data API.
 
 | Surface | Credential | A RAG platform uses it for |
 |---|---|---|
-| Gateway `/v1` | `ume-sk-` keys of one team, one per residency level and service | every model call; all of it is one line under that team |
-| Data API `/v1/catalog/*` | a separate `ume-dk-` key, `catalog.read` | departments and teams, providers, models and prices |
+| Gateway `/v1` | `fors-sk-` keys of one team, one per residency level and service | every model call; all of it is one line under that team |
+| Data API `/v1/catalog/*` | a separate `fors-dk-` key, `catalog.read` | departments and teams, providers, models and prices |
 
 The platform also keeps by hand what the gateway does not hand out: a model's output limit and tool support.
 
@@ -43,14 +43,14 @@ The platform also keeps by hand what the gateway does not hand out: a model's ou
  gateway admin UI                          platform admin UI
   department admin creates key             editor picks the key for the chatbot
   "Stadsbyggnad chatbot", used             (list comes from the gateway), then a
-  through: Ume.Rag; sets budget            model from that key's models
+  through: Källa; sets budget            model from that key's models
         │                                          │
         ▼                                          ▼
  ┌─ Gateway /v1 (data plane) ───────────────────────────────────────────────┐
  │ platform service authenticates with its own key (the credential)         │
- │ and sends  x-ume-on-behalf-of: <id of the chatbot's key>                 │
+ │ and sends  x-fors-on-behalf-of: <id of the chatbot's key>                 │
  │ → the request runs as that key: its limits, policies, budgets, usage     │
- │ GET /v1/models, GET /v1/ume/context: what to show in the platform        │
+ │ GET /v1/models, GET /v1/fors/context: what to show in the platform        │
  └──────────────────────────────────────────────────────────────────────────┘
  ┌─ Admin API /integration/v1 (control plane) ──────────────────────────────┐
  │ usage and budget status of the integration's keys                        │
@@ -69,7 +69,7 @@ A row in `Integrations` (name, description, owner team, active), created by gate
 | Role | Created by | What it is |
 |---|---|---|
 | `Credential` | gateway admin, in the integration's owner team | What a platform service authenticates with. Has a secret, an address list, an expiry, rotation. Can also make the platform's own calls (model check, sync), charged to the owner team |
-| `Assigned` | the key's ordinary managers (department and team admins), in their own team: *Used through: Ume.Rag* on the key form | A chatbot's key. **Cannot authenticate by itself** (refused with `403 integration_only`); it is only used by reference through that integration. No secret is kept or shown; rotation is refused (409) |
+| `Assigned` | the key's ordinary managers (department and team admins), in their own team: *Used through: Källa* on the key form | A chatbot's key. **Cannot authenticate by itself** (refused with `403 integration_only`); it is only used by reference through that integration. No secret is kept or shown; rotation is refused (409) |
 | – (none) | as today | An ordinary key |
 
 A department admin thus sets up a chatbot's key alone: name, models, residencies, PII policy, content guard, rate
@@ -110,7 +110,7 @@ otherwise): the gateway refuses the keys of an inactive one, which would cut the
 
 ## Acting as a key
 
-`x-ume-on-behalf-of: <key id>` on a request authenticated by a credential key.
+`x-fors-on-behalf-of: <key id>` on a request authenticated by a credential key.
 
 | Case | Answer |
 |---|---|
@@ -118,13 +118,13 @@ otherwise): the gateway refuses the keys of an inactive one, which would cut the
 | Header not one key id (GUID), or repeated | `400 invalid_request` |
 | Caller is not a credential key, or the id is not an assigned key of the same integration | `403 delegation_not_allowed` (unknown ids answer the same) |
 | Assigned key disabled, revoked, expired, or its team or department inactive | `403` with the key's reason: `key_disabled`, `key_revoked` or `key_expired` (never `401`: the credential key authenticated; before 0.10.1 an expired key answered `401` and a revoked one `403 delegation_not_allowed`) |
-| Usable | the request continues **as the assigned key**; the answer echoes `x-ume-on-behalf-of` |
+| Usable | the request continues **as the assigned key**; the answer echoes `x-fors-on-behalf-of` |
 
 From there on the pipeline sees the assigned key and needs no other change:
 
 | Aspect | From |
 |---|---|
-| Client address list, residency ceiling header (`x-ume-max-residency`) | the credential key and the request |
+| Client address list, residency ceiling header (`x-fors-max-residency`) | the credential key and the request |
 | Residencies | those **both** keys allow: the assigned key's, within the credential key's |
 | Models, providers, PII, attachments, provider tools and storage, content guard | the assigned key |
 | Rate, token and concurrency limits | the assigned key (a limit per chatbot) |
@@ -132,7 +132,7 @@ From there on the pipeline sees the assigned key and needs no other change:
 | Budgets and token quotas | the assigned key, its team, its department |
 | Usage record, security events | the assigned key; the usage record's `ViaKeyId` is the credential key |
 | `LastUsedAt` | both keys |
-| `x-ume-max-residency` required | when either key has `RequireMaxResidency` |
+| `x-fors-max-residency` required | when either key has `RequireMaxResidency` |
 
 The credential key's own model list does not apply to a request made as another key: the grant is the assignment,
 made by the people who manage the assigned key. Its **residencies are an upper bound**: a request made as an assigned
@@ -158,24 +158,24 @@ request never ran as either key). They are logged as security event 1006 `gatewa
 `not_credential`, `key_not_assigned`, `key_revoked`, `key_expired`, `key_disabled`, `owner_inactive`,
 `no_common_residency`; `RequestId`,
 `OnBehalfOf` as sent, at most 100 characters, `Endpoint`, and the credential key's `KeyId`, `KeyPrefix`, `TeamId`,
-`DepartmentId`). A malformed header is a client bug and logs nothing. `/v1/models` and `/v1/ume/context` with the
+`DepartmentId`). A malformed header is a client bug and logs nothing. `/v1/models` and `/v1/fors/context` with the
 header answer for the assigned key, which is the chatbot's model picker and the check on save.
 
 ### Run metadata
 
-`x-ume-run-id` and `x-ume-step` (any key; opaque ids, trimmed, at most 100 characters kept, control characters
+`x-fors-run-id` and `x-fors-step` (any key; opaque ids, trimmed, at most 100 characters kept, control characters
 replaced, never refused) are stored on the usage record (`RunId`, `Step`), so a platform can split a chatbot's cost by step (answer, condense, rerank, embedding) and join its
 own records to the gateway's. Ids only: no names, content or user ids (ADR 003).
 
 ### Cost on streamed answers
 
-`x-ume-cost-usd` is a response header, so only complete answers carry it. With `x-ume-stream-cost: 1` the gateway
+`x-fors-cost-usd` is a response header, so only complete answers carry it. With `x-fors-stream-cost: 1` the gateway
 writes one Server-Sent Events comment at the end of a streamed answer: before the closing `data: [DONE]` of an
 OpenAI-style stream (clients stop reading there), after the last event of a stream without one (Anthropic Messages,
 Responses):
 
 ```
-: ume-cost-usd=0.00012345
+: fors-cost-usd=0.00012345
 ```
 
 SSE clients ignore comment lines, so other clients are unaffected; it is still opt-in. The cost (six decimals, USD)
@@ -210,23 +210,23 @@ exist there) and hands all of it out in discovery.
 Answered from the in-memory catalogue and key cache, with an `ETag`, so a platform polls with `If-None-Match` and
 usually gets 304. Neither is accounted as a model request.
 
-**`GET /v1/models`** (phase 1) gains, per model, under `ume`: `kind`, `residencies` (alias) or `residency` (model; its
+**`GET /v1/models`** (phase 1) gains, per model, under `fors` (until 0.13 also under its old name `ume`): `kind`, `residencies` (alias) or `residency` (model; its
 own when it has one, else its provider's), `context_window`, `max_output_tokens`, `features`, and `pricing`
 (`input_per_million_usd`, `cached_input_per_million_usd`, `output_per_million_usd`, or null). For an alias the limits
 are the smallest of the targets the key may use (null when one does not know it), the features those all have, and
-the price the first target's. With `x-ume-on-behalf-of` (phase 2) it lists the assigned key's models, which is the
+the price the first target's. With `x-fors-on-behalf-of` (phase 2) it lists the assigned key's models, which is the
 chatbot's model picker and the check on save.
 
-**`GET /v1/ume/context`** (phase 1) for a credential key (field names in snake_case, like `/v1/models`):
+**`GET /v1/fors/context`** (phase 1) for a credential key (field names in snake_case, like `/v1/models`):
 
 ```json
 {
-  "object": "ume.context",
+  "object": "fors.context",
   "gateway": { "version": "0.11.0", "admin_url": "https://…", "integration_api_url": "https://adminapi:8443/integration/v1",
-               "organisation_name": "Umeå kommun", "oidc_authority": "https://idp.example.se/realms/ume", "features": ["max-residency", "model-facts", "integrations"] },
-  "key": { "id": "…", "name": "Ume.Rag api", "prefix": "ume-sk-AbC1", "team_id": "…", "integration_role": "Credential",
+               "organisation_name": "Umeå kommun", "oidc_authority": "https://idp.example.se/realms/fors", "features": ["max-residency", "model-facts", "integrations"] },
+  "key": { "id": "…", "name": "Källa api", "prefix": "fors-sk-AbC1", "team_id": "…", "integration_role": "Credential",
            "integration_scopes": ["usage.read"], "require_max_residency": true, "allowed_residencies": [] },
-  "integration": { "id": "…", "name": "Ume.Rag", "owner_team_id": "…" },
+  "integration": { "id": "…", "name": "Kalla", "owner_team_id": "…" },
   "departments": [{ "id": "…", "name": "…", "cost_center_code": "3000", "is_active": true }],
   "teams": [{ "id": "…", "department_id": "…", "name": "…", "code": "…", "is_active": true }],
   "assigned_keys": [{
@@ -262,7 +262,7 @@ chatbot's model picker and the check on save.
 - `oidc_authority` (feature `oidc-authority`) is `Gateway:OidcAuthority` (optional): the address of the sign-in
   provider the admin console uses. A platform that signs its users in through the same provider takes it from here
   instead of a setting of its own. It is the provider's public address, never a client id or secret. The Compose files
-  and the Portainer stack pass `UME_OIDC_AUTHORITY` to the gateway for it. When the option is empty, it is the authority
+  and the Portainer stack pass `FORS_OIDC_AUTHORITY` to the gateway for it. When the option is empty, it is the authority
   stored in the admin console's sign-in settings (setup mode), read with the catalogue like `organisation_name` (only an
   absolute https address; the gateway's database role can read that column of the sign-in settings and no other).
   `null` when neither is set.
@@ -283,11 +283,11 @@ chatbot's model picker and the check on save.
 
 `/integration/v1` on the Admin API, for what queries the database, which the data plane must not do (ADR 001). It is
 not served on the gateway host: a platform learns its address from `integration_api_url` on
-[`/v1/ume/context`](#discovery-data-plane). When the platform runs in the same Compose stack or host as the gateway,
+[`/v1/fors/context`](#discovery-data-plane). When the platform runs in the same Compose stack or host as the gateway,
 attach `adminapi` to a network the platform's services share (a separate one, not `llm`, which is for provider traffic)
-and set `UME_INTEGRATION_API_URL=https://adminapi:8443/integration/v1`; otherwise use the admin API's published address.
+and set `FORS_INTEGRATION_API_URL=https://adminapi:8443/integration/v1`; otherwise use the admin API's published address.
 
-- **Authentication:** a credential key (`Authorization: Bearer ume-sk-…`) of an active integration, carrying the scope
+- **Authentication:** a credential key (`Authorization: Bearer fors-sk-…`) of an active integration, carrying the scope
   (401 for any other key or none, 403 without the scope). The Admin API already holds the hasher and pepper. Status,
   expiry, grace period, owner team and department and the key's address list apply as on the gateway (the client
   address behind trusted proxies, as in the admin API's audit); lookups are cached 30 s per admin API instance and
@@ -296,7 +296,7 @@ and set `UME_INTEGRATION_API_URL=https://adminapi:8443/integration/v1`; otherwis
   2006 `admin.data.read` with the actor `integration:<name>`.
 - **Scopes are per key**, set by gateway admins, empty by default: a platform gives `usage.read` to its admin
   service only, so a key that serves public chat can read nothing. (`organisation.read` is a scope too, for
-  [`/v1/ume/context`](#discovery-data-plane) on the data plane.)
+  [`/v1/fors/context`](#discovery-data-plane) on the data plane.)
 
 | Scope | Endpoint | |
 |---|---|---|
@@ -314,7 +314,7 @@ by the people responsible for the money.
 - Data API (phase 2, built): `usage/records` gains `viaKeyId`, `runId` and `step` (appended, also as the last CSV
   columns); `catalog/keys` gains `integrationId` and `integrationRole`. The admin API's request list
   (`/api/usage/requests`) has the same three fields. Not built: `catalog/integrations` and a model's
-  `maxOutputTokens` on the Data API (a platform reads them from `/v1/ume/context` and `/v1/models`).
+  `maxOutputTokens` on the Data API (a platform reads them from `/v1/fors/context` and `/v1/models`).
 - `DataApi:MinimumGroupSize` counts distinct keys per department. Each chatbot is a key, so a department with five
   chatbots is no longer folded as it would be behind one shared platform key.
 
@@ -325,7 +325,7 @@ by the people responsible for the money.
 | `Integrations` (phase 1, built) | table `Integrations`; `VirtualKeys`: `IntegrationId uuid NULL` (foreign key, indexed), `IntegrationRole varchar(20) NOT NULL DEFAULT 'None'`, `IntegrationScopes text[] NOT NULL DEFAULT '{}'`; `ModelDeployments.MaxOutputTokens integer NULL` |
 | `UsageRunMetadata` (phase 2, built) | `UsageRecords`: `ViaKeyId uuid NULL`, `RunId varchar(100) NULL`, `Step varchar(100) NULL` (nullable columns: no table rewrite; not kept in monthly totals) |
 
-`app-roles.sql`: the gateway reads `Integrations`, the admin API changes it (phase 1); `ume_data` reads the key
+`app-roles.sql`: the gateway reads `Integrations`, the admin API changes it (phase 1); `fors_data` reads the key
 columns `IntegrationId` and `IntegrationRole` (phase 2). `UsageRecords` is granted whole to every role already.
 No new budget scope, no change to the retention function, no new Redis keys.
 
@@ -333,7 +333,7 @@ No new budget scope, no change to the retention function, no new Redis keys.
 
 | Addition | Per request |
 |---|---|
-| `x-ume-on-behalf-of` | one header lookup; one frozen-dictionary lookup when present |
+| `x-fors-on-behalf-of` | one header lookup; one frozen-dictionary lookup when present |
 | Rate limit and budget | unchanged: the same counters as any key's request, in the same single round trip |
 | Usage record | three nullable columns more in the batched COPY, off the request path |
 | Stream cost | opt-in: one write after the last event |
@@ -354,10 +354,10 @@ file instead of having an admin create them (ADR 022). The migration service app
 {
   "schemaVersion": 1,
   "integration": {
-    "name": "Ume.Rag",
+    "name": "Kalla",
     "description": "Retrieval platform",
     // Optional. Found by code; created (and its department, by cost centre code) when absent.
-    "owner": { "teamCode": "ume-rag", "teamName": "Ume.Rag", "departmentCode": "1000", "departmentName": "IT" }
+    "owner": { "teamCode": "kalla", "teamName": "Källa", "departmentCode": "1000", "departmentName": "IT" }
   },
   "credentialKeys": [
     { "name": "rag-api", "requireMaxResidency": true },
@@ -412,16 +412,16 @@ new keys are shown together, once. Presets are manifests with a `preset` title (
 ignored when applied) in `Admin:IntegrationPresetsPath` (default: the `integration-presets` directory next to the admin
 API, which the image fills from [deploy/integration-presets](../deploy/integration-presets)). A preset is data, not
 code: the platform it is for owns its content, and an adopter points the setting at a directory of their own or sets
-it empty. The repository ships `ume-rag.json` for Ume.Rag without an owner, so it can be imported unedited: Ume.Rag
-gets the default owner (team and department `ume-rag`), to be moved to the organisation's own team afterwards, or an
+it empty. The repository ships `kalla.json` for Källa without an owner, so it can be imported unedited: Källa
+gets the default owner (team and department `kalla`), to be moved to the organisation's own team afterwards, or an
 `owner` can be added before the preview.
 
 **In the shipped stacks** (an empty manifest directory or variable provisions nothing):
 
-- **Compose** (`compose.prod.yaml`, `compose.hardening.yaml`): put manifests in `UME_INTEGRATION_MANIFESTS_DIR`
-  (`deploy/integration-manifests`, readable by uid 1654: `chmod 644` the files); the secrets appear in `UME_INTEGRATION_SECRETS_DIR` (`deploy/integration-secrets`,
+- **Compose** (`compose.prod.yaml`, `compose.hardening.yaml`): put manifests in `FORS_INTEGRATION_MANIFESTS_DIR`
+  (`deploy/integration-manifests`, readable by uid 1654: `chmod 644` the files); the secrets appear in `FORS_INTEGRATION_SECRETS_DIR` (`deploy/integration-secrets`,
   mode 700, owned by uid 1654). `init-deployment.sh` creates both and writes them to `.env`.
-- **Portainer** (`compose.portainer.yaml`): set `UME_INTEGRATION_MANIFEST` to the manifest's JSON; the bootstrap writes it
+- **Portainer** (`compose.portainer.yaml`): set `FORS_INTEGRATION_MANIFEST` to the manifest's JSON; the bootstrap writes it
   for the migration service on every start (clearing it provisions nothing more). Without an owner the JSON holds
   nothing specific to the organisation, so a platform's stack can carry it as a default value; the integration is moved
   to the organisation's team in the admin console after the first sign-in. The secrets are written to the stack's
@@ -430,15 +430,15 @@ gets the default owner (team and department `ume-rag`), to be moved to the organ
 - **Kubernetes:** set `Provisioning__Manifests` and `Provisioning__SecretsPath` on the migrations Job, with the
   manifest from a ConfigMap and a volume the platform's bootstrap can read.
 
-## What a platform changes (Ume.Rag as the example)
+## What a platform changes (Källa as the example)
 
 | Today | With this |
 |---|---|
-| Organisation and model sync read the Data API with a Data API key | read `/v1/ume/context` and `/v1/models` with a credential key; the Data API key and network path go away |
+| Organisation and model sync read the Data API with a Data API key | read `/v1/fors/context` and `/v1/models` with a credential key; the Data API key and network path go away |
 | Per-level keys of the pilot team in each service | one credential key per service, with the residencies that service may ever reach (an upper bound); the ceiling header stays on every call |
-| All traffic charged to the pilot team | an assistant, and a knowledge base for its indexing, has a gateway key chosen from the department's assigned keys; every call sends `x-ume-on-behalf-of` and checks the echo |
+| All traffic charged to the pilot team | an assistant, and a knowledge base for its indexing, has a gateway key chosen from the department's assigned keys; every call sends `x-fors-on-behalf-of` and checks the echo |
 | Output limit and tool support typed in per model | read from the gateway |
-| Own cost estimate from mirrored prices | the gateway's cost: `x-ume-cost-usd`, the stream comment, or `usage.read` |
+| Own cost estimate from mirrored prices | the gateway's cost: `x-fors-cost-usd`, the stream comment, or `usage.read` |
 | Budget per assistant: not possible | the key's budget in the gateway; 402 names the scope and the platform shows the assistant as unavailable |
 
 The platform's own keys for its callers (which app may use which chatbot) stay in the platform. A public user's
@@ -446,12 +446,12 @@ browser never holds a gateway key.
 
 ## Other platforms later
 
-A new platform is another integration and uses the same interfaces: the data plane with `x-ume-on-behalf-of`,
+A new platform is another integration and uses the same interfaces: the data plane with `x-fors-on-behalf-of`,
 discovery, the Integration API, security events over OpenTelemetry, and the Data API for reporting. No code is
 loaded into the gateway process. Candidates for later, off the request path: webhooks from the Admin API (budget
 threshold, key disabled, catalogue changed) so platforms need not poll.
 
-The contract (`/v1/ume/context`, the `ume` model fields, the headers and `/integration/v1`) is published as an
+The contract (`/v1/fors/context`, the `fors` model fields, the headers and `/integration/v1`) is published as an
 OpenAPI 3.1 document, [openapi/integrations.json](openapi/integrations.json), and changed by addition only within
 `v1` (new fields, features, scopes and enum values; a client ignores what it does not know), so a platform's fake
 gateway can be tested against it. The gateway's own tests hold the real answers to the document
@@ -464,8 +464,8 @@ Each is additive and safe for a rolling update ([zero-downtime-updates.md](zero-
 
 | Phase | Content | Done when |
 |---|---|---|
-| 1 Consolidate and share (built) | `Integrations`, key roles and scopes, admin UI, `MaxOutputTokens`, `/v1/models` facts, `/v1/ume/context`, ETag | a platform runs with gateway keys only, fills its pickers from the gateway, and the Data API can be switched off |
-| 2 Keys per chatbot (built) | `x-ume-on-behalf-of`, echo, event 1006, run metadata, stream cost | two departments' chatbots show as their own keys in the usage report, and a key budget stops one of them with 402 |
+| 1 Consolidate and share (built) | `Integrations`, key roles and scopes, admin UI, `MaxOutputTokens`, `/v1/models` facts, `/v1/fors/context`, ETag | a platform runs with gateway keys only, fills its pickers from the gateway, and the Data API can be switched off |
+| 2 Keys per chatbot (built) | `x-fors-on-behalf-of`, echo, event 1006, run metadata, stream cost | two departments' chatbots show as their own keys in the usage report, and a key budget stops one of them with 402 |
 | 3 Read back (built) | Integration API (`usage.read`) | the platform shows the gateway's cost and budget status per chatbot |
 | 4 Later | webhooks | – |
 
@@ -475,9 +475,9 @@ Recorded as ADR 020, 021 and 022 (provisioning from a manifest) in [adr.md](adr.
 
 ## Open points
 
-- A platform-wide cap: acted requests count against the assigned key's limits only. Not needed by Ume.Rag for now
+- A platform-wide cap: acted requests count against the assigned key's limits only. Not needed by Källa for now
   (knowledge bases have their own keys and the worker limits itself). If one is needed (so indexing cannot starve
   chat), the credential key's concurrency limit can be counted too, in the same script.
 - Whether `pricing` on `/v1/models` should list every eligible target instead of the first (a fallback can cost
   differently; the actual cost is on the answer either way). Built: the first.
-- `x-ume-stream-cost` with the Anthropic and Responses stream shapes: verify with the SDKs first.
+- `x-fors-stream-cost` with the Anthropic and Responses stream shapes: verify with the SDKs first.

@@ -1,0 +1,481 @@
+using System.Net;
+using System.Text;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http.Resilience;
+using Fors.AdminApi.Catalog;
+using Fors.AdminApi.Catalog.Pricing;
+using Fors.Domain;
+using Fors.Domain.Entities;
+using Fors.Domain.Providers;
+using Fors.Infrastructure.Security;
+using Fors.ServiceDefaults;
+
+namespace Fors.AdminApi.Tests;
+
+public sealed class ModelDiscoveryTests(AdminFixture fixture)
+{
+    private static readonly CredentialProtector Protector = new(new EphemeralDataProtectionProvider());
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    /// <summary>Answers every request with <paramref name="respond"/> and records what was sent.</summary>
+    private sealed class FakeProvider(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+    {
+        public FakeProvider(string json, HttpStatusCode status = HttpStatusCode.OK)
+            : this(_ => new HttpResponseMessage(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") })
+        {
+        }
+
+        public List<(HttpMethod Method, Uri Uri, Dictionary<string, string> Headers)> Requests { get; } = [];
+
+        public Uri? LastUri => Requests.Count == 0 ? null : Requests[^1].Uri;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            lock (Requests)
+            {
+                Requests.Add((request.Method, request.RequestUri!, request.Headers.ToDictionary(h => h.Key, h => string.Join(",", h.Value), StringComparer.OrdinalIgnoreCase)));
+            }
+
+            return Task.FromResult(respond(request));
+        }
+    }
+
+    private static ProviderAccount Provider(string baseUrl, ProviderType type = ProviderType.OpenAI, ProviderAuthMode auth = ProviderAuthMode.Bearer, string? credential = "secret") =>
+        new() { Name = "provider", BaseUrl = baseUrl, Type = type, AuthMode = auth, EncryptedCredential = Protector.Protect(credential) };
+
+    private static async Task<DiscoveredModel[]> DiscoverAsync(
+        ProviderAccount provider, HttpMessageHandler handler, bool requireHttps = false, IReadOnlyList<AzurePriceMeter>? azurePrices = null)
+    {
+        using var http = new HttpClient(handler, disposeHandler: false);
+        return await ModelDiscovery.DiscoverAsync(provider, http, Protector, requireHttps, Ct, azurePrices is null ? null : _ => Task.FromResult(azurePrices));
+    }
+
+    [Fact]
+    public async Task Speech_and_realtime_models_get_their_kind_and_other_audio_models_are_left_out()
+    {
+        using var list = new FakeProvider("""
+            {"data":[{"id":"gpt-4.1"},{"id":"whisper-1"},{"id":"gpt-4o-mini-transcribe"},{"id":"text-embedding-3-small"},
+                     {"id":"tts-1"},{"id":"gpt-4o-realtime-preview"},{"id":"gpt-4o-audio-preview"},{"id":"dall-e-3"},
+                     {"id":"gpt-realtime-translate"},{"id":"gpt-realtime-whisper"},{"id":"gpt-image-1"},{"id":"flux-1.1-pro"},{"id":"sora-2"}]}
+            """);
+
+        var models = await DiscoverAsync(Provider("https://api.example/v1"), list);
+
+        models.Select(m => (m.Id, m.Kind)).ShouldBe(
+        [
+            ("dall-e-3", ModelKind.Image),
+            ("flux-1.1-pro", ModelKind.Image),
+            ("gpt-4.1", ModelKind.Chat),
+            ("gpt-4o-mini-transcribe", ModelKind.Transcription),
+            ("gpt-4o-realtime-preview", ModelKind.Realtime),
+            ("gpt-image-1", ModelKind.Image),
+            ("gpt-realtime-translate", ModelKind.SpeechTranslation),
+            ("gpt-realtime-whisper", ModelKind.Transcription),
+            ("text-embedding-3-small", ModelKind.Embedding),
+            ("whisper-1", ModelKind.Transcription),
+        ]);
+    }
+
+    [Theory]
+    [InlineData("https://res.example/openai?api-version=2025-04-01-preview", "https://res.example/openai/models?api-version=2025-04-01-preview")]
+    [InlineData("https://res.example/openai/?api-version=1", "https://res.example/openai/models?api-version=1")]
+    [InlineData("https://api.example/v1/", "https://api.example/v1/models")]
+    [InlineData("https://api.example/v1", "https://api.example/v1/models")]
+    public async Task The_models_path_goes_after_the_base_path_and_before_its_query_string(string baseUrl, string expected)
+    {
+        using var list = new FakeProvider("""{"data":[{"id":"gpt-4.1"}]}""");
+
+        await DiscoverAsync(Provider(baseUrl, ProviderType.OpenAICompatible), list);
+
+        list.LastUri.ShouldBe(new Uri(expected));
+    }
+
+    [Theory]
+    [InlineData("https://res.services.ai.azure.com/openai/v1", "https://res.services.ai.azure.com/api/projects/_project/deployments?api-version=v1")]
+    [InlineData("https://res.openai.azure.com/openai/v1", "https://res.services.ai.azure.com/api/projects/_project/deployments?api-version=v1")]
+    [InlineData("https://res.cognitiveservices.azure.com/openai/v1", "https://res.services.ai.azure.com/api/projects/_project/deployments?api-version=v1")]
+    [InlineData("https://res.services.ai.azure.com/api/projects/umea", "https://res.services.ai.azure.com/api/projects/umea/deployments?api-version=v1")]
+    public async Task Foundry_lists_the_deployments_of_the_project_api_not_the_model_catalogue(string baseUrl, string expected)
+    {
+        using var list = new FakeProvider("""{"value":[]}""");
+
+        await DiscoverAsync(Provider(baseUrl, ProviderType.AzureAIFoundry, ProviderAuthMode.ApiKeyHeader), list);
+
+        list.LastUri.ShouldBe(new Uri(expected));
+        list.Requests[0].Headers["api-key"].ShouldBe("secret");
+    }
+
+    [Fact]
+    public async Task Foundry_deployments_are_listed_by_deployment_name_across_pages()
+    {
+        const string first = """
+            {"value":[
+              {"type":"ModelDeployment","name":"gpt-4.1","modelName":"gpt-4.1","modelVersion":"2025-04-14","modelPublisher":"OpenAI",
+               "capabilities":{"chat_completion":"true","agentsV2":"true"},"sku":{"name":"GlobalStandard","capacity":50}},
+              {"type":"ModelDeployment","name":"embed-sv","modelName":"text-embedding-3-large","modelVersion":"1","modelPublisher":"OpenAI",
+               "capabilities":{"embeddings":"true"},"sku":{"name":"Standard","capacity":10}}],
+             "nextLink":"https://res.services.ai.azure.com/api/projects/_project/deployments?api-version=v1&skip=2"}
+            """;
+        const string second = """
+            {"value":[{"type":"ModelDeployment","name":"stt","modelName":"gpt-4o-transcribe","modelVersion":"2025-03-20","modelPublisher":"OpenAI","capabilities":{},"sku":{}}]}
+            """;
+        using var list = new FakeProvider(request => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(request.RequestUri!.Query.Contains("skip=2", StringComparison.Ordinal) ? second : first, Encoding.UTF8, "application/json"),
+        });
+        var provider = Provider("https://res.services.ai.azure.com/openai/v1", ProviderType.AzureAIFoundry, ProviderAuthMode.ApiKeyHeader);
+        provider.Deployments.Add(new ModelDeployment { Name = "embeddings", UpstreamModel = "embed-sv" });
+
+        var models = await DiscoverAsync(provider, list);
+
+        list.Requests.Count.ShouldBe(2);
+        models.Select(m => (m.Id, m.Kind, m.AlreadyAdded)).ShouldBe(
+        [
+            ("embed-sv", ModelKind.Embedding, true),
+            ("gpt-4.1", ModelKind.Chat, false),
+            ("stt", ModelKind.Transcription, false),
+        ]);
+        models[0].DisplayName.ShouldBe("embed-sv (text-embedding-3-large), version 1");
+        models[1].Features.ShouldBe(["agentsv2"]);
+    }
+
+    [Fact]
+    public async Task Foundry_rerankers_get_the_kind_Rerank_their_publisher_and_a_residency_from_the_deployment_type()
+    {
+        using var list = new FakeProvider("""
+            {"value":[
+              {"type":"ModelDeployment","name":"Cohere-rerank-v5-fast","modelName":"Cohere-rerank-v5-fast","modelVersion":"1","modelPublisher":"Cohere",
+               "capabilities":{},"sku":{"name":"DataZoneStandard","capacity":1}},
+              {"type":"ModelDeployment","name":"ranker","modelName":"new-ranker","modelVersion":"1","modelPublisher":"Jina AI",
+               "capabilities":{"rerank":"true"},"sku":{"name":"GlobalStandard"}},
+              {"type":"ModelDeployment","name":"gpt-4.1","modelName":"gpt-4.1","modelVersion":"2025-04-14","modelPublisher":"OpenAI",
+               "capabilities":{"chat_completion":"true"},"sku":{"name":"Standard"}},
+              {"type":"ModelDeployment","name":"gpt-4.1-dz","modelName":"gpt-4.1","modelVersion":"2025-04-14","capabilities":{},"sku":{}}]}
+            """);
+        var provider = Provider("https://res.services.ai.azure.com/api/projects/umea", ProviderType.AzureAIFoundry, ProviderAuthMode.ApiKeyHeader);
+        provider.Residency = DataResidency.Eu;
+
+        var models = (await DiscoverAsync(provider, list)).ToDictionary(m => m.Id);
+
+        // The name says rerank, or the capabilities do; the publisher comes from the deployment, not from code.
+        (models["Cohere-rerank-v5-fast"].Kind, models["Cohere-rerank-v5-fast"].Publisher, models["Cohere-rerank-v5-fast"].Residency)
+            .ShouldBe((ModelKind.Rerank, "Cohere", DataResidency.Eu)); // an EU resource's data zone
+        (models["ranker"].Kind, models["ranker"].Publisher, models["ranker"].Residency).ShouldBe((ModelKind.Rerank, "Jina AI", DataResidency.External)); // global
+        models["ranker"].Features.ShouldNotContain("rerank");
+        (models["gpt-4.1"].Kind, models["gpt-4.1"].Residency).ShouldBe((ModelKind.Chat, (DataResidency?)null)); // regional: the provider's
+        (models["gpt-4.1-dz"].Publisher, models["gpt-4.1-dz"].Residency).ShouldBe(((string?)null, (DataResidency?)null));
+    }
+
+    [Theory]
+    [InlineData("GlobalStandard", DataResidency.Eu, DataResidency.External)]
+    [InlineData("GlobalProvisionedManaged", DataResidency.Eu, DataResidency.External)]
+    [InlineData("GlobalBatch", DataResidency.External, DataResidency.External)]
+    [InlineData("DataZoneStandard", DataResidency.Eu, DataResidency.Eu)]
+    [InlineData("DataZoneProvisionedManaged", DataResidency.Eu, DataResidency.Eu)]
+    [InlineData("DataZoneStandard", DataResidency.External, DataResidency.External)] // the US data zone
+    [InlineData("Standard", DataResidency.Eu, null)]
+    [InlineData("ProvisionedManaged", DataResidency.Eu, null)]
+    [InlineData("SomethingNew", DataResidency.Eu, null)]
+    [InlineData(null, DataResidency.Eu, null)]
+    public void The_deployment_type_suggests_where_a_deployment_processes_data(string? sku, DataResidency provider, DataResidency? expected) =>
+        ModelDiscovery.SuggestedResidency(sku, provider).ShouldBe(expected);
+
+    private const string MixedDeployments = """
+        {"value":[
+          {"type":"ModelDeployment","name":"gpt-4.1","modelName":"gpt-4.1","modelVersion":"2025-04-14","modelPublisher":"OpenAI","capabilities":{},"sku":{"name":"GlobalStandard"}},
+          {"type":"ModelDeployment","name":"gpt-4.1-ptu","modelName":"gpt-4.1","modelVersion":"2025-04-14","modelPublisher":"OpenAI","capabilities":{},"sku":{"name":"ProvisionedManaged"}},
+          {"type":"ModelDeployment","name":"claude-sonnet-4-5","modelName":"claude-sonnet-4-5","modelVersion":"1","modelPublisher":"Anthropic","capabilities":{},"sku":{"name":"GlobalStandard"}}]}
+        """;
+
+    [Fact]
+    public async Task Foundry_deployments_get_the_Azure_list_price_of_their_model_and_deployment_type()
+    {
+        using var list = new FakeProvider(MixedDeployments);
+        AzurePriceMeter[] meters =
+        [
+            AzurePriceMatcher.Parse("Azure OpenAI", "gpt 4.1 Inp glbl Tokens", "1K", 0.002m, "Consumption")!,
+            AzurePriceMatcher.Parse("Azure OpenAI", "gpt 4.1 Outp glbl Tokens", "1K", 0.008m, "Consumption")!,
+        ];
+
+        var models = await DiscoverAsync(Provider("https://res.services.ai.azure.com/openai/v1", ProviderType.AzureAIFoundry, ProviderAuthMode.ApiKeyHeader), list, azurePrices: meters);
+
+        // Claude too: the gateway sends it to the resource's Anthropic API.
+        models.Select(m => (m.Id, m.BaseModel)).ShouldBe([("claude-sonnet-4-5", "claude-sonnet-4-5"), ("gpt-4.1", "gpt-4.1"), ("gpt-4.1-ptu", "gpt-4.1")]);
+        models[1].Price.ShouldBe(new DiscoveredPrice(2m, 2m, 8m));
+        models[1].PriceSource.ShouldBe("Azure list price: gpt 4.1 Inp glbl Tokens, gpt 4.1 Outp glbl Tokens");
+        models[2].Price.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Claude_on_Foundry_is_listed_for_an_Anthropic_provider_from_the_project_api()
+    {
+        using var list = new FakeProvider(MixedDeployments);
+
+        var models = await DiscoverAsync(Provider("https://res.services.ai.azure.com/anthropic/v1", ProviderType.Anthropic, ProviderAuthMode.XApiKeyHeader), list);
+
+        list.LastUri.ShouldBe(new Uri("https://res.services.ai.azure.com/api/projects/_project/deployments?api-version=v1"));
+        list.Requests[0].Headers["api-key"].ShouldBe("secret");
+        list.Requests[0].Headers.ShouldNotContainKey("x-api-key");
+        models.Single().Id.ShouldBe("claude-sonnet-4-5");
+    }
+
+    [Fact]
+    public async Task Foundry_deployments_get_details_and_a_missing_price_from_the_model_list_by_their_base_model()
+    {
+        using var list = new FakeProvider(MixedDeployments);
+        using var document = System.Text.Json.JsonDocument.Parse("""
+            {"azure":{"models":{
+              "gpt-4.1":{"description":"Smart non-reasoning model","tool_call":true,"limit":{"context":1047576},"cost":{"input":2,"output":8,"cache_read":0.5}},
+              "claude-sonnet-4-5":{"description":"Claude Sonnet","reasoning":true,"cost":{"input":3,"output":15,"cache_read":0.3,"cache_write":3.75}}}}}
+            """);
+        var listed = ModelList.Parse(document);
+        AzurePriceMeter[] meters =
+        [
+            AzurePriceMatcher.Parse("Azure OpenAI", "gpt 4.1 Inp glbl Tokens", "1K", 0.002m, "Consumption")!,
+            AzurePriceMatcher.Parse("Azure OpenAI", "gpt 4.1 Outp glbl Tokens", "1K", 0.008m, "Consumption")!,
+        ];
+        using var http = new HttpClient(list, disposeHandler: false);
+        var models = await ModelDiscovery.DiscoverAsync(Provider("https://res.services.ai.azure.com/openai/v1", ProviderType.AzureAIFoundry, ProviderAuthMode.ApiKeyHeader),
+            http, Protector, requireHttps: false, Ct, _ => Task.FromResult<IReadOnlyList<AzurePriceMeter>>(meters), _ => Task.FromResult(listed));
+
+        var global = models.Single(m => m.Id == "gpt-4.1");
+        global.PriceSource.ShouldNotBeNull().ShouldStartWith("Azure list price"); // Azure's own price comes first
+        (global.Description, global.ContextWindow).ShouldBe(("Smart non-reasoning model", (int?)1047576));
+        global.Features.ShouldBe(["tools"]);
+        // The provisioned deployment has no Azure pay-as-you-go price: the list fills it, looked up by its base model.
+        var ptu = models.Single(m => m.Id == "gpt-4.1-ptu");
+        (ptu.Price, ptu.PriceSource, ptu.Description).ShouldBe((new DiscoveredPrice(2, 0.5m, 8), "models.dev list price: azure/gpt-4.1", "Smart non-reasoning model"));
+        var claude = models.Single(m => m.Id == "claude-sonnet-4-5");
+        claude.Price.ShouldBe(new DiscoveredPrice(3, 0.3m, 15, CacheWriteInputPerMillionUsd: 3.75m));
+        claude.Features.ShouldBe(["thinking"]);
+    }
+
+    [Fact]
+    public async Task Foundry_does_not_follow_a_next_link_to_another_host()
+    {
+        using var list = new FakeProvider("""{"value":[{"name":"gpt-4.1","modelName":"gpt-4.1"}],"nextLink":"https://elsewhere.example/steal"}""");
+
+        var models = await DiscoverAsync(Provider("https://res.services.ai.azure.com/openai/v1", ProviderType.AzureAIFoundry, ProviderAuthMode.ApiKeyHeader), list);
+
+        list.Requests.Count.ShouldBe(1);
+        models.Single().Id.ShouldBe("gpt-4.1");
+    }
+
+    [Theory]
+    [InlineData(ProviderType.AzureAIFoundry, "https://res.services.ai.azure.com/api/projects/umea", "https://res.services.ai.azure.com/openai/v1")]
+    [InlineData(ProviderType.AzureAIFoundry, "https://res.services.ai.azure.com/api/projects/umea/", "https://res.services.ai.azure.com/openai/v1")]
+    [InlineData(ProviderType.AzureAIFoundry, "https://res.services.ai.azure.com", "https://res.services.ai.azure.com/openai/v1")]
+    [InlineData(ProviderType.AzureAIFoundry, "https://res.services.ai.azure.com/openai/v1", "https://res.services.ai.azure.com/openai/v1")]
+    [InlineData(ProviderType.AzureAIFoundry, "https://res.openai.azure.com/openai/v1", "https://res.openai.azure.com/openai/v1")]
+    [InlineData(ProviderType.Anthropic, "https://res.services.ai.azure.com/api/projects/umea", "https://res.services.ai.azure.com/anthropic/v1")]
+    [InlineData(ProviderType.Anthropic, "https://res.services.ai.azure.com/anthropic/v1", "https://res.services.ai.azure.com/anthropic/v1")]
+    [InlineData(ProviderType.Anthropic, "https://api.anthropic.com/v1", "https://api.anthropic.com/v1")]
+    [InlineData(ProviderType.OpenAICompatible, "https://res.services.ai.azure.com/api/projects/umea", "https://res.services.ai.azure.com/api/projects/umea")]
+    public void Requests_go_to_the_resource_address_of_a_saved_project_endpoint(ProviderType type, string saved, string requests) =>
+        FoundryEndpoint.RequestBaseUrl(type, saved).ShouldBe(requests);
+
+    [Fact]
+    public async Task A_404_without_a_project_asks_for_the_project_endpoint()
+    {
+        using var list = new FakeProvider("{}", HttpStatusCode.NotFound);
+
+        var fault = await Should.ThrowAsync<ApiFaultException>(() =>
+            DiscoverAsync(Provider("https://res.services.ai.azure.com/openai/v1", ProviderType.AzureAIFoundry, ProviderAuthMode.ApiKeyHeader), list));
+
+        fault.Message.ShouldContain("/api/projects/<project>");
+    }
+
+    [Fact]
+    public async Task Anthropic_asks_for_the_whole_list_and_keeps_a_base_query_string()
+    {
+        using var plain = new FakeProvider("""{"data":[{"id":"claude-x"}]}""");
+        await DiscoverAsync(Provider("https://api.anthropic.example/v1", ProviderType.Anthropic, ProviderAuthMode.XApiKeyHeader), plain);
+        plain.LastUri.ShouldBe(new Uri("https://api.anthropic.example/v1/models?limit=1000"));
+
+        using var withQuery = new FakeProvider("""{"data":[{"id":"claude-x"}]}""");
+        await DiscoverAsync(Provider("https://proxy.example/anthropic?tenant=a", ProviderType.Anthropic, ProviderAuthMode.XApiKeyHeader), withQuery);
+        withQuery.LastUri.ShouldBe(new Uri("https://proxy.example/anthropic/models?tenant=a&limit=1000"));
+    }
+
+    [Fact]
+    public async Task Ollama_lists_on_the_native_api_without_the_v1_segment_and_reads_details()
+    {
+        using var ollama = new FakeProvider(request => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(request.RequestUri!.AbsolutePath.EndsWith("/api/tags", StringComparison.Ordinal)
+                ? """{"models":[{"name":"llama3:8b"},{"name":"nomic-embed-text"}]}"""
+                : """{"capabilities":["completion","tools"],"model_info":{"llama.context_length":8192}}""", Encoding.UTF8, "application/json"),
+        });
+
+        var models = await DiscoverAsync(Provider("http://ollama.local:11434/v1/", ProviderType.Ollama, credential: null), ollama);
+
+        ollama.Requests[0].Uri.ShouldBe(new Uri("http://ollama.local:11434/api/tags"));
+        ollama.Requests.Skip(1).ShouldAllBe(r => r.Method == HttpMethod.Post && r.Uri == new Uri("http://ollama.local:11434/api/show"));
+        ollama.Requests.ShouldAllBe(r => !r.Headers.ContainsKey("Authorization"));
+        var llama = models.Single(m => m.Id == "llama3:8b");
+        llama.ContextWindow.ShouldBe(8192);
+        llama.Features.ShouldBe(["tools"]);
+    }
+
+    [Theory]
+    [InlineData(ProviderType.OpenAI, ProviderAuthMode.Bearer, "Authorization", "Bearer secret")]
+    [InlineData(ProviderType.AzureAIFoundry, ProviderAuthMode.ApiKeyHeader, "api-key", "secret")]
+    [InlineData(ProviderType.OpenAI, ProviderAuthMode.XApiKeyHeader, "x-api-key", "secret")]
+    public async Task The_credential_goes_in_the_header_the_auth_mode_names(ProviderType type, ProviderAuthMode mode, string header, string value)
+    {
+        using var list = new FakeProvider("""{"data":[]}""");
+
+        await DiscoverAsync(Provider("https://api.example/v1", type, mode), list);
+
+        var sent = list.Requests.Single().Headers;
+        sent[header].ShouldBe(value);
+        string[] credentialHeaders = ["Authorization", "api-key", "x-api-key"];
+        credentialHeaders.Where(h => h != header).ShouldAllBe(h => !sent.ContainsKey(h));
+        sent.ContainsKey("anthropic-version").ShouldBeFalse();
+        list.LastUri!.Query.ShouldNotContain("secret");
+    }
+
+    [Fact]
+    public async Task Models_get_what_the_provider_does_not_report_from_the_model_list()
+    {
+        using var list = new FakeProvider("""{"data":[{"id":"claude-opus-4-5"},{"id":"claude-unlisted"}]}""");
+        using var document = System.Text.Json.JsonDocument.Parse("""
+            {"anthropic":{"models":{"claude-opus-4-5":{"description":"Deep reasoning","tool_call":true,"reasoning":true,
+              "modalities":{"input":["text","image","pdf"],"output":["text"]},"limit":{"context":200000},
+              "cost":{"input":5,"output":25,"cache_read":0.5,"cache_write":6.25}}}}}
+            """);
+        var listed = ModelList.Parse(document);
+        using var http = new HttpClient(list, disposeHandler: false);
+        var models = await ModelDiscovery.DiscoverAsync(Provider("https://api.anthropic.example/v1", ProviderType.Anthropic, ProviderAuthMode.XApiKeyHeader),
+            http, Protector, requireHttps: false, Ct, modelList: _ => Task.FromResult(listed));
+
+        // An Anthropic provider at another host still pays Anthropic's prices.
+        var opus = models.Single(m => m.Id == "claude-opus-4-5");
+        opus.Price.ShouldBe(new DiscoveredPrice(5, 0.5m, 25, CacheWriteInputPerMillionUsd: 6.25m));
+        opus.PriceSource.ShouldBe("models.dev list price: anthropic/claude-opus-4-5");
+        opus.Description.ShouldBe("Deep reasoning");
+        opus.Features.ShouldBe(["thinking", "tools", "vision"]);
+        opus.ContextWindow.ShouldBe(200000);
+        var unlisted = models.Single(m => m.Id == "claude-unlisted");
+        (unlisted.Price, unlisted.Description).ShouldBe((null, null));
+    }
+
+    [Fact]
+    public async Task Anthropic_gets_its_api_version_header()
+    {
+        using var list = new FakeProvider("""{"data":[]}""");
+
+        await DiscoverAsync(Provider("https://api.anthropic.example/v1", ProviderType.Anthropic, ProviderAuthMode.XApiKeyHeader), list);
+
+        var sent = list.Requests.Single().Headers;
+        sent["x-api-key"].ShouldBe("secret");
+        sent["anthropic-version"].ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Without_a_credential_no_auth_header_is_sent()
+    {
+        using var list = new FakeProvider("""{"data":[]}""");
+
+        await DiscoverAsync(Provider("https://api.example/v1", credential: null), list);
+
+        list.Requests.Single().Headers.ContainsKey("Authorization").ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Plain_http_is_refused_when_https_is_required_before_anything_is_sent()
+    {
+        using var list = new FakeProvider("""{"data":[]}""");
+
+        var refused = await Should.ThrowAsync<ApiFaultException>(() => DiscoverAsync(Provider("http://api.example/v1"), list, requireHttps: true));
+
+        refused.Status.ShouldBe(400);
+        list.Requests.ShouldBeEmpty();
+        (await DiscoverAsync(Provider("https://api.example/v1"), list, requireHttps: true)).ShouldBeEmpty();
+        (await DiscoverAsync(Provider("http://api.example/v1"), list, requireHttps: false)).ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, "Check the API key.")]
+    [InlineData(HttpStatusCode.Forbidden, "Check the API key.")]
+    [InlineData(HttpStatusCode.NotFound, "Check the address and the authentication method.")]
+    public async Task An_error_status_becomes_a_bad_gateway_with_a_hint(HttpStatusCode status, string hint)
+    {
+        using var list = new FakeProvider("""{"error":"nope"}""", status);
+
+        var fault = await Should.ThrowAsync<ApiFaultException>(() => DiscoverAsync(Provider("https://api.example/v1"), list));
+
+        fault.Status.ShouldBe(502);
+        fault.Message.ShouldContain(((int)status).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        fault.Message.ShouldEndWith(hint);
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("""{"unexpected":true}""")]
+    [InlineData("42")]
+    public async Task An_answer_without_a_model_list_becomes_a_bad_gateway(string body)
+    {
+        using var list = new FakeProvider(body);
+
+        var fault = await Should.ThrowAsync<ApiFaultException>(() => DiscoverAsync(Provider("https://api.example/v1"), list));
+
+        fault.Status.ShouldBe(502);
+    }
+
+    [Fact]
+    public async Task A_connection_failure_becomes_a_bad_gateway()
+    {
+        using var down = new FakeProvider(_ => throw new HttpRequestException("connection refused"));
+
+        var fault = await Should.ThrowAsync<ApiFaultException>(() => DiscoverAsync(Provider("https://api.example/v1"), down));
+
+        fault.Status.ShouldBe(502);
+    }
+
+    [Fact]
+    public async Task Azure_OpenAI_cannot_list_deployments()
+    {
+        using var list = new FakeProvider("""{"data":[]}""");
+
+        var fault = await Should.ThrowAsync<ApiFaultException>(() => DiscoverAsync(Provider("https://res.example/openai", ProviderType.AzureOpenAI, ProviderAuthMode.ApiKeyHeader), list));
+
+        fault.Status.ShouldBe(400);
+        list.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Models_already_added_are_marked()
+    {
+        using var list = new FakeProvider("""{"data":[{"id":"gpt-4.1"},{"id":"gpt-4o"}]}""");
+        var provider = Provider("https://api.example/v1");
+        provider.Deployments.Add(new ModelDeployment { Name = "gpt-4.1", UpstreamModel = "GPT-4.1" });
+
+        var models = await DiscoverAsync(provider, list);
+
+        models.Single(m => m.Id == "gpt-4.1").AlreadyAdded.ShouldBeTrue();
+        models.Single(m => m.Id == "gpt-4o").AlreadyAdded.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void The_discovery_client_makes_a_single_attempt()
+    {
+        using var handler = fixture.Services.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler(ModelDiscovery.HttpClientName);
+
+        Pipeline(handler).ShouldNotContain(h => h is ResilienceHandler);
+        Pipeline(fixture.Services.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler("gateway-operations")).ShouldContain(h => h is ResilienceHandler);
+    }
+
+    private static List<HttpMessageHandler> Pipeline(HttpMessageHandler handler)
+    {
+        var chain = new List<HttpMessageHandler>();
+        for (HttpMessageHandler? current = handler; current is not null; current = (current as DelegatingHandler)?.InnerHandler)
+        {
+            chain.Add(current);
+        }
+
+        return chain;
+    }
+}

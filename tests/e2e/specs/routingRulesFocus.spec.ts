@@ -9,7 +9,7 @@ test.afterEach(async ({ page }) => { await page.close() })
 const suffix = () => crypto.randomUUID().slice(0, 8)
 
 async function createRule(page: Page, body: Record<string, unknown>): Promise<string> {
-  const response = await mutate(page, '/api/routing-rules', { targets: [{ model: 'ume/chat-onprem', weight: 1 }], scope: 'Global', ...body })
+  const response = await mutate(page, '/api/routing-rules', { targets: [{ model: 'fors/chat-onprem', weight: 1 }], scope: 'Global', ...body })
   expect(response.status(), await response.text()).toBe(201)
   return (await response.json()).id
 }
@@ -39,7 +39,7 @@ test('focus moves to the detail heading, back to the trigger, to the first error
     const testTrigger = page.getByRole('button', { name: 'Test a request' })
     await testTrigger.click()
     const dialog = page.getByRole('dialog', { name: 'Test a request' })
-    await dialog.getByLabel('Model the client asks for').fill('ume/chat-standard')
+    await dialog.getByLabel('Model the client asks for').fill('fors/chat-standard')
     await dialog.getByRole('button', { name: 'Run test', exact: true }).click()
     await expect(dialog.getByRole('heading', { name: /applies|No rule matches/ })).toBeFocused()
     await dialog.getByRole('button', { name: 'Close', exact: true }).click()

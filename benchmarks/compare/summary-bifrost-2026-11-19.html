@@ -10,7 +10,7 @@
 <style>
 :root {
   --bg: #f6f7f9; --surface: #fcfcfb; --fg: #16202a; --muted: #5a6573; --line: #d9dee5; --chip: #eceff3;
-  --ume: #2a78d6; --bifrost: #eb6834; --good: #1f7a3a; --bad: #b3261e;
+  --fors: #2a78d6; --bifrost: #eb6834; --good: #1f7a3a; --bad: #b3261e;
   --display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
   --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
@@ -19,13 +19,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f141a; --surface: #1a1a19; --fg: #e3e8ee; --muted: #9aa5b2; --line: #2a3440; --chip: #1f2832;
-    --ume: #3987e5; --bifrost: #d95926; --good: #5cc97c; --bad: #ff7b72;
+    --fors: #3987e5; --bifrost: #d95926; --good: #5cc97c; --bad: #ff7b72;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f141a; --surface: #1a1a19; --fg: #e3e8ee; --muted: #9aa5b2; --line: #2a3440; --chip: #1f2832;
-  --ume: #3987e5; --bifrost: #d95926; --good: #5cc97c; --bad: #ff7b72;
+  --fors: #3987e5; --bifrost: #d95926; --good: #5cc97c; --bad: #ff7b72;
   color-scheme: dark;
 }
 body {
@@ -43,8 +43,8 @@ section { display: flex; flex-direction: column; gap: 16px; }
 .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .lede { font-size: 18px; max-width: 66ch; }
 .meta { font-family: var(--mono); font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; }
-a { color: var(--ume); }
-a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--ume); outline-offset: 2px; }
+a { color: var(--fors); }
+a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--fors); outline-offset: 2px; }
 code { font-family: var(--mono); font-size: 0.88em; background: var(--chip); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
 ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
 
@@ -65,9 +65,9 @@ svg text { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
 svg text.dl, svg text.vl { fill: var(--fg); font-size: 11.5px; }
 svg .grid { stroke: var(--line); stroke-width: 1; }
 svg .ln { fill: none; stroke-width: 2; }
-svg .ln.ume { stroke: var(--ume); } svg .ln.bifrost { stroke: var(--bifrost); }
+svg .ln.fors { stroke: var(--fors); } svg .ln.bifrost { stroke: var(--bifrost); }
 svg .pt { stroke: var(--surface); stroke-width: 2; cursor: default; }
-svg .pt.ume, svg .bar.ume { fill: var(--ume); } svg .pt.bifrost, svg .bar.bifrost { fill: var(--bifrost); }
+svg .pt.fors, svg .bar.fors { fill: var(--fors); } svg .pt.bifrost, svg .bar.bifrost { fill: var(--bifrost); }
 svg .pt:hover, svg .pt:focus { r: 6; }
 svg .bar:hover, svg .bar:focus { opacity: 0.85; }
 .legend { display: flex; gap: 16px; font-family: var(--mono); font-size: 12.5px; flex-wrap: wrap; }
@@ -93,40 +93,40 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
 
 <header style="display:flex;flex-direction:column;gap:14px">
   <span class="eyebrow">Gateway benchmark · 19 Nov 2026</span>
-  <h1>Bifrost vs. the Ume LLM gateway</h1>
-  <p class="lede">Both gateways ran on the same machine, in the same session, against the same simulated model, with their governance features on: virtual keys, rate limits, budgets at three levels, routing with a fallback, and a record of every message. On the same four vCPUs the Ume gateway served 4–7× as many messages at 5–7× less CPU per message, and it recorded all of them. Bifrost dropped up to 39&nbsp;% of its request logs under load.</p>
-  <div class="meta"><span>Bifrost v2.5.1 (official image)</span><span>Ume gateway 0.11.0 @ d128f57</span><span>0 errors except Bifrost on the small host</span><span>Branch: <a href="https://github.com/thekim1/llmgateway/tree/bench/bifrost-vs-gateway">bench/bifrost-vs-gateway</a></span></div>
+  <h1>Bifrost vs. Fors</h1>
+  <p class="lede">Both gateways ran on the same machine, in the same session, against the same simulated model, with their governance features on: virtual keys, rate limits, budgets at three levels, routing with a fallback, and a record of every message. On the same four vCPUs Fors served 4–7× as many messages at 5–7× less CPU per message, and it recorded all of them. Bifrost dropped up to 39&nbsp;% of its request logs under load.</p>
+  <div class="meta"><span>Bifrost v2.5.1 (official image)</span><span>Fors 0.11.0 @ d128f57</span><span>0 errors except Bifrost on the small host</span><span>Branch: <a href="https://github.com/thekim1/fors/tree/bench/bifrost-vs-gateway">bench/bifrost-vs-gateway</a></span></div>
 </header>
 
 <section>
   <div class="verdict">
     <div class="limit">
       <span class="what">Peak streamed messages/s, 4 vCPUs</span>
-      <span class="big"><span class="who"><span class="dot" style="background:var(--ume)"></span>14&#8239;369</span></span>
-      <p>Ume gateway, against <b>2&#8239;077</b> for Bifrost (6.9×). On one vCPU: 5&#8239;443 against 663.</p>
+      <span class="big"><span class="who"><span class="dot" style="background:var(--fors)"></span>14&#8239;369</span></span>
+      <p>Fors, against <b>2&#8239;077</b> for Bifrost (6.9×). On one vCPU: 5&#8239;443 against 663.</p>
     </div>
     <div class="limit">
       <span class="what">CPU per streamed message, 64 clients</span>
-      <span class="big"><span class="who"><span class="dot" style="background:var(--ume)"></span>0.30&nbsp;ms</span></span>
-      <p>Ume gateway, against <b>2.07&nbsp;ms</b> for Bifrost. Even with everything off, Bifrost needs 1.41&nbsp;ms.</p>
+      <span class="big"><span class="who"><span class="dot" style="background:var(--fors)"></span>0.30&nbsp;ms</span></span>
+      <p>Fors, against <b>2.07&nbsp;ms</b> for Bifrost. Even with everything off, Bifrost needs 1.41&nbsp;ms.</p>
     </div>
     <div class="limit">
       <span class="what">Messages recorded under load</span>
-      <span class="big"><span class="who"><span class="dot" style="background:var(--ume)"></span>100&nbsp;%</span></span>
-      <p>Ume gateway in every run. Bifrost logged 61–66&nbsp;% of non-streamed messages at 16–64 clients; the rest were dropped.</p>
+      <span class="big"><span class="who"><span class="dot" style="background:var(--fors)"></span>100&nbsp;%</span></span>
+      <p>Fors in every run. Bifrost logged 61–66&nbsp;% of non-streamed messages at 16–64 clients; the rest were dropped.</p>
     </div>
     <div class="limit">
       <span class="what">Small host, 100 msg/s of realistic streams</span>
-      <span class="big"><span class="who"><span class="dot" style="background:var(--ume)"></span>0.5&nbsp;vCPU</span></span>
-      <p>Enough for the Ume gateway (≤&nbsp;200&nbsp;MB, 0 failures). Bifrost ran out of 512&nbsp;MB and was killed; it needed 1&nbsp;vCPU and ~620&nbsp;MB.</p>
+      <span class="big"><span class="who"><span class="dot" style="background:var(--fors)"></span>0.5&nbsp;vCPU</span></span>
+      <p>Enough for Fors (≤&nbsp;200&nbsp;MB, 0 failures). Bifrost ran out of 512&nbsp;MB and was killed; it needed 1&nbsp;vCPU and ~620&nbsp;MB.</p>
     </div>
   </div>
 </section>
 
 <section>
   <h2>As load grows</h2>
-  <p class="prose">Streamed chat on 4 vCPUs each, 20&nbsp;s per point, an instant fake model, so everything measured is the gateway's own cost. Neither gateway returned a single error. Bifrost is at its limit from 8 clients: its throughput stays flat and the extra clients queue. The Ume gateway keeps gaining up to 256.</p>
-  <div class="legend" aria-hidden="true"><span><span class="dot" style="background:var(--ume)"></span>Ume gateway</span><span><span class="dot" style="background:var(--bifrost)"></span>Bifrost v2.5.1</span></div>
+  <p class="prose">Streamed chat on 4 vCPUs each, 20&nbsp;s per point, an instant fake model, so everything measured is the gateway's own cost. Neither gateway returned a single error. Bifrost is at its limit from 8 clients: its throughput stays flat and the extra clients queue. Fors keeps gaining up to 256.</p>
+  <div class="legend" aria-hidden="true"><span><span class="dot" style="background:var(--fors)"></span>Fors</span><span><span class="dot" style="background:var(--bifrost)"></span>Bifrost v2.5.1</span></div>
   <div class="charts">
     <figure>
       <figcaption>Messages per second</figcaption>
@@ -151,17 +151,17 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
 <text x="416.5" y="278" text-anchor="middle">128</text>
 <text x="468.0" y="278" text-anchor="middle">256</text>
 <text x="262" y="296" text-anchor="middle">concurrent clients</text>
-<path d="M56.0,244.2 L107.5,231.6 L159.0,212.7 L210.5,189.9 L262.0,156.5 L313.5,117.9 L365.0,85.8 L416.5,50.7 L468.0,36.5" class="ln ume"/>
-<circle cx="56.0" cy="244.2" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 1 clients · 1 034 msg/s"/>
-<circle cx="107.5" cy="231.6" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 2 clients · 1 859 msg/s"/>
-<circle cx="159.0" cy="212.7" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 4 clients · 3 100 msg/s"/>
-<circle cx="210.5" cy="189.9" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 8 clients · 4 594 msg/s"/>
-<circle cx="262.0" cy="156.5" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 16 clients · 6 786 msg/s"/>
-<circle cx="313.5" cy="117.9" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 32 clients · 9 318 msg/s"/>
-<circle cx="365.0" cy="85.8" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 64 clients · 11 423 msg/s"/>
-<circle cx="416.5" cy="50.7" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 128 clients · 13 727 msg/s"/>
-<circle cx="468.0" cy="36.5" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 256 clients · 14 653 msg/s"/>
-<text x="478.0" y="40.5" class="dl">Ume</text>
+<path d="M56.0,244.2 L107.5,231.6 L159.0,212.7 L210.5,189.9 L262.0,156.5 L313.5,117.9 L365.0,85.8 L416.5,50.7 L468.0,36.5" class="ln fors"/>
+<circle cx="56.0" cy="244.2" r="4" class="pt fors" tabindex="0" data-tip="Fors · 1 clients · 1 034 msg/s"/>
+<circle cx="107.5" cy="231.6" r="4" class="pt fors" tabindex="0" data-tip="Fors · 2 clients · 1 859 msg/s"/>
+<circle cx="159.0" cy="212.7" r="4" class="pt fors" tabindex="0" data-tip="Fors · 4 clients · 3 100 msg/s"/>
+<circle cx="210.5" cy="189.9" r="4" class="pt fors" tabindex="0" data-tip="Fors · 8 clients · 4 594 msg/s"/>
+<circle cx="262.0" cy="156.5" r="4" class="pt fors" tabindex="0" data-tip="Fors · 16 clients · 6 786 msg/s"/>
+<circle cx="313.5" cy="117.9" r="4" class="pt fors" tabindex="0" data-tip="Fors · 32 clients · 9 318 msg/s"/>
+<circle cx="365.0" cy="85.8" r="4" class="pt fors" tabindex="0" data-tip="Fors · 64 clients · 11 423 msg/s"/>
+<circle cx="416.5" cy="50.7" r="4" class="pt fors" tabindex="0" data-tip="Fors · 128 clients · 13 727 msg/s"/>
+<circle cx="468.0" cy="36.5" r="4" class="pt fors" tabindex="0" data-tip="Fors · 256 clients · 14 653 msg/s"/>
+<text x="478.0" y="40.5" class="dl">Fors</text>
 <path d="M56.0,249.1 L107.5,240.8 L159.0,232.8 L210.5,229.8 L262.0,229.2 L313.5,228.5 L365.0,229.3 L416.5,229.9 L468.0,231.1" class="ln bifrost"/>
 <circle cx="56.0" cy="249.1" r="4" class="pt bifrost" tabindex="0" data-tip="Bifrost v2.5.1 · 1 clients · 714 msg/s"/>
 <circle cx="107.5" cy="240.8" r="4" class="pt bifrost" tabindex="0" data-tip="Bifrost v2.5.1 · 2 clients · 1 259 msg/s"/>
@@ -207,17 +207,17 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
 <text x="416.5" y="278" text-anchor="middle">128</text>
 <text x="468.0" y="278" text-anchor="middle">256</text>
 <text x="262" y="296" text-anchor="middle">concurrent clients</text>
-<path d="M56.0,238.3 L107.5,234.1 L159.0,226.5 L210.5,213.4 L262.0,199.8 L313.5,184.0 L365.0,164.1 L416.5,143.2 L468.0,117.5" class="ln ume"/>
-<circle cx="56.0" cy="238.3" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 1 clients · 0.9 ms median"/>
-<circle cx="107.5" cy="234.1" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 2 clients · 0.9 ms median"/>
-<circle cx="159.0" cy="226.5" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 4 clients · 1.1 ms median"/>
-<circle cx="210.5" cy="213.4" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 8 clients · 1.6 ms median"/>
-<circle cx="262.0" cy="199.8" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 16 clients · 2.2 ms median"/>
-<circle cx="313.5" cy="184.0" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 32 clients · 3.2 ms median"/>
-<circle cx="365.0" cy="164.1" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 64 clients · 5.3 ms median"/>
-<circle cx="416.5" cy="143.2" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 128 clients · 8.8 ms median"/>
-<circle cx="468.0" cy="117.5" r="4" class="pt ume" tabindex="0" data-tip="Ume gateway · 256 clients · 16.5 ms median"/>
-<text x="478.0" y="121.5" class="dl">Ume</text>
+<path d="M56.0,238.3 L107.5,234.1 L159.0,226.5 L210.5,213.4 L262.0,199.8 L313.5,184.0 L365.0,164.1 L416.5,143.2 L468.0,117.5" class="ln fors"/>
+<circle cx="56.0" cy="238.3" r="4" class="pt fors" tabindex="0" data-tip="Fors · 1 clients · 0.9 ms median"/>
+<circle cx="107.5" cy="234.1" r="4" class="pt fors" tabindex="0" data-tip="Fors · 2 clients · 0.9 ms median"/>
+<circle cx="159.0" cy="226.5" r="4" class="pt fors" tabindex="0" data-tip="Fors · 4 clients · 1.1 ms median"/>
+<circle cx="210.5" cy="213.4" r="4" class="pt fors" tabindex="0" data-tip="Fors · 8 clients · 1.6 ms median"/>
+<circle cx="262.0" cy="199.8" r="4" class="pt fors" tabindex="0" data-tip="Fors · 16 clients · 2.2 ms median"/>
+<circle cx="313.5" cy="184.0" r="4" class="pt fors" tabindex="0" data-tip="Fors · 32 clients · 3.2 ms median"/>
+<circle cx="365.0" cy="164.1" r="4" class="pt fors" tabindex="0" data-tip="Fors · 64 clients · 5.3 ms median"/>
+<circle cx="416.5" cy="143.2" r="4" class="pt fors" tabindex="0" data-tip="Fors · 128 clients · 8.8 ms median"/>
+<circle cx="468.0" cy="117.5" r="4" class="pt fors" tabindex="0" data-tip="Fors · 256 clients · 16.5 ms median"/>
+<text x="478.0" y="121.5" class="dl">Fors</text>
 <path d="M56.0,224.3 L107.5,219.9 L159.0,205.6 L210.5,182.3 L262.0,153.2 L313.5,125.3 L365.0,95.4 L416.5,66.3 L468.0,36.9" class="ln bifrost"/>
 <circle cx="56.0" cy="224.3" r="4" class="pt bifrost" tabindex="0" data-tip="Bifrost v2.5.1 · 1 clients · 1.2 ms median"/>
 <circle cx="107.5" cy="219.9" r="4" class="pt bifrost" tabindex="0" data-tip="Bifrost v2.5.1 · 2 clients · 1.3 ms median"/>
@@ -230,7 +230,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
 <circle cx="468.0" cy="36.9" r="4" class="pt bifrost" tabindex="0" data-tip="Bifrost v2.5.1 · 256 clients · 120 ms median"/>
 <text x="478.0" y="40.9" class="dl">Bifrost</text>
 </svg>
-      <span class="note">At 256 clients: 16.5&nbsp;ms (p99 34&nbsp;ms) for the Ume gateway, 120&nbsp;ms (p99 374&nbsp;ms) for Bifrost.</span>
+      <span class="note">At 256 clients: 16.5&nbsp;ms (p99 34&nbsp;ms) for Fors, 120&nbsp;ms (p99 374&nbsp;ms) for Bifrost.</span>
     </figure>
     <figure>
       <figcaption>Peak messages per second by vCPUs</figcaption>
@@ -246,27 +246,27 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
 <line x1="56" x2="544" y1="16.0" y2="16.0" class="grid"/>
 <text x="48" y="20.0" text-anchor="end">16 000</text>
 <text x="117.0" y="278" text-anchor="middle">1 vCPU</text>
-<path d="M82.0,260.0 V181.0 Q82.0,177.0 86.0,177.0 H112.0 Q116.0,177.0 116.0,181.0 V260.0 Z" class="bar ume" tabindex="0" data-tip="Ume gateway · 1 vCPU · 5 443 msg/s at 64 clients"/>
+<path d="M82.0,260.0 V181.0 Q82.0,177.0 86.0,177.0 H112.0 Q116.0,177.0 116.0,181.0 V260.0 Z" class="bar fors" tabindex="0" data-tip="Fors · 1 vCPU · 5 443 msg/s at 64 clients"/>
 <text x="99.0" y="171.0" text-anchor="middle" class="vl">5.4k</text>
 <path d="M118.0,260.0 V253.9 Q118.0,249.9 122.0,249.9 H148.0 Q152.0,249.9 152.0,253.9 V260.0 Z" class="bar bifrost" tabindex="0" data-tip="Bifrost v2.5.1 · 1 vCPU · 663 msg/s at 8 clients"/>
 <text x="135.0" y="243.9" text-anchor="middle" class="vl">0.7k</text>
 <text x="239.0" y="278" text-anchor="middle">2 vCPU</text>
-<path d="M204.0,260.0 V113.0 Q204.0,109.0 208.0,109.0 H234.0 Q238.0,109.0 238.0,113.0 V260.0 Z" class="bar ume" tabindex="0" data-tip="Ume gateway · 2 vCPU · 9 899 msg/s at 128 clients"/>
+<path d="M204.0,260.0 V113.0 Q204.0,109.0 208.0,109.0 H234.0 Q238.0,109.0 238.0,113.0 V260.0 Z" class="bar fors" tabindex="0" data-tip="Fors · 2 vCPU · 9 899 msg/s at 128 clients"/>
 <text x="221.0" y="103.0" text-anchor="middle" class="vl">9.9k</text>
 <path d="M240.0,260.0 V245.4 Q240.0,241.4 244.0,241.4 H270.0 Q274.0,241.4 274.0,245.4 V260.0 Z" class="bar bifrost" tabindex="0" data-tip="Bifrost v2.5.1 · 2 vCPU · 1 223 msg/s at 16 clients"/>
 <text x="257.0" y="235.4" text-anchor="middle" class="vl">1.2k</text>
 <text x="361.0" y="278" text-anchor="middle">4 vCPU</text>
-<path d="M326.0,260.0 V44.9 Q326.0,40.9 330.0,40.9 H356.0 Q360.0,40.9 360.0,44.9 V260.0 Z" class="bar ume" tabindex="0" data-tip="Ume gateway · 4 vCPU · 14 369 msg/s at 256 clients"/>
+<path d="M326.0,260.0 V44.9 Q326.0,40.9 330.0,40.9 H356.0 Q360.0,40.9 360.0,44.9 V260.0 Z" class="bar fors" tabindex="0" data-tip="Fors · 4 vCPU · 14 369 msg/s at 256 clients"/>
 <text x="343.0" y="34.9" text-anchor="middle" class="vl">14.4k</text>
 <path d="M362.0,260.0 V232.3 Q362.0,228.3 366.0,228.3 H392.0 Q396.0,228.3 396.0,232.3 V260.0 Z" class="bar bifrost" tabindex="0" data-tip="Bifrost v2.5.1 · 4 vCPU · 2 077 msg/s at 32 clients"/>
 <text x="379.0" y="222.3" text-anchor="middle" class="vl">2.1k</text>
 <text x="483.0" y="278" text-anchor="middle">6 vCPU</text>
-<path d="M448.0,260.0 V33.2 Q448.0,29.2 452.0,29.2 H478.0 Q482.0,29.2 482.0,33.2 V260.0 Z" class="bar ume" tabindex="0" data-tip="Ume gateway · 6 vCPU · 15 135 msg/s at 384 clients"/>
+<path d="M448.0,260.0 V33.2 Q448.0,29.2 452.0,29.2 H478.0 Q482.0,29.2 482.0,33.2 V260.0 Z" class="bar fors" tabindex="0" data-tip="Fors · 6 vCPU · 15 135 msg/s at 384 clients"/>
 <text x="465.0" y="23.2" text-anchor="middle" class="vl">15.1k</text>
 <path d="M484.0,260.0 V224.4 Q484.0,220.4 488.0,220.4 H514.0 Q518.0,220.4 518.0,224.4 V260.0 Z" class="bar bifrost" tabindex="0" data-tip="Bifrost v2.5.1 · 6 vCPU · 2 594 msg/s at 48 clients"/>
 <text x="501.0" y="214.4" text-anchor="middle" class="vl">2.6k</text>
 </svg>
-      <span class="note">Best throughput over several client counts, fresh stack per size. The Ume gateway on 1 vCPU beats Bifrost on 6.</span>
+      <span class="note">Best throughput over several client counts, fresh stack per size. Fors on 1 vCPU beats Bifrost on 6.</span>
     </figure>
   </div>
 </section>
@@ -275,7 +275,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
   <h2>The numbers</h2>
   <div class="table">
     <table>
-      <thead><tr><th>Chat message, 4 vCPUs each</th><th>Ume gateway</th><th>Bifrost v2.5.1</th></tr></thead>
+      <thead><tr><th>Chat message, 4 vCPUs each</th><th>Fors</th><th>Bifrost v2.5.1</th></tr></thead>
       <tbody>
         <tr><td>Added latency, 1 client, non-streaming / streaming (median)</td><td>0.46 / 0.68 ms</td><td>0.62 / 1.06 ms</td></tr>
         <tr><td>Added latency, 64 clients, streaming (median) / p99</td><td>3.7 / 9.9 ms</td><td>27.9 / 85.4 ms</td></tr>
@@ -304,7 +304,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
           <tr><td>Governance + log with content (default)</td><td>1&#8239;925</td><td>2.07 ms</td></tr>
           <tr><td>Governance + log without content</td><td>2&#8239;001</td><td>1.99 ms</td></tr>
           <tr><td>Bare proxy: no stores, key or log</td><td>2&#8239;813</td><td>1.41 ms</td></tr>
-          <tr><td><i>Ume gateway, everything on</i></td><td><i>11&#8239;520</i></td><td><i>0.30 ms</i></td></tr>
+          <tr><td><i>Fors, everything on</i></td><td><i>11&#8239;520</i></td><td><i>0.30 ms</i></td></tr>
         </tbody>
       </table></div>
       <p class="callout">Bifrost's own process was the limit in every run: 4.0 of 4 vCPUs busy, its Postgres under half busy. Most of the gap is its core proxy path, not its features.</p>
@@ -326,13 +326,13 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
 
 <section>
   <h2>A small host</h2>
-  <p class="prose">The Ume gateway's small-host budget for both: 0.5&nbsp;vCPU and 512&nbsp;MB, Postgres with 1&nbsp;vCPU and 1&nbsp;GB, realistic streams, mixed traffic at fixed rates for 2 minutes each. The Ume gateway also ran PII detection and the content guard; Bifrost's open-source build has neither.</p>
+  <p class="prose">Fors's small-host budget for both: 0.5&nbsp;vCPU and 512&nbsp;MB, Postgres with 1&nbsp;vCPU and 1&nbsp;GB, realistic streams, mixed traffic at fixed rates for 2 minutes each. Fors also ran PII detection and the content guard; Bifrost's open-source build has neither.</p>
   <div class="table">
     <table>
       <thead><tr><th>Messages per second</th><th>10</th><th>50</th><th>100</th></tr></thead>
       <tbody>
-        <tr><td>Ume gateway: CPU / memory</td><td>0.21 vCPU / ≤ 148 MB</td><td>0.31 vCPU / ≤ 168 MB</td><td>0.47 vCPU / ≤ 200 MB</td></tr>
-        <tr><td>Ume gateway: failed</td><td><span class="pill ok">0</span></td><td><span class="pill ok">0</span></td><td><span class="pill ok">0 of 12&#8239;999</span></td></tr>
+        <tr><td>Fors: CPU / memory</td><td>0.21 vCPU / ≤ 148 MB</td><td>0.31 vCPU / ≤ 168 MB</td><td>0.47 vCPU / ≤ 200 MB</td></tr>
+        <tr><td>Fors: failed</td><td><span class="pill ok">0</span></td><td><span class="pill ok">0</span></td><td><span class="pill ok">0 of 12&#8239;999</span></td></tr>
         <tr><td>Bifrost: CPU / memory</td><td>0.19 vCPU / ≤ 298 MB</td><td>0.48 vCPU (93 % throttled) / ≤ 482 MB</td><td>out of memory at 512 MB, killed</td></tr>
         <tr><td>Bifrost: failed</td><td><span class="pill ok">0</span></td><td><span class="pill ok">0</span></td><td><span class="pill bad">7&#8239;973 of 9&#8239;004</span></td></tr>
         <tr><td>Bifrost with 1 vCPU and 1 GB</td><td></td><td></td><td>0 failed, 0.94 vCPU, ≤ 616 MB</td></tr>
@@ -345,7 +345,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
   <h2>What was compared</h2>
   <div class="table">
     <table>
-      <thead><tr><th></th><th style="text-align:left">Ume gateway</th><th style="text-align:left">Bifrost v2.5.1</th></tr></thead>
+      <thead><tr><th></th><th style="text-align:left">Fors</th><th style="text-align:left">Bifrost v2.5.1</th></tr></thead>
       <tbody>
         <tr><td>Key and limits</td><td class="l">Virtual key; requests and tokens per minute; key, team and department budgets</td><td class="l">Virtual key; requests and tokens per minute; key, team and customer budgets</td></tr>
         <tr><td>Routing</td><td class="l">Alias to a primary and a fallback provider</td><td class="l">Key's weighted providers, the second as fallback</td></tr>
@@ -359,7 +359,7 @@ footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line)
 </section>
 
 <footer>
-  <span><b>Caveats.</b> One session on one laptop (Intel i7-13700H, WSL2, CPU-pinned containers), single 20–30&nbsp;s samples. The hybrid CPU makes the absolute figures lower than the Ume gateway's 2026-11-02 baseline (68–83&nbsp;%), so compare the ratios. The fake model answers instantly except in the realistic-timing and small-host tests; with a real model neither gateway is noticeable to users, and the difference is the hardware they need. Bifrost ran with its defaults apart from what the comparison needs; its queue sizes were not tuned.</span>
+  <span><b>Caveats.</b> One session on one laptop (Intel i7-13700H, WSL2, CPU-pinned containers), single 20–30&nbsp;s samples. The hybrid CPU makes the absolute figures lower than Fors's 2026-11-02 baseline (68–83&nbsp;%), so compare the ratios. The fake model answers instantly except in the realistic-timing and small-host tests; with a real model neither gateway is noticeable to users, and the difference is the hardware they need. Bifrost ran with its defaults apart from what the comparison needs; its queue sizes were not tuned.</span>
   <span>Full report: <code>benchmarks/compare/results-bifrost-2026-11-19.md</code> on branch <code>bench/bifrost-vs-gateway</code>.</span>
 </footer>
 

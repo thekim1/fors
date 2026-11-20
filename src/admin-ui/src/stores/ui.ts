@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
-export const THEME_STORAGE_KEY = 'ume-theme'
+export const THEME_STORAGE_KEY = 'fors-theme'
 export const THEMES = ['light', 'dark', 'lumen'] as const
 export type Theme = (typeof THEMES)[number]
 

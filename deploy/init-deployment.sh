@@ -3,13 +3,13 @@
 # certificates, the Data Protection certificate, database/Redis passwords, the key
 # pepper, the admin API's setup secret and deploy/.env. Safe to re-run: existing secrets are never overwritten
 # (regenerating the pepper or Data Protection certificate would break existing data). A re-run keeps the sign-in
-# values and UME_SETUP_REOPEN from deploy/.env.
+# values and FORS_SETUP_REOPEN from deploy/.env.
 #
 #   ./deploy/init-deployment.sh                      # prompts for what it needs
 #   ./deploy/init-deployment.sh --gateway-host llm.example.se --admin-host llm-admin.example.se --yes
 #   ./deploy/init-deployment.sh --domain example.se --yes
 #                                                    # the same two names, from the domain (each option overrides its own)
-#   ./deploy/init-deployment.sh --oidc-authority https://idp.example.se/realms/ume --domain example.se --yes
+#   ./deploy/init-deployment.sh --oidc-authority https://idp.example.se/realms/fors --domain example.se --yes
 #                                                    # sign-in declared here instead of in the setup wizard
 #   ./deploy/init-deployment.sh --renew-certs        # re-issue internal certificates only
 #   ./deploy/init-deployment.sh --renew-ca           # new internal CA, then re-issue its certificates
@@ -19,7 +19,7 @@
 #   --oidc-authority URL    declare the sign-in instead: the https URL of the OIDC provider. The wizard then never
 #                           opens. Optional; an interactive first run asks once (leave it empty for the wizard). A re-run
 #                           without it keeps the value in deploy/.env (empty the line there to hand sign-in to the wizard)
-#   --oidc-client-id ID     the client as a deployment value (unset: the wizard's, else ume-admin); kept like the authority
+#   --oidc-client-id ID     the client as a deployment value (unset: the wizard's, else fors-admin); kept like the authority
 #   --oidc-client-secret-file FILE
 #                           confidential client: install the secret for the admin API (needs the authority; omit it for a
 #                           public client using PKCE only, or to enter the secret in the wizard)
@@ -81,15 +81,15 @@ done
 command -v openssl >/dev/null || die "openssl is required"
 env_value() { sed -n "s/^$1=//p" "$env_file" | tail -n 1; } # env_value NAME — its last value in deploy/.env
 # A re-run without --oidc-authority or --oidc-client-id keeps the value in deploy/.env: a declared sign-in does not move to
-# the setup wizard because an option was left out. The deployer's UME_SETUP_REOPEN is kept too (set by hand, never here).
+# the setup wizard because an option was left out. The deployer's FORS_SETUP_REOPEN is kept too (set by hand, never here).
 setup_reopen=""; first_run=1
 if [ -f "$env_file" ]; then
   first_run=0
-  [ -n "$oidc_authority" ] || oidc_authority="$(env_value UME_OIDC_AUTHORITY)"
-  [ -n "$oidc_client" ] || oidc_client="$(env_value UME_OIDC_CLIENT_ID)"
-  setup_reopen="$(env_value UME_SETUP_REOPEN)"
+  [ -n "$oidc_authority" ] || oidc_authority="$(env_value FORS_OIDC_AUTHORITY)"
+  [ -n "$oidc_client" ] || oidc_client="$(env_value FORS_OIDC_CLIENT_ID)"
+  setup_reopen="$(env_value FORS_SETUP_REOPEN)"
 fi
-# --domain names both hosts (llm.<domain>, llm-admin.<domain>), as UME_DOMAIN does in compose.portainer.yaml.
+# --domain names both hosts (llm.<domain>, llm-admin.<domain>), as FORS_DOMAIN does in compose.portainer.yaml.
 if [ -n "$domain" ]; then
   gateway_host="${gateway_host:-llm.$domain}"; admin_host="${admin_host:-llm-admin.$domain}"
 fi
@@ -107,7 +107,7 @@ ask() { # ask VAR "prompt" [default]
 }
 
 if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
-  echo "Ume LLM Gateway production setup"
+  echo "Fors production setup"
   if [ "$first_run" = 1 ] && [ -z "$oidc_authority" ] && [ "$yes" = 0 ] && [ -t 0 ]; then
     read -r -p "OIDC authority URL (https://...; leave empty to set sign-in in the browser): " oidc_authority
   fi
@@ -159,7 +159,7 @@ if [ "$renew_ca" = 1 ] && [ -e "$certs/ca.pem" ]; then
 fi
 if new_file "$certs/ca.pem"; then
   openssl req -x509 -newkey rsa:3072 -nodes -keyout "$certs/ca.key" -out "$certs/ca.pem" \
-    -days 3650 -subj "/CN=ume-gateway-internal-ca" \
+    -days 3650 -subj "/CN=fors-gateway-internal-ca" \
     -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
 fi
 
@@ -179,9 +179,9 @@ issue() { # issue SERVICE SAN...
 if [ "$renew" = 1 ] && [ -f "$env_file" ]; then
   # shellcheck disable=SC1090
   . "$env_file"
-  gateway_host="${UME_GATEWAY_PUBLIC_URL#https://}"; gateway_host="${gateway_host%%[:/]*}"
-  admin_host="${UME_ADMIN_PUBLIC_HOST:-$gateway_host}"
-  data_host="${UME_DATA_HOST:-}"
+  gateway_host="${FORS_GATEWAY_PUBLIC_URL#https://}"; gateway_host="${gateway_host%%[:/]*}"
+  admin_host="${FORS_ADMIN_PUBLIC_HOST:-$gateway_host}"
+  data_host="${FORS_DATA_HOST:-}"
 fi
 [ -n "$data_host" ] || data_host="$gateway_host"
 for svc in postgres redis; do
@@ -205,7 +205,7 @@ dp="$certs/data-protection.pfx"
 if new_file "$dp"; then
   tmp="$(mktemp -d)"
   openssl req -x509 -newkey rsa:3072 -nodes -keyout "$tmp/dp.key" -out "$tmp/dp.crt" -days 3650 \
-    -subj "/CN=ume-gateway-data-protection" >/dev/null 2>&1
+    -subj "/CN=fors-gateway-data-protection" >/dev/null 2>&1
   openssl pkcs12 -export -inkey "$tmp/dp.key" -in "$tmp/dp.crt" -out "$dp" -passout pass: >/dev/null 2>&1
   rm -rf "$tmp"
 fi
@@ -235,7 +235,7 @@ new_file "$pepper_src" && openssl rand -hex 48 > "$pepper_src"
 for svc in gateway adminapi migrations; do
   role="$svc"; case "$svc" in adminapi) role=admin;; migrations) role=migrator;; esac
   printf '%s' "$(cat "$pepper_src")" > "$secrets/$svc/Security__KeyPepper"
-  printf 'Host=postgres;Database=gatewaydb;Username=ume_%s;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
+  printf 'Host=postgres;Database=gatewaydb;Username=fors_%s;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
     "$role" "$(cat "$secrets/postgres/${role}_password")" > "$secrets/$svc/ConnectionStrings__gatewaydb"
   if [ "$svc" != migrations ]; then
     printf 'redis:6379,user=gateway,password=%s,ssl=true,sslHost=redis,abortConnect=false' \
@@ -244,7 +244,7 @@ for svc in gateway adminapi migrations; do
 done
 
 # Data API (optional, profile "data"): read-only role, no pepper, no Redis.
-printf 'Host=postgres;Database=gatewaydb;Username=ume_data;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
+printf 'Host=postgres;Database=gatewaydb;Username=fors_data;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' \
   "$(cat "$secrets/postgres/data_password")" > "$secrets/dataapi/ConnectionStrings__gatewaydb"
 
 if [ -n "$oidc_secret_file" ]; then
@@ -284,65 +284,65 @@ if [ "$renew" = 0 ] || [ ! -f "$env_file" ]; then
   ops_url=""
   # PKI certificates rarely cover the internal name "gateway", so the admin API reaches
   # the gateway's operations endpoint by its public name instead.
-  [ "$pki" = 1 ] && ops_url="UME_GATEWAY_OPERATIONS_URL=https://$gateway_host$public_gw"
+  [ "$pki" = 1 ] && ops_url="FORS_GATEWAY_OPERATIONS_URL=https://$gateway_host$public_gw"
   admin_url="https://$admin_host$public_admin"
   cat > "$env_file" <<EOF
-# Non-secret settings for deploy/compose.prod.yaml. Secrets live in UME_SECRETS_DIR.
-UME_CERTS_DIR=$certs
-UME_SECRETS_DIR=$secrets
+# Non-secret settings for deploy/compose.prod.yaml. Secrets live in FORS_SECRETS_DIR.
+FORS_CERTS_DIR=$certs
+FORS_SECRETS_DIR=$secrets
 # Sign-in (docs/identity-and-roles.md, "Setup mode"): empty is unset, so the setup wizard's value applies, else the
-# code's default (client ume-admin). A set authority declares the sign-in and keeps the wizard closed; every UME_OIDC_*
+# code's default (client fors-admin). A set authority declares the sign-in and keeps the wizard closed; every FORS_OIDC_*
 # set here is the deployment's value and locks its field in the wizard. A re-run of init-deployment.sh keeps both lines.
-UME_OIDC_AUTHORITY=$oidc_authority
-UME_OIDC_CLIENT_ID=$oidc_client
+FORS_OIDC_AUTHORITY=$oidc_authority
+FORS_OIDC_CLIENT_ID=$oidc_client
 # Empty. Any new value without spaces (for example today's date), then \`docker compose ... up -d\`, opens the setup
 # wizard once more, for an hour, with a new setup code in the admin API's log; empty it before restoring a database.
-UME_SETUP_REOPEN=$setup_reopen
-UME_GATEWAY_PUBLIC_URL=https://$gateway_host$public_gw
-UME_ADMIN_PUBLIC_HOST=$admin_host
-# The admin console's address, handed to integrations (/v1/ume/context) for links to a key or budget.
-UME_ADMIN_PUBLIC_URL=$admin_url
+FORS_SETUP_REOPEN=$setup_reopen
+FORS_GATEWAY_PUBLIC_URL=https://$gateway_host$public_gw
+FORS_ADMIN_PUBLIC_HOST=$admin_host
+# The admin console's address, handed to integrations (/v1/fors/context) for links to a key or budget.
+FORS_ADMIN_PUBLIC_URL=$admin_url
 $ops_url
 # Listeners default to loopback (0.0.0.0 with --proxy: firewall them to the proxy only).
-UME_GATEWAY_BIND=$bind
-UME_GATEWAY_PORT=$gateway_port
-UME_ADMIN_BIND=$bind
-UME_ADMIN_PORT=$admin_port
+FORS_GATEWAY_BIND=$bind
+FORS_GATEWAY_PORT=$gateway_port
+FORS_ADMIN_BIND=$bind
+FORS_ADMIN_PORT=$admin_port
 # Second slots for updates without downtime (compose.rolling.yaml, docs/zero-downtime-updates.md).
-UME_GATEWAY_B_PORT=$((gateway_port + 1))
-UME_ADMIN_B_PORT=$((admin_port + 1))
+FORS_GATEWAY_B_PORT=$((gateway_port + 1))
+FORS_ADMIN_B_PORT=$((admin_port + 1))
 # Optional read-only Data API (docs/data-access.md): uncomment to start it with the stack.
 # COMPOSE_PROFILES=data
-UME_DATA_HOST=$data_host
-UME_DATA_BIND=$bind
-UME_DATA_PORT=10443
-# UME_DATA_AUTHORITY=   (defaults to UME_OIDC_AUTHORITY, never to the setup wizard's; the issuer of the integrations'
+FORS_DATA_HOST=$data_host
+FORS_DATA_BIND=$bind
+FORS_DATA_PORT=10443
+# FORS_DATA_AUTHORITY=   (defaults to FORS_OIDC_AUTHORITY, never to the setup wizard's; the issuer of the integrations'
 #                       client-credentials tokens. Without either, the Data API accepts only Data API keys)
-# UME_DATA_AUDIENCE=ume-data-api
+# FORS_DATA_AUDIENCE=fors-data-api
 # Claims from an existing IdP (Keycloak, AD FS, Entra ID); see docs/runbook.md, "Identity provider". Unset, the setup
 # wizard's value applies, else the default shown here (no extra scope; openid, profile and email are always requested).
-# UME_OIDC_ROLE_CLAIM=roles
-# UME_OIDC_DEPARTMENT_CLAIM=departmentCodes
-# UME_OIDC_TEAM_CLAIM=teamCodes   (or groups: team codes are then the group names)
-# UME_OIDC_GROUP_CLAIM=groups
-# UME_OIDC_EXTRA_SCOPE=groups
+# FORS_OIDC_ROLE_CLAIM=roles
+# FORS_OIDC_DEPARTMENT_CLAIM=departmentCodes
+# FORS_OIDC_TEAM_CLAIM=teamCodes   (or groups: team codes are then the group names)
+# FORS_OIDC_GROUP_CLAIM=groups
+# FORS_OIDC_EXTRA_SCOPE=groups
 # Groups (names as in the token, separated by ';') that grant each role without IdP-side roles:
-# UME_OIDC_GROUPS_GATEWAY_ADMIN=GG-Llm-Admins
-# UME_OIDC_GROUPS_DEPARTMENT_ADMIN=
-# UME_OIDC_GROUPS_VIEWER=
-# UME_OIDC_GROUPS_TEAM_ADMIN=
+# FORS_OIDC_GROUPS_GATEWAY_ADMIN=GG-Llm-Admins
+# FORS_OIDC_GROUPS_DEPARTMENT_ADMIN=
+# FORS_OIDC_GROUPS_VIEWER=
+# FORS_OIDC_GROUPS_TEAM_ADMIN=
 # Integration API (/integration/v1): requests per minute per credential key (default 60).
-# UME_INTEGRATION_REQUESTS_PER_MINUTE=60
+# FORS_INTEGRATION_REQUESTS_PER_MINUTE=60
 # Integration manifests to provision on every deploy, and where the new keys' secrets are written (docs/integrations.md).
-UME_INTEGRATION_MANIFESTS_DIR=$manifests
-UME_INTEGRATION_SECRETS_DIR=$integration_secrets
-# The Integration API's address as integrations reach it, handed out on /v1/ume/context (empty leaves it out), e.g.
-# UME_INTEGRATION_API_URL=https://adminapi:8443/integration/v1
+FORS_INTEGRATION_MANIFESTS_DIR=$manifests
+FORS_INTEGRATION_SECRETS_DIR=$integration_secrets
+# The Integration API's address as integrations reach it, handed out on /v1/fors/context (empty leaves it out), e.g.
+# FORS_INTEGRATION_API_URL=https://adminapi:8443/integration/v1
 # Pin images by digest once pushed to your registry, for example:
-# GATEWAY_IMAGE=registry.example.se/ume/gateway@sha256:...
-# ADMINAPI_IMAGE=registry.example.se/ume/adminapi@sha256:...
-# MIGRATIONS_IMAGE=registry.example.se/ume/migrations@sha256:...
-# DATAAPI_IMAGE=registry.example.se/ume/dataapi@sha256:...
+# GATEWAY_IMAGE=registry.example.se/fors/gateway@sha256:...
+# ADMINAPI_IMAGE=registry.example.se/fors/adminapi@sha256:...
+# MIGRATIONS_IMAGE=registry.example.se/fors/migrations@sha256:...
+# DATAAPI_IMAGE=registry.example.se/fors/dataapi@sha256:...
 EOF
 fi
 
@@ -385,7 +385,7 @@ fi
 # Sign-in: declared by the authority, or set in the setup wizard after the first up.
 logs_cmd="${up_cmd% up -d --wait} logs adminapi"
 if [ -n "$oidc_authority" ]; then
-  signin_step="  3. Sign-in is declared here (UME_OIDC_AUTHORITY in deploy/.env), so the setup wizard stays closed:
+  signin_step="  3. Sign-in is declared here (FORS_OIDC_AUTHORITY in deploy/.env), so the setup wizard stays closed:
      sign in at https://$admin_host$public_admin/."
 else
   signin_step="  3. Set up sign-in in the setup wizard. Read the setup code (valid for an hour; a restart of the admin API
@@ -395,10 +395,10 @@ else
      client and secret, and tests a sign-in before saving; whoever tests needs the role gateway-admin."
   [ ! -s "$secrets/adminapi/Oidc__ClientSecret" ] || signin_step="$signin_step
      $secrets/adminapi/Oidc__ClientSecret is a deployment client secret without an authority: every test
-     sign-in fails with deployment_secret_without_authority. Set UME_OIDC_AUTHORITY in deploy/.env (or re-run with
+     sign-in fails with deployment_secret_without_authority. Set FORS_OIDC_AUTHORITY in deploy/.env (or re-run with
      --oidc-authority), or delete the file and enter the secret in the wizard."
   signin_step="$signin_step
-     The optional Data API takes access tokens only from UME_DATA_AUTHORITY then (never the wizard's provider)."
+     The optional Data API takes access tokens only from FORS_DATA_AUTHORITY then (never the wizard's provider)."
 fi
 own_step="  0. File ownership is set."
 [ "$chown" = 1 ] || own_step="  0. Files stay owned by you (--no-chown). For Kubernetes, run deploy/kubernetes/create-secrets.sh next."
@@ -417,7 +417,7 @@ Done. Generated:
 
 Next steps:
 $own_step
-  1. Register these redirect URIs for client '${oidc_client:-ume-admin}' in your IdP (code + PKCE):
+  1. Register these redirect URIs for client '${oidc_client:-fors-admin}' in your IdP (code + PKCE):
        https://$admin_host$public_admin/signin-oidc
        https://$admin_host$public_admin/signout-callback-oidc
   2. $up_cmd

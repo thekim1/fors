@@ -21,18 +21,18 @@ beforeEach(() => signIn.mockReset())
 describe('SignInCard', () => {
   it('shows each value with its source, and says the values change only in setup mode', async () => {
     const wrapper = await mountCard(signInSettings({
-      authority: { value: 'https://idp.example.org/realms/ume', source: 'wizard', locked: false },
+      authority: { value: 'https://idp.example.org/realms/fors', source: 'wizard', locked: false },
       groupClaim: { value: 'groups', source: 'deployment', locked: true },
       clientSecret: { set: true, source: 'wizard', setAt: '2026-11-16T08:00:00Z', expiresOn: '2027-11-01', unreadable: false, locked: false },
       updatedAt: '2026-11-16T08:00:00Z',
     }))
-    expect(wrapper.get('[data-test=sign-in-authority]').text()).toContain('https://idp.example.org/realms/ume')
+    expect(wrapper.get('[data-test=sign-in-authority]').text()).toContain('https://idp.example.org/realms/fors')
     expect(wrapper.get('[data-test=sign-in-authority]').text()).toContain('Set in setup')
     expect(wrapper.get('[data-test=sign-in-groupClaim]').text()).toContain('Set by the deployment')
     expect(wrapper.get('[data-test=sign-in-roleClaim]').text()).toContain('Default')
     expect(wrapper.get('[data-test=sign-in-clientSecret]').text()).toContain('expires 1 Nov 2027')
     expect(wrapper.text()).toContain('change only in setup mode')
-    expect(wrapper.text()).toContain('UME_SETUP_REOPEN')
+    expect(wrapper.text()).toContain('FORS_SETUP_REOPEN')
     expect(wrapper.find('input').exists()).toBe(false)
   })
 

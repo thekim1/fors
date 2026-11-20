@@ -1,7 +1,7 @@
 // Builds the static website into site/dist: the product page, Getting started, Benchmarks and every Markdown page in
 // content.mjs DOCS rendered as documentation. No framework; one dependency (marked).
 //
-//   node build.mjs                 build for https://<host>/        (SITE_BASE=/llmgateway/ for GitHub Pages)
+//   node build.mjs                 build for https://<host>/        (SITE_BASE=/fors/ for GitHub Pages)
 //   node build.mjs --serve         build, then serve dist on http://localhost:4321
 //
 // The build fails on a link to a documentation page or heading that does not exist.
@@ -120,7 +120,7 @@ function layout({ page, title, description, path, body }) {
     ['Docs', [['Routing rules', url('docs/routing-rules/')], ['Admin API', url('docs/admin-api/')], ['Runbook', url('docs/runbook/')]]],
     ['Trust', [['Security and compliance', url('docs/security-and-compliance/')], ['Accessibility statement', url('docs/accessibility-statement/')], ['GitHub', C.GH]]],
   ]
-  const fullTitle = page === 'home' ? 'Ume AI Gateway' : `${title} · Ume AI Gateway`
+  const fullTitle = page === 'home' ? 'Fors' : `${title} · Fors`
   return `<!doctype html>
 <html lang="en" data-theme="light">
 <head>
@@ -131,7 +131,7 @@ function layout({ page, title, description, path, body }) {
 <meta property="og:title" content="${esc(fullTitle)}">
 <meta property="og:description" content="${esc(description)}">
 ${origin ? `<link rel="canonical" href="${esc(origin + url(path))}">\n` : ''}<link rel="icon" href="${url('assets/favicon.svg')}" type="image/svg+xml">
-<script>try{var t=localStorage.getItem('ume-site-theme');document.documentElement.dataset.theme=t||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(e){}</script>
+<script>try{var t=localStorage.getItem('fors-site-theme');document.documentElement.dataset.theme=t||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
@@ -144,7 +144,7 @@ ${origin ? `<link rel="canonical" href="${esc(origin + url(path))}">\n` : ''}<li
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <div class="top-in">
-    <a class="brand" href="${url('')}"><span class="logo" aria-hidden="true">U</span><span>Ume AI Gateway</span></a>
+    <a class="brand" href="${url('')}"><span class="logo" aria-hidden="true">U</span><span>Fors</span></a>
     <nav class="nav-main" aria-label="Main">${nav}</nav>
     <div class="spacer"></div>
     <div class="seg theme-top" role="group" aria-label="Theme">${THEMES.map(([id, label, ic]) => `<button type="button" data-theme-set="${id}" aria-pressed="false" aria-label="${label} theme" title="${label}">${icon(ic)}</button>`).join('')}</div>
@@ -161,7 +161,7 @@ ${body}
 </main>
 <footer class="foot">
   <div class="foot-in">
-    <div class="foot-about"><span class="b">Ume AI Gateway</span><span>© 2026 Kim Vallén, Nichlas Löfdahl and Umeå kommun. Open source under EUPL-1.2. Not a production approval, legal compliance attestation or WCAG certification.</span></div>
+    <div class="foot-about"><span class="b">Fors</span><span>© 2026 Kim Vallén and Nichlas Löfdahl. Open source under Apache-2.0. Not a production approval, legal compliance attestation or WCAG certification.</span></div>
     ${footer.map(([t, links]) => `<div class="foot-col"><span class="b">${t}</span>${links.map(([l, h]) => `<a href="${h}">${l}</a>`).join('')}</div>`).join('\n    ')}
   </div>
 </footer>
@@ -207,9 +207,9 @@ function homePage() {
 <section class="wrap pt-120" aria-labelledby="rules-h">
   <div class="split">
     <div class="stack-16">${eyebrow('Routing rules')}<h2 id="rules-h" class="h-l">Apps ask for a model. Rules decide where it goes.</h2>
-      <p class="body-l">Write a condition on headers, team, budget use or personal data, then send matching requests to weighted targets with fallbacks. Test a sample request before you rely on it. The response header <code>x-ume-rule</code> tells you which rule applied.</p>
+      <p class="body-l">Write a condition on headers, team, budget use or personal data, then send matching requests to weighted targets with fallbacks. Test a sample request before you rely on it. The response header <code>x-fors-rule</code> tells you which rule applied.</p>
       <div class="term">pii_detected &amp;&amp; endpoint == "chat_completions"
-<span class="mute">→ send to</span> ume/chat-onprem   <span class="mute">· no fallbacks, on purpose</span></div>
+<span class="mute">→ send to</span> fors/chat-onprem   <span class="mute">· no fallbacks, on purpose</span></div>
       <a class="more" href="${url('docs/routing-rules/')}">Read the routing guide${icon('arrow_forward')}</a>
     </div>
     <figure class="frame"><img src="${url('images/routing-pii-rule.png')}" alt="The routing rules page with the rule Personal data stays on-prem at the top of the list" loading="lazy"></figure>
@@ -263,7 +263,7 @@ function startPage() {
 
   <section class="stack-16" aria-labelledby="connect-h">
     <h2 id="connect-h" class="h-m">Connect an application</h2>
-    <p>Applications need two things from an administrator: a <strong>key</strong> from their team and the gateway's <strong>base URL</strong> (<code>https://&lt;gateway&gt;/v1</code>). Read the key from an environment variable such as <code>UME_API_KEY</code>; never store it in code. Ask for an alias from the admin UI's <em>Catalogue</em>, such as <code>ume/chat-standard</code>, rather than a vendor model. The gateway publishes its OpenAPI document at <code>/openapi/v1.json</code> and an API reference at <code>/scalar</code>.</p>
+    <p>Applications need two things from an administrator: a <strong>key</strong> from their team and the gateway's <strong>base URL</strong> (<code>https://&lt;gateway&gt;/v1</code>). Read the key from an environment variable such as <code>FORS_API_KEY</code>; never store it in code. Ask for an alias from the admin UI's <em>Catalogue</em>, such as <code>fors/chat-standard</code>, rather than a vendor model. The gateway publishes its OpenAPI document at <code>/openapi/v1.json</code> and an API reference at <code>/scalar</code>.</p>
     <p class="note warn">${icon('warning', 'fill warn')}<span>Prompts and responses are never saved by the gateway. Don't send confidential information to external providers without an approved assessment.</span></p>
     <div class="grid-260">${[
       ['Chat, Responses, Messages', 'OpenAI and Anthropic SDKs, unchanged.', 'docs/admin-api/#gateway-data-plane--for-the-developer-portal-snippets'],
@@ -308,7 +308,7 @@ function benchPage() {
   <section class="card panel stack-20" aria-labelledby="scale-h" data-tabs>
     <div class="panel-head"><div class="stack-4"><h2 id="scale-h" class="h-s">Throughput as load grows</h2><span class="muted">Streaming chat, messages per second, 4 vCPUs unless noted</span></div>
       <div class="seg" role="tablist" aria-label="Chart">${C.SCALE.map((sc, i) => `<button type="button" role="tab" id="chart-tab-${sc.id}" aria-controls="chart-${sc.id}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${sc.tab}</button>`).join('')}</div></div>
-    <div class="legend"><span><i class="sw b"></i>Ume gateway, ${C.BENCH_DATE}</span></div>
+    <div class="legend"><span><i class="sw b"></i>Fors, ${C.BENCH_DATE}</span></div>
     ${chart}
   </section>
 
@@ -379,9 +379,9 @@ mkdirSync(dist, { recursive: true })
 const out = []
 const write = (path, html) => out.push([path, html])
 
-write('index.html', layout({ page: 'home', title: 'Ume AI Gateway', path: '', description: 'An open-source LLM gateway for the public sector: virtual keys, budgets, routing rules that keep personal data on-prem, and provider fallback.', body: homePage() }))
-write('start/index.html', layout({ page: 'start', title: 'Getting started', path: 'start/', description: 'Run the Ume AI Gateway locally with demo data, or deploy a release to production, and send your first request.', body: startPage() }))
-write('benchmarks/index.html', layout({ page: 'bench', title: 'Benchmarks', path: 'benchmarks/', description: 'What the Ume AI Gateway adds to each LLM request: latency, throughput, CPU and a comparison with eneo.', body: benchPage() }))
+write('index.html', layout({ page: 'home', title: 'Fors', path: '', description: 'An open-source LLM gateway for the public sector: virtual keys, budgets, routing rules that keep personal data on-prem, and provider fallback.', body: homePage() }))
+write('start/index.html', layout({ page: 'start', title: 'Getting started', path: 'start/', description: 'Run Fors locally with demo data, or deploy a release to production, and send your first request.', body: startPage() }))
+write('benchmarks/index.html', layout({ page: 'bench', title: 'Benchmarks', path: 'benchmarks/', description: 'What Fors adds to each LLM request: latency, throughput, CPU and a comparison with eneo.', body: benchPage() }))
 const rendered = new Map(docs.map(d => [d, renderMarkdown(d.source)]))
 for (const d of docs) write(`${d.slug ? `docs/${d.slug}/` : 'docs/'}index.html`, layout({ page: 'docs', title: d.title, path: d.slug ? `docs/${d.slug}/` : 'docs/', description: d.lead, body: docPage(d, rendered.get(d)) }))
 write('404.html', layout({ page: '', title: 'Page not found', path: '404.html', description: 'Page not found.', body: `<div class="wrap-960 pt-64 stack-16"><h1 class="h-page">Page not found.</h1><p class="lead-s">The page may have moved. Try the <a href="${url('docs/')}">documentation</a> or the <a href="${url('')}">home page</a>.</p></div>` }))

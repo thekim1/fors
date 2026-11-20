@@ -41,7 +41,7 @@ jobs:
       - name: Build
         working-directory: site
         env:
-          SITE_BASE: /llmgateway/
+          SITE_BASE: /fors/
         run: |
           npm ci
           npm audit --audit-level=low

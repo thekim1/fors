@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fors.TestKit\Fors.TestKit.csproj" />
+    <ProjectReference Include="..\..\src\Fors.DataApi\Fors.DataApi.csproj" />
+  </ItemGroup>
+</Project>

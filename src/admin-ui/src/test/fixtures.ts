@@ -18,7 +18,7 @@ export function rule(overrides: Partial<RoutingRule> = {}): RoutingRule {
     isOrphaned: false,
     condition: '',
     chain: false,
-    targets: [{ model: 'ume/chat-advanced', weight: 1 }],
+    targets: [{ model: 'fors/chat-advanced', weight: 1 }],
     fallbacks: [],
     missingModels: [],
     validationErrors: [],
@@ -39,7 +39,7 @@ export function signInSettings(overrides: Partial<SignInSettings> = {}): SignInS
   const value = <T>(v: T) => ({ value: v, source: 'default' as const, locked: false })
   return {
     authority: value<string | null>(null),
-    clientId: value('ume-admin'),
+    clientId: value('fors-admin'),
     clientSecret: { set: false, source: 'default', setAt: null, expiresOn: null, unreadable: false, locked: false },
     roleClaim: value('roles'),
     departmentClaim: value('departmentCodes'),
@@ -51,7 +51,7 @@ export function signInSettings(overrides: Partial<SignInSettings> = {}): SignInS
   }
 }
 
-/** A passed test by a gateway admin, with the authority https://idp.example.org/realms/ume and a typed secret. */
+/** A passed test by a gateway admin, with the authority https://idp.example.org/realms/fors and a typed secret. */
 export function setupTest(overrides: Partial<SetupTest> = {}): SetupTest {
   return {
     testId: 't1',
@@ -60,7 +60,7 @@ export function setupTest(overrides: Partial<SetupTest> = {}): SetupTest {
     startedAt: '2026-11-16T08:00:00Z',
     expiresAt: '2026-11-16T08:10:00Z',
     values: {
-      authority: 'https://idp.example.org/realms/ume',
+      authority: 'https://idp.example.org/realms/fors',
       clientId: null,
       roleClaim: null,
       departmentClaim: null,

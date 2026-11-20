@@ -3,7 +3,7 @@ import type { ProblemDetails } from './types'
 export const XSRF_COOKIE = 'XSRF-TOKEN'
 export const XSRF_HEADER = 'X-XSRF-TOKEN'
 /** Set by the admin API when a change is saved but the gateways could not be told at once (Redis unavailable). */
-export const PROPAGATION_HEADER = 'Ume-Change-Propagation'
+export const PROPAGATION_HEADER = 'Fors-Change-Propagation'
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
 export type QueryValue = string | number | boolean | null | undefined

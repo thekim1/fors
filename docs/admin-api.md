@@ -8,7 +8,7 @@ A malformed request (unreadable body) → 400; an unexpected failure → 500 wit
 (the exception is only logged, by type). Every response, error responses included, carries `X-Content-Type-Options: nosniff`,
 `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`.
 A change is saved before the gateways are told to reload. If they cannot be told (Redis unavailable), the request still
-succeeds, the admin API logs a warning, and the response carries `Ume-Change-Propagation: delayed`: the gateways apply the
+succeeds, the admin API logs a warning, and the response carries `Fors-Change-Propagation: delayed`: the gateways apply the
 change when their cache expires (`Gateway:KeyCacheSeconds` / `Gateway:CatalogCacheSeconds`, 30 s by default). The admin UI
 shows this as a notice.
 
@@ -32,14 +32,14 @@ shows this as a notice.
   [setup mode](#setup-mode-bffsetup) is open, so the UI goes to `/setup`; both read again at most every 10 seconds)
   (`group`: the code came from a [member group](identity-and-roles.md#department-scope) of the department)
   (always 200; `isAuthenticated=false` when not signed in). `sessionLimitAt` is the absolute end of the session.
-- Session cookie: `__Host-ume-admin`, HttpOnly, Secure, SameSite=Lax (compatible with OIDC redirects).
+- Session cookie: `__Host-fors-admin`, HttpOnly, Secure, SameSite=Lax (compatible with OIDC redirects).
   No tokens reach the browser. The cookie only holds a session id; the session itself is stored encrypted in Redis
-  (`ume:admin-session:*`), so signing out ends it for every copy of the cookie. A sign-in lasts eight hours, a session at
+  (`fors:admin-session:*`), so signing out ends it for every copy of the cookie. A sign-in lasts eight hours, a session at
   most `Admin:MaxSessionHours` (12, 1–24) from sign-in; the UI warns before expiry and can start a new login.
 - **CSRF**: every non-GET request must send header `X-XSRF-TOKEN` with the value of the readable cookie
   `XSRF-TOKEN` (set on `GET /bff/user`). Also send `X-Requested-With: XMLHttpRequest`.
 - Unauthenticated API calls → 401 (no redirect). Missing role → 403.
-- Local configuration: `Oidc:Authority`, `Oidc:ClientId` (default `ume-admin`), optional
+- Local configuration: `Oidc:Authority`, `Oidc:ClientId` (default `fors-admin`), optional
   `Oidc:ClientSecret`, `ConnectionStrings:gatewaydb`, `Security:KeyPepper`, optional Redis and
   Data Protection certificate settings shared with the gateway. Production OIDC metadata requires HTTPS.
   The sign-in values may instead be stored in the database (see `GET /api/settings/sign-in`); a value the configuration
@@ -60,7 +60,7 @@ shows this as a notice.
   models that follow the list, and empty model details are filled (`Admin:AutoUpdatePrices`, default `true`). An empty
   `Admin:PriceListUrl` turns the list off. See *List prices* in [providers and models](providers-and-models.md#list-prices).
 - The newest release is read from GitHub (`https://api.github.com/repos/<Admin:ReleaseRepository>/releases/latest`, default
-  `thekim1/llmgateway`, no key; the admin API needs outbound HTTPS to `api.github.com`). Set `Admin:CheckForReleases=false`
+  `thekim1/fors`, no key; the admin API needs outbound HTTPS to `api.github.com`). Set `Admin:CheckForReleases=false`
   (`Admin__CheckForReleases`) where it has no internet access; the running version is still shown.
 
 Roles (OIDC `roles` claim):
@@ -74,13 +74,13 @@ Roles (OIDC `roles` claim):
 ## Setup mode (`/bff/setup`)
 
 The admin console's sign-in (authority, client id, client secret, claim names, extra scopes) can be set in a browser wizard
-instead of the deployment (thekim1/llmgateway#100; rules in [identity and roles](identity-and-roles.md#setup-mode)). The
+instead of the deployment (thekim1/fors#100; rules in [identity and roles](identity-and-roles.md#setup-mode)). The
 API is anonymous, not in the API reference, has the per-address rate limit of `/api`, and every `POST` needs the CSRF headers
 above (the `XSRF-TOKEN` cookie from `GET /bff/user`). **Every route under `/bff/setup` answers `404` while setup mode is
 closed**, whatever the method, body or cookie. Problems carry `code` and, for a test, `reason`.
 
 - `POST /bff/setup/session` `{ code }` (the setup code from the admin API's standard output; case, spaces and dashes do not
-  matter, at most 64 characters) → `200 { expiresAt, setupEndsAt }` and the cookie `__Secure-ume-setup` (`HttpOnly`,
+  matter, at most 64 characters) → `200 { expiresAt, setupEndsAt }` and the cookie `__Secure-fors-setup` (`HttpOnly`,
   `Secure`, `SameSite=Strict`, path `/bff/setup`, 30 minutes, valid only in the opening it was given in). A wrong code →
   `400` `code: "setup_code_invalid"`; it voids nothing. After 20 wrong codes in a minute on one instance, further wrong ones → `429`
   `code: "setup_attempts_exhausted"` with `Retry-After` (seconds to the minute's end). The right code is never refused: it
@@ -100,7 +100,7 @@ closed**, whatever the method, body or cookie. Problems carry `code` and, for a 
   department, team } }` after the callback; lists hold at most 100 entries).
 - `POST /bff/setup/test` `{ authority?, clientId?, clientSecret?, roleClaim?, departmentClaim?, teamClaim?, groupClaim?,
   extraScopes?: string[], clientSecretExpiresOn?: "yyyy-MM-dd" }` → `200 { testId, authorizeUrl, expiresAt }` and the cookie
-  `__Secure-ume-setup-test` (`HttpOnly`, `Secure`, `SameSite=None`, path `/signin-oidc`, 10 minutes). Open `authorizeUrl` in
+  `__Secure-fors-setup-test` (`HttpOnly`, `Secure`, `SameSite=None`, path `/signin-oidc`, 10 minutes). Open `authorizeUrl` in
   the **same browser** (a new window or this one): the person signs in at the provider, which posts back to `/signin-oidc`;
   the admin API finishes the test there and redirects to `/setup?test=done` whatever happened (the result is never in the
   address; read it from `GET /bff/setup/state`). A value the deployment sets wins over the candidate's. `clientSecret`:
@@ -187,7 +187,7 @@ unchanged, `{}` clears it. Both are copied to the replacement key on rotation.)
 (`attachmentPolicy` omitted = `Allowed` on create, unchanged on update; it is copied to the replacement key on rotation)
 (`allowProviderTools` / `allowProviderStorage` omitted = `false` on create, unchanged on update; copied on rotation; see
 [provider tools and storage](#gateway-data-plane--for-the-developer-portal-snippets))
-(`requireMaxResidency`: every request must send `x-ume-max-residency`, see [residency ceiling](#residency-ceiling-per-request);
+(`requireMaxResidency`: every request must send `x-fors-max-residency`, see [residency ceiling](#residency-ceiling-per-request);
 omitted = `false` on create, unchanged on update; copied on rotation)
 (`lastUsedAt` has minute resolution: each gateway instance writes it at most once per key and minute)
 (`integrationId`, `integrationRole`: the [integration](integrations.md) the key belongs to, set on create only; an update
@@ -202,7 +202,7 @@ rotation with the integration and role. The integration must be active to add a 
 - `GET /api/keys?teamId=&departmentId=&status=&integrationId=` → `VirtualKey[]` (the keys the user manages: own departments, or own teams for a team admin)
 - `GET /api/keys/{id}` → `VirtualKey`
 - `POST /api/keys` `{ teamId, name, description?, expiresAt?, allowedModels, allowedResidencies, allowedProviders?, allowedIpRanges?, piiPolicy, attachmentPolicy?, allowProviderTools?, allowProviderStorage?, requireMaxResidency?, requestsPerMinute?, tokensPerMinute?, maxConcurrentRequests?, requestPolicy?, integrationId?, integrationRole?, integrationScopes? }`
-  → 201 `{ key: VirtualKey, secret: "ume-sk-…" | null }` — **secret is shown once, never retrievable again** (null for an assigned key)
+  → 201 `{ key: VirtualKey, secret: "fors-sk-…" | null }` — **secret is shown once, never retrievable again** (null for an assigned key)
 - `PUT /api/keys/{id}` `{ name, description?, expiresAt?, allowedModels, allowedResidencies, allowedProviders?, allowedIpRanges?, piiPolicy, attachmentPolicy?, allowProviderTools?, allowProviderStorage?, requireMaxResidency?, requestsPerMinute?, tokensPerMinute?, maxConcurrentRequests?, requestPolicy?, isEnabled, integrationScopes? }` → `VirtualKey`
 - `POST /api/keys/{id}/rotate` `{ mode: KeyRotationMode }` → `{ key: VirtualKey, secret, previousKey: VirtualKey }`
 - `POST /api/keys/{id}/reveal` `{ purpose: "Reveal" | "Copy" }` → `{ secret }` (gateway-admin only; writes an audit entry `reveal`/`copy` with the actor; 409 for revoked keys and for keys created before the secret was stored, `VirtualKey.canReveal` is false for those)
@@ -243,7 +243,7 @@ Other systems that use gateway keys for the teams they serve, such as a RAG plat
 
 ## Integration API (for integrations)
 Not under `/api` and not for the admin UI: `/integration/v1`, for an integration's own services, authenticated with one
-of its credential keys (`Authorization: Bearer ume-sk-…`) that holds the scope; see
+of its credential keys (`Authorization: Bearer fors-sk-…`) that holds the scope; see
 [integrations](integrations.md#integration-api-control-plane) for every field.
 
 - `GET /integration/v1/usage?from=&to=&granularity=day|month&groupBy=key,model,step&keyId=&runId=` (scope `usage.read`) →
@@ -261,7 +261,7 @@ Keys for the read-only Data API ([data-access.md](data-access.md#data-api-keys))
 - `GET /api/data-access` → `{ dataApiUrl: string|null, permissions: DataPermission[] }` (`dataApiUrl` from the admin API's `DataApi:PublicUrl`)
 - `GET /api/data-access/keys` → `DataApiKey[]` (sorted by name; never the secret or hash)
 - `GET /api/data-access/keys/{id}` → `DataApiKey`
-- `POST /api/data-access/keys` `{ name, description?, permissions: DataPermission[] (1+), expiresAt? }` → 201 `{ key: DataApiKey, secret: "ume-dk-…" }` — **secret is shown once, only its SHA-256 is stored**
+- `POST /api/data-access/keys` `{ name, description?, permissions: DataPermission[] (1+), expiresAt? }` → 201 `{ key: DataApiKey, secret: "fors-dk-…" }` — **secret is shown once, only its SHA-256 is stored**
 - `PUT /api/data-access/keys/{id}` (same body) → `DataApiKey`; 409 for a revoked key
 - `POST /api/data-access/keys/{id}/revoke` → `DataApiKey`; 409 if already revoked. The Data API refuses the key within `DataApi:KeyCacheSeconds` (30 s).
 - `DELETE /api/data-access/keys/{id}` → 204; 409 for an active key (revoke it first)
@@ -418,7 +418,7 @@ and invalidate the gateway catalogue.
   (setup mode shows the value and cannot change it). The client secret is never answered: only whether one
   is set, where from, when it was stored and the expiry date entered with it (`expiresOn`, for a stored secret only);
   `unreadable` is true when one is stored that the key ring cannot unprotect (a replaced Data Protection certificate), and
-  sign-in is then not configured. Read-only: the stored values change only in setup mode (thekim1/llmgateway#100), which
+  sign-in is then not configured. Read-only: the stored values change only in setup mode (thekim1/fors#100), which
   audits each change (`Settings`, entity id `sign-in`, with whether a secret is set and when, never the secret) and publishes
   a configuration change. `Oidc:RoleGroups` is always a deployment value. `updatedAt`: when the stored values last changed.
 - `GET /api/settings/request-log` *(gateway-admin)* → `{ active, until, updatedAt }` · `PUT /api/settings/request-log`
@@ -453,7 +453,7 @@ and invalidate the gateway catalogue.
   - `recordsFrom` is set when the period starts before the oldest kept usage record (data retention): monthly totals have no
     timings or days, so the figures cover only `recordsFrom`..`to`.
 - `GET /api/usage/requests?from=&to=&keyId=&teamId=&departmentId=&model=&provider=&outcome=&errors=&page=1&pageSize=50`
-  → `{ items: UsageRequest[], total }` where `UsageRequest = { requestId, timestamp, keyPrefix, keyName, teamName, departmentName, endpoint, requestedModel, providerName, upstreamModel, inputTokens, cachedInputTokens, outputTokens, latencyMs, statusCode, outcome, fallbackCount, streamed, piiActionApplied, piiCategories, errorCode, routingRuleId, routingRuleName, costUsd, upstreamMs, timeToFirstTokenMs, guardFlags, providerFirstTokenMs, viaKeyId, runId, step }` (`viaKeyId`: the [integration](integrations.md)'s credential key that made the request as this key, `null` otherwise; `runId`, `step`: the client's `x-ume-run-id` and `x-ume-step`) (`routingRuleName`: the routing rule that decided where the request went, `null` when none applied; `upstreamMs`: time spent waiting on providers, failed fallback attempts and a streamed answer included, `null` when no provider was called and for live audio sessions; `timeToFirstTokenMs`: streamed answers only, until the first event reached the client; `providerFirstTokenMs`: streamed answers only, from sending the request to the provider that answered until its first event, without failed fallback attempts, retries or gateway time)
+  → `{ items: UsageRequest[], total }` where `UsageRequest = { requestId, timestamp, keyPrefix, keyName, teamName, departmentName, endpoint, requestedModel, providerName, upstreamModel, inputTokens, cachedInputTokens, outputTokens, latencyMs, statusCode, outcome, fallbackCount, streamed, piiActionApplied, piiCategories, errorCode, routingRuleId, routingRuleName, costUsd, upstreamMs, timeToFirstTokenMs, guardFlags, providerFirstTokenMs, viaKeyId, runId, step }` (`viaKeyId`: the [integration](integrations.md)'s credential key that made the request as this key, `null` otherwise; `runId`, `step`: the client's `x-fors-run-id` and `x-fors-step`) (`routingRuleName`: the routing rule that decided where the request went, `null` when none applied; `upstreamMs`: time spent waiting on providers, failed fallback attempts and a streamed answer included, `null` when no provider was called and for live audio sessions; `timeToFirstTokenMs`: streamed answers only, until the first event reached the client; `providerFirstTokenMs`: streamed answers only, from sending the request to the provider that answered until its first event, without failed fallback attempts, retries or gateway time)
   - Filters: `model` is the requested model; `provider` the provider account name, or `-` for requests no provider handled (as the summary groups them); `outcome` one `RequestOutcome`; `errors=true` keeps only requests that did not succeed (every outcome but `Success`).
 - `GET /api/usage/requests/{requestId}` → `UsageRequest` (lookup by `x-request-id` from gateway response)
 - `GET /api/usage/pii-incidents?from=&to=&keyId=&teamId=&departmentId=&category=&action=&page=1&pageSize=50` (any role, own departments)
@@ -493,7 +493,7 @@ and invalidate the gateway catalogue.
 - `GET /api/ops/config/export` → JSON document (providers without credentials, models, prices, routes, global routing rules)
 - `POST /api/ops/config/import` (same JSON) → `{ created, updated, skipped }`
 - Config schema: `{ schemaVersion: 1, providers: [{ configuration: ProviderRequest (without credential),
-  credentialEnvironment?: "UME_PROVIDER_..." }], models: [{ providerName, configuration: ModelRequest,
+  credentialEnvironment?: "FORS_PROVIDER_..." }], models: [{ providerName, configuration: ModelRequest,
   prices: Price[] }], routes: [{ name, description, kind, isEnabled,
   targets: [{ modelName, priority, weight }] }], routingRules?: [{ name, description?, isEnabled, priority, condition?, chain,
   targets: [{ model, weight }], fallbacks?: string[] }] }`. Only **global** routing rules are transferred (key/team/department ids differ between
@@ -517,9 +517,9 @@ and invalidate the gateway catalogue.
     prefix, for a config import the counts `{ created, updated, skipped }`.
 
 ## Gateway (data plane) – for the developer portal snippets
-- Base URL: `{gatewayBaseUrl}/v1`. Auth: `Authorization: Bearer ume-sk-…` (also `x-api-key` / `api-key`).
+- Base URL: `{gatewayBaseUrl}/v1`. Auth: `Authorization: Bearer fors-sk-…` (also `x-api-key` / `api-key`).
 - `POST /v1/chat/completions`, `POST /v1/embeddings`, `GET /v1/models`, `POST /v1/responses`, `POST /v1/messages` (Anthropic format).
-- `GET /v1/ume/context`: what the key is and may use, for integrations; see [integrations](integrations.md#discovery-data-plane).
+- `GET /v1/fors/context`: what the key is and may use, for integrations; see [integrations](integrations.md#discovery-data-plane).
 - `POST /v1/rerank` (optional, Cohere-compatible): `{ model, query, documents: (string | { text })[], top_n?, return_documents? }` →
   the provider's answer unchanged (`results[]` with `index` and `relevance_score`). Only models of kind `Rerank` on
   providers with the `Rerank` capability, or under an Azure AI Foundry provider (called at the model's `rerankBaseUrl`);
@@ -544,20 +544,20 @@ and invalidate the gateway catalogue.
   attachments, so keys set to `None` get `attachment_not_allowed` on edits. Billing: the number of pictures in `data` ×
   `perImageUsd`, plus reported tokens × token prices (gpt-image-1).
 - Live audio: see [below](#live-audio-realtime).
-- Request headers the gateway reads (not passed to providers): `x-ume-session` (keeps a conversation on one target),
-  `x-ume-max-residency` ([residency ceiling](#residency-ceiling-per-request)), `x-ume-on-behalf-of` (an integration's
-  credential key makes the request as one of its assigned keys, echoed on the answer), `x-ume-run-id` and `x-ume-step`
-  (opaque ids stored on the usage record), `x-ume-stream-cost: 1` (a streamed answer ends with `: ume-cost-usd=…`); see
+- Request headers the gateway reads (not passed to providers): `x-fors-session` (keeps a conversation on one target),
+  `x-fors-max-residency` ([residency ceiling](#residency-ceiling-per-request)), `x-fors-on-behalf-of` (an integration's
+  credential key makes the request as one of its assigned keys, echoed on the answer), `x-fors-run-id` and `x-fors-step`
+  (opaque ids stored on the usage record), `x-fors-stream-cost: 1` (a streamed answer ends with `: fors-cost-usd=…`); see
   [integrations](integrations.md).
-- Response headers: `x-request-id`, `x-ume-provider`, `x-ume-model`, `x-ume-residency` (`OnPrem`, `Eu` or `External`: the
-  residency of the model that answered, its own or its provider's), `x-ume-fallbacks`, `x-ume-cost-usd`,
-  `x-ratelimit-limit-requests`, `x-ratelimit-remaining-requests`, `x-ume-budget-remaining-usd`,
-  `x-ume-rule` (id(s) of the routing rule(s) that applied; see [routing rules](routing-rules.md)), `x-ume-pii` ([personal data](personal-data.md)), `x-ume-guard` ([content guard](content-guard.md)).
+- Response headers: `x-request-id`, `x-fors-provider`, `x-fors-model`, `x-fors-residency` (`OnPrem`, `Eu` or `External`: the
+  residency of the model that answered, its own or its provider's), `x-fors-fallbacks`, `x-fors-cost-usd`,
+  `x-ratelimit-limit-requests`, `x-ratelimit-remaining-requests`, `x-fors-budget-remaining-usd`,
+  `x-fors-rule` (id(s) of the routing rule(s) that applied; see [routing rules](routing-rules.md)), `x-fors-pii` ([personal data](personal-data.md)), `x-fors-guard` ([content guard](content-guard.md)).
 - Error body (OpenAI style): `{ "error": { "message", "type", "code", "request_id", "doc_url" } }` (English `message`;
   `doc_url` is null when `Gateway:PublishApiReference` is off and `Gateway:DocsUrl` points at the gateway itself) with codes
   `invalid_api_key`, `key_expired`, `key_revoked`, `key_disabled` (also when the key's team, department or integration is
   deactivated), `address_not_allowed` (403: the key is restricted to other client addresses), `integration_only` (403: a key
-  assigned to an [integration](integrations.md) was presented directly), `delegation_not_allowed` (403: `x-ume-on-behalf-of`
+  assigned to an [integration](integrations.md) was presented directly), `delegation_not_allowed` (403: `x-fors-on-behalf-of`
   from a key that is not a credential key, naming a key that is not assigned to its integration, or one that shares no residency with the credential key), `model_not_allowed`, `model_not_found`, `model_ambiguous`, `budget_exceeded`,
   `rate_limited`, `pii_blocked`, `attachment_not_allowed`, `tool_not_allowed`, `storage_not_allowed`, `no_eligible_provider`,
   `max_residency_not_met` (403, see [residency ceiling](#residency-ceiling-per-request)), `context_length_exceeded`,
@@ -576,8 +576,8 @@ and invalidate the gateway catalogue.
   breaker. Other client errors (e.g. 400) are returned to the client, see below.
 - `GET /v1/models` lists only aliases and models the key may use and that some endpoint of their kind can reach, by the
   same rule as routing: model and provider enabled and not drained, a provider capability for that endpoint, and the
-  key's provider and residency allow-lists, within the request's `x-ume-max-residency` when it sends one (an alias's
-  `ume.residencies` then shows only residencies within it). Each entry's `ume` object has `type` (`alias` or `model`),
+  key's provider and residency allow-lists, within the request's `x-fors-max-residency` when it sends one (an alias's
+  `fors.residencies` then shows only residencies within it). Each entry's `fors` object (until 0.13 also as a copy under its old name `ume`) has `type` (`alias` or `model`),
   `kind`, `residencies` (alias) or `residency` (model; its own when it has one, else its provider's), `context_window`,
   `max_output_tokens`, `features` and `pricing` (`input_per_million_usd`, `cached_input_per_million_usd`,
   `output_per_million_usd`, or null). For an alias the limits are the smallest of the targets the key may use (null when
@@ -586,7 +586,7 @@ and invalidate the gateway catalogue.
 
 ### Residency ceiling per request
 
-A request may lower the residencies it can reach with `x-ume-max-residency: OnPrem | Eu | External` (the
+A request may lower the residencies it can reach with `x-fors-max-residency: OnPrem | Eu | External` (the
 `DataResidency` names, case-insensitive; `OnPrem` < `Eu` < `External`). It never raises them: the residencies used
 are the key's allowed residencies, the PII guard's on-prem restriction and the ceiling, intersected. Omit the header for
 no ceiling (`Any` is not a value). Anything else, an empty value or two values is `400 invalid_request`: a ceiling the
@@ -605,9 +605,9 @@ gateway does not understand is refused, never ignored.
   it fails instead of running without a ceiling.
 - A target's residency is its model's own when the model has one (`residencyOverride`), else its provider's: an EU
   data zone deployment under an external Foundry provider is within `Eu`, a global deployment under an EU provider is not.
-- `x-ume-residency` on the answer says where the request went. A client that must be sure checks it: during a rolling
+- `x-fors-residency` on the answer says where the request went. A client that must be sure checks it: during a rolling
   update an older gateway instance ignores the request header (and a model's own residency).
-- Outgoing requests to providers carry `User-Agent: Ume-LlmGateway/<version>`.
+- Outgoing requests to providers carry `User-Agent: Fors-LlmGateway/<version>`.
   A provider-side refusal is returned with the provider's status, but only its `message`, `type`, `code` and `param`, in
   the client's error shape (OpenAI, or Anthropic on `/v1/messages`) with the gateway's `request_id`; the rest of the
   provider's body (inner errors, deployment or organisation names) is dropped, and a body that is not JSON becomes

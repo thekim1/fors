@@ -28,11 +28,11 @@ fi
 
 gateway_cpu() { # → total user kernel (ns) of the gateway container, from the Docker API
   curl -s --unix-socket /var/run/docker.sock \
-    "http://localhost/containers/$("${COMPOSE[@]}" ps -q ume-gateway)/stats?stream=false&one-shot=true" |
+    "http://localhost/containers/$("${COMPOSE[@]}" ps -q fors-gateway)/stats?stream=false&one-shot=true" |
     python3 -c 'import json,sys; c=json.load(sys.stdin)["cpu_stats"]["cpu_usage"]; print(c["total_usage"], c["usage_in_usermode"], c["usage_in_kernelmode"])'
 }
 sidecar() {
-  docker run --rm --pid "container:$("${COMPOSE[@]}" ps -q ume-gateway)" --cap-add SYS_PTRACE --cpuset-cpus 7 \
+  docker run --rm --pid "container:$("${COMPOSE[@]}" ps -q fors-gateway)" --cap-add SYS_PTRACE --cpuset-cpus 7 \
     -e TMPDIR=/proc/1/root/tmp -e DOTNET_ROOT=/usr/share/dotnet -v "$TOOLS":/tools -v "$OUT":/out "$SDK" "$@"
 }
 
@@ -41,9 +41,9 @@ for name in $LAYOUTS; do
   export APP_CPUS FAKE_CPUS PG_CPUS REDIS_CPUS
   source ./lib.sh
   log "$name: gateway $APP_CPUS, $VUS clients"
-  start_platform ume
-  warm_up ume
-  k6 ume true "$VUS" 75s "profile/$name-k6" > "$OUT/$name-k6.txt" 2>&1 &
+  start_platform fors
+  warm_up fors
+  k6 fors true "$VUS" 75s "profile/$name-k6" > "$OUT/$name-k6.txt" 2>&1 &
   load=$!
   sleep 15
   before=$(gateway_cpu); t0=$(date +%s%N)

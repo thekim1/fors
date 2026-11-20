@@ -61,9 +61,9 @@ const examplePath = computed(() => {
   }
 })
 // The key is read from an environment variable so it does not end up in shell history.
-const curlExample = computed(() => `curl -H "Authorization: Bearer $UME_DATA_KEY" \\\n  "${baseUrl.value}${examplePath.value}"`)
+const curlExample = computed(() => `curl -H "Authorization: Bearer $FORS_DATA_KEY" \\\n  "${baseUrl.value}${examplePath.value}"`)
 const powershellExample = computed(
-  () => `Invoke-RestMethod "${baseUrl.value}${examplePath.value}" \`\n  -Headers @{ 'X-Api-Key' = $env:UME_DATA_KEY }`,
+  () => `Invoke-RestMethod "${baseUrl.value}${examplePath.value}" \`\n  -Headers @{ 'X-Api-Key' = $env:FORS_DATA_KEY }`,
 )
 
 function openCreate(): void {
@@ -199,7 +199,7 @@ onBeforeUnmount(() => {
     @done="ui.notify('Data API key ready to use')"
   >
     <p class="m-0 text-small text-fg-2">Store it in the integration’s secret store, then send it as a bearer token or in the X-Api-Key header:</p>
-    <CodeBlock label="curl (UME_DATA_KEY holds the key)" :code="curlExample" />
+    <CodeBlock label="curl (FORS_DATA_KEY holds the key)" :code="curlExample" />
     <CodeBlock label="PowerShell" :code="powershellExample" />
   </SecretDialog>
 </template>

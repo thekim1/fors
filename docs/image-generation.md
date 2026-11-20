@@ -5,17 +5,17 @@ Image models (gpt-image-1, DALL·E 3, FLUX and others with an OpenAI-compatible 
 pictures in `image` or `image[]`, and an optional `mask`). Clients use the OpenAI SDKs unchanged:
 
 ```bash
-curl https://<gateway>/v1/images/generations -H "Authorization: Bearer $UME_API_KEY" \
-  -H "Content-Type: application/json" -d '{"model":"ume/image","prompt":"En röd stuga vid en sjö","size":"1024x1024"}'
-curl https://<gateway>/v1/images/edits -H "Authorization: Bearer $UME_API_KEY" \
-  -F model=ume/image -F prompt="Gör himlen blå" -F image=@stuga.png
+curl https://<gateway>/v1/images/generations -H "Authorization: Bearer $FORS_API_KEY" \
+  -H "Content-Type: application/json" -d '{"model":"fors/image","prompt":"En röd stuga vid en sjö","size":"1024x1024"}'
+curl https://<gateway>/v1/images/edits -H "Authorization: Bearer $FORS_API_KEY" \
+  -F model=fors/image -F prompt="Gör himlen blå" -F image=@stuga.png
 ```
 
 **Setting it up.** OpenAI, Azure OpenAI and Foundry providers serve images; an OpenAI-compatible server needs *Image
 generation and editing* under *Endpoints this server offers*. Add the model with kind
 *Image generation* (`Image`; discovery does this for `gpt-image*`, `dall-e*`, `flux*`, `imagen*` and `stable-diffusion*`
 models) and put it behind an alias with the same kind. Fallback, residency, provider allow-lists, rate limits, budgets
-and routing rules (`endpoint == "image_generations"` or `"image_edits"`) work as for chat. The dev seed has `ume/image`
+and routing rules (`endpoint == "image_generations"` or `"image_edits"`) work as for chat. The dev seed has `fors/image`
 on FakeLlm.
 
 **Prices.** DALL·E-style models are priced per picture (*Image (USD per picture)* in the price form, `perImageUsd`);

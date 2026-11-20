@@ -13,7 +13,7 @@ param([switch]$Empty)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$apphost = Join-Path $root 'src\Ume.LlmGateway.AppHost\Ume.LlmGateway.AppHost.csproj'
+$apphost = Join-Path $root 'src\Fors.AppHost\Fors.AppHost.csproj'
 
 $env:Seed__Enabled = if ($Empty) { 'false' } else { 'true' }
 Write-Output ('Starting with {0}.' -f $(if ($Empty) { 'an empty database (no demo data)' } else { 'demo data' }))

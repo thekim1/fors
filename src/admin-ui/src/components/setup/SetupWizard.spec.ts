@@ -22,8 +22,8 @@ vi.mock('@/api', () => ({
   },
 }))
 
-const AUTHORITY = 'https://idp.example.org/realms/ume'
-const AUTHORIZE = 'https://idp.example.org/realms/ume/protocol/openid-connect/auth?state=ume-setup-test.x'
+const AUTHORITY = 'https://idp.example.org/realms/fors'
+const AUTHORIZE = 'https://idp.example.org/realms/fors/protocol/openid-connect/auth?state=fors-setup-test.x'
 const SESSION_ENDED = 'Your setup session has ended.'
 
 const noSession = () => new ApiError(401, 'GET', { code: 'setup_session_required' })
@@ -191,7 +191,7 @@ describe('setup wizard: sign-in values and the test', () => {
     expect(input(wrapper, 'setup-authority').disabled).toBe(true)
     expect(input(wrapper, 'setup-authority').value).toBe(AUTHORITY)
     expect(wrapper.get('#setup-authority-hint').text()).toContain('Set by the deployment')
-    expect(wrapper.get('#setup-clientId-hint').text()).toContain('Leave empty for the default: ume-admin.')
+    expect(wrapper.get('#setup-clientId-hint').text()).toContain('Leave empty for the default: fors-admin.')
     test.mockResolvedValue({ testId: 't2', authorizeUrl: AUTHORIZE, expiresAt: '' })
     await startTest(wrapper)
     expect(test).toHaveBeenCalledWith(expect.objectContaining({ authority: null, clientId: null }))
@@ -207,7 +207,7 @@ describe('setup wizard: sign-in values and the test', () => {
 
     await startTest(wrapper)
     expect(test).toHaveBeenLastCalledWith(expect.objectContaining({ authority: AUTHORITY, clientSecret: null }))
-    expect(open).toHaveBeenCalledWith('about:blank', 'ume-gateway-setup-test', expect.any(String))
+    expect(open).toHaveBeenCalledWith('about:blank', 'fors-gateway-setup-test', expect.any(String))
     expect(popup.location.href).toBe(AUTHORIZE)
 
     await chooseSecret(wrapper, 'No secret (public client)')
@@ -250,7 +250,7 @@ describe('setup wizard: sign-in values and the test', () => {
     await startTest(wrapper)
     expect(wrapper.find('[data-test=test-pending]').exists()).toBe(true)
     expect(wrapper.get('[data-test=popup-blocked] a').attributes('href')).toBe(AUTHORIZE)
-    expect(wrapper.get('[data-test=popup-blocked] a').attributes('target')).toBe('ume-gateway-setup-test')
+    expect(wrapper.get('[data-test=popup-blocked] a').attributes('target')).toBe('fors-gateway-setup-test')
     wrapper.unmount()
   })
 
@@ -331,7 +331,7 @@ describe('setup wizard: save', () => {
     const wrapper = await resume(setupState({ latestTest: setupTest() }))
     await goTo(wrapper, 'save')
     expect(wrapper.get('[data-test=save-authority]').text()).toContain('Set here')
-    expect(wrapper.get('[data-test=save-clientId]').text()).toContain('ume-admin')
+    expect(wrapper.get('[data-test=save-clientId]').text()).toContain('fors-admin')
     expect(wrapper.get('[data-test=save-clientId]').text()).toContain('Default')
     expect(wrapper.get('[data-test=save-secret]').text()).toContain('The secret typed for the test')
     expect(wrapper.get('[data-test=save-person]').text()).toContain('Anna Andersson')
@@ -424,7 +424,7 @@ describe('setup wizard: the session ends', () => {
       vi.advanceTimersByTime(25 * 60_000)
       await flushPromises()
       expect(wrapper.get('[data-test=setup-closed]').text()).toContain('Setup mode’s hour has ended')
-      expect(wrapper.text()).toContain('UME_SETUP_REOPEN')
+      expect(wrapper.text()).toContain('FORS_SETUP_REOPEN')
       wrapper.unmount()
     })
   })

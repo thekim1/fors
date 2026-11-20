@@ -18,8 +18,8 @@ vi.mock('@/api', () => ({
 vi.mock('@/composables/useModelOptions', () => ({
   useModelOptions: () => ({
     options: ref([
-      { name: 'ume/chat-standard', source: 'route', residencies: [], providers: [] },
-      { name: 'ume/chat-advanced', source: 'route', residencies: [], providers: [] },
+      { name: 'fors/chat-standard', source: 'route', residencies: [], providers: [] },
+      { name: 'fors/chat-advanced', source: 'route', residencies: [], providers: [] },
     ]),
     loading: ref(false),
     error: ref(null),
@@ -28,7 +28,7 @@ vi.mock('@/composables/useModelOptions', () => ({
 }))
 vi.mock('@/stores/teams', () => ({ useTeamsStore: () => ({ items: [{ id: 't1', name: 'Service desk', departmentName: 'KS' }, { id: 't2', name: 'Ny grupp', departmentName: 'KS' }], load: vi.fn() }) }))
 vi.mock('@/stores/departments', () => ({ useDepartmentsStore: () => ({ items: [{ id: 'd1', name: 'Kommunstyrelsen' }], load: vi.fn() }) }))
-vi.mock('@/stores/keys', () => ({ useKeysStore: () => ({ items: [{ id: 'k1', name: 'CRM', prefix: 'ume-sk-ab' }], load: vi.fn() }) }))
+vi.mock('@/stores/keys', () => ({ useKeysStore: () => ({ items: [{ id: 'k1', name: 'CRM', prefix: 'fors-sk-ab' }], load: vi.fn() }) }))
 
 const ok = { valid: true, errors: [], variables: [], available: [] }
 
@@ -41,7 +41,7 @@ function mountForm(existing = null as ReturnType<typeof rule> | null) {
 const ownerBox = (wrapper: ReturnType<typeof mountForm>['wrapper'], name: string) =>
   wrapper.findAll('label').find((l) => l.text().includes(name))!.find('input[type="checkbox"]')
 
-async function fillBasics(wrapper: ReturnType<typeof mountForm>['wrapper'], name = 'Premium', model = 'ume/chat-advanced') {
+async function fillBasics(wrapper: ReturnType<typeof mountForm>['wrapper'], name = 'Premium', model = 'fors/chat-advanced') {
   await wrapper.find('#rule-name').setValue(name)
   await wrapper.find('#rule-target-0').setValue(model)
 }
@@ -65,13 +65,13 @@ describe('RuleFormDrawer', () => {
   it('creates a global rule with trimmed values, placed first, enabled', async () => {
     const { wrapper } = mountForm()
     await flushPromises()
-    await fillBasics(wrapper, '  Premium  ', ' ume/chat-advanced ')
+    await fillBasics(wrapper, '  Premium  ', ' fors/chat-advanced ')
     create.mockResolvedValue(rule({ name: 'Premium' }))
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     expect(create).toHaveBeenCalledWith({
       name: 'Premium', description: null, scope: 'Global', scopeIds: [], isEnabled: true, priority: 0, condition: '', chain: false,
-      targets: [{ model: 'ume/chat-advanced', weight: 1 }], fallbacks: [],
+      targets: [{ model: 'fors/chat-advanced', weight: 1 }], fallbacks: [],
     })
     expect(wrapper.emitted('saved')).toHaveLength(1)
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
@@ -115,7 +115,7 @@ describe('RuleFormDrawer', () => {
     await fillBasics(wrapper)
     await buttonByLabel(wrapper, 'Remove target 1').exists()
     await button(wrapper, 'Add target').trigger('click')
-    await wrapper.find('#rule-target-1').setValue('ume/chat-standard')
+    await wrapper.find('#rule-target-1').setValue('fors/chat-standard')
     const weights = wrapper.findAll('input[type="number"]')
     await weights[0]!.setValue('70')
     await weights[1]!.setValue('30')
@@ -142,13 +142,13 @@ describe('RuleFormDrawer', () => {
     await fillBasics(wrapper)
     await button(wrapper, 'Add fallback').trigger('click')
     await button(wrapper, 'Add fallback').trigger('click')
-    await wrapper.find('#rule-fallback-0').setValue('ume/chat-standard')
-    await wrapper.find('#rule-fallback-1').setValue('ume/chat-advanced')
+    await wrapper.find('#rule-fallback-0').setValue('fors/chat-standard')
+    await wrapper.find('#rule-fallback-1').setValue('fors/chat-advanced')
     await buttonByLabel(wrapper, 'Move fallback 2 earlier').trigger('click')
     create.mockResolvedValue(rule())
     await wrapper.find('form').trigger('submit')
     await flushPromises()
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ fallbacks: ['ume/chat-advanced', 'ume/chat-standard'] }))
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ fallbacks: ['fors/chat-advanced', 'fors/chat-standard'] }))
   })
 
   it('shows the server’s field errors where they belong', async () => {
@@ -174,7 +174,7 @@ describe('RuleFormDrawer', () => {
   })
 
   it('edits an existing rule and keeps its place in the order', async () => {
-    const existing = rule({ name: 'Old', priority: 40, condition: 'budget_used > 90', targets: [{ model: 'ume/chat-advanced', weight: 3 }], fallbacks: ['ume/chat-standard'], chain: true })
+    const existing = rule({ name: 'Old', priority: 40, condition: 'budget_used > 90', targets: [{ model: 'fors/chat-advanced', weight: 3 }], fallbacks: ['fors/chat-standard'], chain: true })
     const { wrapper } = mountForm(existing)
     await flushPromises()
     expect((wrapper.find('#rule-name').element as HTMLInputElement).value).toBe('Old')
@@ -183,7 +183,7 @@ describe('RuleFormDrawer', () => {
     await wrapper.find('#rule-name').setValue('New')
     await wrapper.find('form').trigger('submit')
     await flushPromises()
-    expect(update).toHaveBeenCalledWith(existing.id, expect.objectContaining({ name: 'New', priority: 40, chain: true, fallbacks: ['ume/chat-standard'], targets: [{ model: 'ume/chat-advanced', weight: 3 }] }))
+    expect(update).toHaveBeenCalledWith(existing.id, expect.objectContaining({ name: 'New', priority: 40, chain: true, fallbacks: ['fors/chat-standard'], targets: [{ model: 'fors/chat-advanced', weight: 3 }] }))
   })
 
   it('cannot enable a rule that has no owner until a new owner is chosen', async () => {

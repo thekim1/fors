@@ -74,7 +74,7 @@ onMounted(load)
           time, key, team and department, model and provider, tokens, cost, latency, status and outcome, PII categories found and the routing
           rule that applied. Request counts, outcomes, latency and throughput are on
           <RouterLink :to="{ name: 'usage' }" class="text-accent-ink underline">Monitor › Usage</RouterLink>, and in the Data API and the
-          <code class="font-mono text-small">ume.gateway.requests</code> metric. Requests refused before a key is recognised (missing,
+          <code class="font-mono text-small">fors.gateway.requests</code> metric. Requests refused before a key is recognised (missing,
           unknown or revoked keys) are counted separately as refused credentials. Message content is never logged or stored.
         </p>
         <p class="m-0">

@@ -5,13 +5,13 @@ import os
 import sys
 from pathlib import Path
 
-NAMES = {"fake": "Fake LLM directly (floor)", "ume": "Ume LLM gateway", "bifrost": f"Bifrost {os.environ.get('BIFROST_VERSION', 'v2.5.1')}",
+NAMES = {"fake": "Fake LLM directly (floor)", "fors": "Fors", "bifrost": f"Bifrost {os.environ.get('BIFROST_VERSION', 'v2.5.1')}",
          "eneo": f"eneo {os.environ.get('ENEO_VERSION', 'v2.2.3')}"}
-APP = {"ume": ["ume-gateway"], "bifrost": ["bifrost"], "eneo": ["eneo-backend", "eneo-worker"], "fake": []}
-DATA = {"ume": ["ume-db", "ume-redis"], "bifrost": ["bifrost-db"], "eneo": ["eneo-db", "eneo-redis"], "fake": []}
-TARGETS = ("fake", "ume", "bifrost", "eneo")
+APP = {"fors": ["fors-gateway"], "bifrost": ["bifrost"], "eneo": ["eneo-backend", "eneo-worker"], "fake": []}
+DATA = {"fors": ["fors-db", "fors-redis"], "bifrost": ["bifrost-db"], "eneo": ["eneo-db", "eneo-redis"], "fake": []}
+TARGETS = ("fake", "fors", "bifrost", "eneo")
 # Containers whose load shows the harness had room: the platform, the fake LLM and the platform's stores.
-HARNESS = {"ume": [("Gateway (of 4)", "ume-gateway"), ("Fake LLM (of 4)", "fake-llm"), ("Postgres (of 2)", "ume-db"), ("Redis (of 1)", "ume-redis")],
+HARNESS = {"fors": [("Gateway (of 4)", "fors-gateway"), ("Fake LLM (of 4)", "fake-llm"), ("Postgres (of 2)", "fors-db"), ("Redis (of 1)", "fors-redis")],
            "bifrost": [("Bifrost (of 4)", "bifrost"), ("Fake LLM (of 4)", "fake-llm"), ("Postgres (of 2)", "bifrost-db")]}
 
 
@@ -73,7 +73,7 @@ def main(folder: Path) -> None:
     print("# Platform comparison against the same fake LLM\n")
     print("Overhead = median latency minus the fake LLM's own median at the same load. CPU is container CPU time per")
     print("request: the platform process, and its Postgres + Redis. Statements and commands include background work (e.g.")
-    print("usage writers). Rows stored = usage records (Ume gateway) or request log rows (Bifrost) written per request. Bifrost")
+    print("usage writers). Rows stored = usage records (Fors) or request log rows (Bifrost) written per request. Bifrost")
     print("has no Redis. All checks verify status 200 and the fake answer.\n")
     for stream in (False, True):
         print(f"## {'Streaming' if stream else 'Non-streaming'} chat completion\n")

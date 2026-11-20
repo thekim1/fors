@@ -11,7 +11,7 @@ Two rules hold in every setup:
   redirect from port 80); Postgres refuses connections without TLS (`hostnossl ... reject` in
   [`pg_hba.conf`](../deploy/postgres/pg_hba.conf)); Redis has no plain port (`port 0`, `tls-port 6379` in
   [`redis.conf`](../deploy/redis/redis.conf)). In production every provider address must be `https` or `wss`
-  (a provider at `http://` is refused with `https_required`, `src/Ume.LlmGateway.Infrastructure/Providers/ProviderTransport.cs`).
+  (a provider at `http://` is refused with `https_required`, `src/Fors.Infrastructure/Providers/ProviderTransport.cs`).
 - **Every app listens on 8443 inside its container**, and only the host side of the mapping is configurable
   ([`compose.prod.yaml`](../deploy/compose.prod.yaml), header comment). The health probe inside the container checks
   `https://localhost:8443`.
@@ -30,7 +30,7 @@ Two rules hold in every setup:
 | OpenTelemetry Collector (optional) | Yours; receives logs, traces, metrics and security events over OTLP | 4317 in the example | – |
 | Keycloak (optional project) | `deploy/keycloak`: an OIDC provider next to the gateway | 8443 HTTPS, management 9000 (never published) | 11443 |
 | Providers | Outside: Azure OpenAI / Foundry, OpenAI, Anthropic, Berget AI, on-prem Ollama or vLLM | – | – |
-| Client systems | Outside: applications such as Ume.Rag, admins' browsers, Data API consumers | – | – |
+| Client systems | Outside: applications such as Källa, admins' browsers, Data API consumers | – | – |
 
 ```text
                      client apps (API keys)     admins' browsers          Data API consumers
@@ -69,17 +69,17 @@ address, so the host or network firewall enforces the destinations below.
 | Reverse proxy, gateway host name | 443 | HTTPS; WebSocket upgrade on `/v1/realtime` and `/v1/realtime/translations` | Client applications with virtual keys | LLM API | Yes, with a proxy | Your proxy ([`nginx.conf.example`](../deploy/proxy/nginx.conf.example)) |
 | Reverse proxy, admin host name | 443 | HTTPS | Admins' browsers | Admin UI and admin API, OIDC callbacks `/signin-oidc`, `/signout-callback-oidc` | Yes, with a proxy | Your proxy |
 | Reverse proxy, Keycloak host name | 443 | HTTPS | Browsers of everyone who signs in; back-channel of the admin API and other systems | OIDC | Only with the Keycloak project | Your proxy ([keycloak.md](keycloak.md#set-up), step 4) |
-| Gateway | 8443 | HTTPS (TLS from the internal CA or your PKI), WebSocket | The proxy; or client applications directly when there is no proxy | `/v1/*`, `/health/live`, `/health/ready`, `/version` | Yes | `UME_GATEWAY_BIND`, `UME_GATEWAY_PORT` |
-| Gateway, second slot | 8444 | as above | The proxy only | Rolling updates | Only with `compose.rolling.yaml` | `UME_GATEWAY_B_PORT` |
-| Admin API and UI | 9443 | HTTPS | The proxy; or admins' browsers directly | Admin UI, `/api/*`, `/bff/*`, OIDC callbacks, health | Yes | `UME_ADMIN_BIND`, `UME_ADMIN_PORT` |
-| Admin API, second slot | 9444 | HTTPS | The proxy only | Rolling updates | Only with `compose.rolling.yaml` | `UME_ADMIN_B_PORT` |
-| Data API | 10443 | HTTPS (always the internal CA's certificate) | Integrations (ETL, SIEM connector, BI) with client-credentials tokens or Data API keys; or your proxy / API gateway | `/v1/usage/*`, `/v1/security/*`, `/v1/catalog/*`, `/openapi/v1.json`, health | Only with `COMPOSE_PROFILES=data` | `UME_DATA_BIND`, `UME_DATA_PORT` |
-| Keycloak | 11443 | HTTPS | The proxy only (Keycloak trusts `X-Forwarded-*`) | OIDC, Keycloak admin console | Only with the Keycloak project | `UME_KEYCLOAK_BIND`, `UME_KEYCLOAK_PORT` ([`init-keycloak.sh`](../deploy/keycloak/init-keycloak.sh) `--bind`, `--port`) |
+| Gateway | 8443 | HTTPS (TLS from the internal CA or your PKI), WebSocket | The proxy; or client applications directly when there is no proxy | `/v1/*`, `/health/live`, `/health/ready`, `/version` | Yes | `FORS_GATEWAY_BIND`, `FORS_GATEWAY_PORT` |
+| Gateway, second slot | 8444 | as above | The proxy only | Rolling updates | Only with `compose.rolling.yaml` | `FORS_GATEWAY_B_PORT` |
+| Admin API and UI | 9443 | HTTPS | The proxy; or admins' browsers directly | Admin UI, `/api/*`, `/bff/*`, OIDC callbacks, health | Yes | `FORS_ADMIN_BIND`, `FORS_ADMIN_PORT` |
+| Admin API, second slot | 9444 | HTTPS | The proxy only | Rolling updates | Only with `compose.rolling.yaml` | `FORS_ADMIN_B_PORT` |
+| Data API | 10443 | HTTPS (always the internal CA's certificate) | Integrations (ETL, SIEM connector, BI) with client-credentials tokens or Data API keys; or your proxy / API gateway | `/v1/usage/*`, `/v1/security/*`, `/v1/catalog/*`, `/openapi/v1.json`, health | Only with `COMPOSE_PROFILES=data` | `FORS_DATA_BIND`, `FORS_DATA_PORT` |
+| Keycloak | 11443 | HTTPS | The proxy only (Keycloak trusts `X-Forwarded-*`) | OIDC, Keycloak admin console | Only with the Keycloak project | `FORS_KEYCLOAK_BIND`, `FORS_KEYCLOAK_PORT` ([`init-keycloak.sh`](../deploy/keycloak/init-keycloak.sh) `--bind`, `--port`) |
 
 **Bind address.** Without `--proxy`, `init-deployment.sh` binds every listener to `127.0.0.1`; with `--proxy` to
 `0.0.0.0` ([`init-deployment.sh`](../deploy/init-deployment.sh): "Listeners default to loopback (0.0.0.0 with --proxy:
 firewall them to the proxy only)"). [`compose.portainer.yaml`](../deploy/compose.portainer.yaml) defaults to `0.0.0.0`.
-Keycloak's bind defaults to the admin API's (`UME_ADMIN_BIND`). Change it for all three apps with `--bind <address>`;
+Keycloak's bind defaults to the admin API's (`FORS_ADMIN_BIND`). Change it for all three apps with `--bind <address>`;
 with the proxy on the same host, `--bind 127.0.0.1`.
 
 **Reachable only from the proxy** when a proxy is in front: 8443, 8444, 9443, 9444 and 11443 (and 10443 if the Data API
@@ -89,7 +89,7 @@ believes the `X-Forwarded-*` headers ([keycloak.md](keycloak.md#set-up)). The ga
 addresses listed under *Settings > Trusted proxies* ([client addresses](client-addresses.md)).
 
 **Health and monitoring.** `/health/live`, `/health/ready` and `/version` are on the same HTTPS listener as the API, without
-authentication; they return only an aggregate status (`src/Ume.LlmGateway.ServiceDefaults/Extensions.cs`). There is no
+authentication; they return only an aggregate status (`src/Fors.ServiceDefaults/Extensions.cs`). There is no
 metrics scrape endpoint: telemetry is pushed over OTLP (*Outbound*). A load balancer monitors `GET /health/ready` over
 HTTPS and expects 200 ([updates without downtime](zero-downtime-updates.md#set-it-up)).
 
@@ -128,10 +128,10 @@ Allow only what the deployment uses. All are TCP.
 |---|---|---|---|---|
 | Each configured provider's base URL host | 443 HTTPS, or the port in the base URL | Model requests (streamed SSE) | For every provider an admin adds | Admin UI, *Providers* (base URL, stored in the database) |
 | The same hosts | 443 WSS, or the port in the base URL | Live audio sessions (`/v1/realtime`), opened by the gateway to the provider | Only with realtime models | Same |
-| Azure AI Foundry: `<resource>.services.ai.azure.com` as well as the entered `<resource>.openai.azure.com` or `<resource>.cognitiveservices.azure.com` | 443 | Claude on Foundry (`…/anthropic/v1`) and Foundry rerankers (`…/providers/<publisher>/v2`) go to the resource's `services.ai.azure.com` host, whatever host the admin entered | Foundry providers | `src/Ume.LlmGateway.Domain/Providers/FoundryEndpoint.cs` |
+| Azure AI Foundry: `<resource>.services.ai.azure.com` as well as the entered `<resource>.openai.azure.com` or `<resource>.cognitiveservices.azure.com` | 443 | Claude on Foundry (`…/anthropic/v1`) and Foundry rerankers (`…/providers/<publisher>/v2`) go to the resource's `services.ai.azure.com` host, whatever host the admin entered | Foundry providers | `src/Fors.Domain/Providers/FoundryEndpoint.cs` |
 | Content guard model | Its provider's host and port | The guard model is an ordinary provider (usually on-prem) | Only with the content guard | Admin UI ([content guard](content-guard.md)) |
 | Budget alert webhook | The URL's host and port | Budget alerts, one POST each, 5 s timeout | Only if set | `Gateway:AlertWebhookUrl` (`Gateway__AlertWebhookUrl`) |
-| OpenTelemetry Collector | The endpoint's port (example 4317, OTLP/gRPC, TLS) | Logs, traces, metrics, security events | Only if set | `UME_OTEL_ENDPOINT` → `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| OpenTelemetry Collector | The endpoint's port (example 4317, OTLP/gRPC, TLS) | Logs, traces, metrics, security events | Only if set | `FORS_OTEL_ENDPOINT` → `OTEL_EXPORTER_OTLP_ENDPOINT` |
 | Redis, Postgres | 6379, 5432 | See *Internal only* | Always | Connection strings in the secret files |
 
 **Rule for provider egress:** allow the gateway (on one Docker host: the host) **to each configured provider's base URL
@@ -143,26 +143,26 @@ it whenever a provider is added. Known hosts, as examples from the documentation
 | Azure OpenAI / Azure AI Foundry | `<resource>.openai.azure.com`, `<resource>.cognitiveservices.azure.com`, `<resource>.services.ai.azure.com` (all three for one resource) | [providers and models](providers-and-models.md#reranking-optional), [live audio](live-audio.md) |
 | Foundry Voice Live | `<resource>.services.ai.azure.com` (`/voice-live`) | [live audio](live-audio.md) |
 | OpenAI | `api.openai.com` | [live audio](live-audio.md) |
-| Anthropic | `api.anthropic.com` | `src/Ume.LlmGateway.MigrationService/DevSeeder.cs` (development seed) |
+| Anthropic | `api.anthropic.com` | `src/Fors.MigrationService/DevSeeder.cs` (development seed) |
 | Berget AI | `api.berget.ai` | [providers and models](providers-and-models.md#reranking-optional) |
 | Ollama Cloud | `ollama.com` | `DevSeeder.cs`, [providers and models](providers-and-models.md#list-prices) |
 | On-prem Ollama, vLLM, Speaches, a guard model | Your server's HTTPS address and port | Ports are the server's own: **not set by the gateway; agree with infra** |
 
 Providers authenticate with an API key or bearer token in a header; the gateway does not fetch tokens from Entra ID or
-an instance metadata service for providers (`ProviderAuthMode` in `src/Ume.LlmGateway.Domain/ProviderEnums.cs`).
+an instance metadata service for providers (`ProviderAuthMode` in `src/Fors.Domain/ProviderEnums.cs`).
 
 ### Admin API
 
 | Destination | Port / protocol | Purpose | When | Configured in |
 |---|---|---|---|---|
-| OIDC provider (`Oidc:Authority`, or the one saved in setup mode) | 443 HTTPS, or the port in the authority | **Back-channel:** discovery document, signing keys (JWKS), the token endpoint (authorization code with PKCE is redeemed by the admin API, not the browser) | Always | `UME_OIDC_AUTHORITY` → `Oidc__Authority`, else the setup wizard (stored in the database) |
+| OIDC provider (`Oidc:Authority`, or the one saved in setup mode) | 443 HTTPS, or the port in the authority | **Back-channel:** discovery document, signing keys (JWKS), the token endpoint (authorization code with PKCE is redeemed by the admin API, not the browser) | Always | `FORS_OIDC_AUTHORITY` → `Oidc__Authority`, else the setup wizard (stored in the database) |
 | The provider being tested in setup mode | 443 HTTPS, or the port in the candidate authority | The wizard's test sign-in: the candidate's discovery document, keys and token endpoint (no redirect followed, nothing returned) | While setup mode is open and someone runs a test | Typed in the wizard: allow the provider you intend to use **before** running the wizard |
-| Gateway operations endpoint | 8443 HTTPS, `https://gateway:8443` on the internal `edge` network | Health, version and usage-writer state for *Operations* (signed request) | Always | `Gateway__OperationsUrl` (`UME_GATEWAY_OPERATIONS_URL`; with PKI certificates the gateway's public URL, so the admin API must reach the proxy) |
+| Gateway operations endpoint | 8443 HTTPS, `https://gateway:8443` on the internal `edge` network | Health, version and usage-writer state for *Operations* (signed request) | Always | `Gateway__OperationsUrl` (`FORS_GATEWAY_OPERATIONS_URL`; with PKI certificates the gateway's public URL, so the admin API must reach the proxy) |
 | Each configured provider's host | 443 or the base URL's port | **Discover models** (lists the provider's models with its credential) | When an admin uses discovery | Admin UI, *Providers* |
 | `models.dev` | 443 HTTPS | Model list prices, once a day | On by default; empty `Admin:PriceListUrl` turns it off, or point it at an internal copy | `Admin:PriceListUrl` (default `https://models.dev/api.json`) |
-| `prices.azure.com` | 443 HTTPS | Azure Retail Prices API: suggested prices for Foundry deployments during discovery | When discovering Foundry models | Fixed host (`src/Ume.LlmGateway.AdminApi/Catalog/Pricing/AzureRetailPrices.cs`); region `Admin:AzurePriceRegion` |
+| `prices.azure.com` | 443 HTTPS | Azure Retail Prices API: suggested prices for Foundry deployments during discovery | When discovering Foundry models | Fixed host (`src/Fors.AdminApi/Catalog/Pricing/AzureRetailPrices.cs`); region `Admin:AzurePriceRegion` |
 | `api.github.com` | 443 HTTPS | Latest release, shown in *Settings > Version* | On by default | `Admin:CheckForReleases=false` turns it off; `Admin:ReleaseRepository` |
-| OpenTelemetry Collector | As for the gateway | Telemetry, admin security events | Only if set | `UME_OTEL_ENDPOINT` |
+| OpenTelemetry Collector | As for the gateway | Telemetry, admin security events | Only if set | `FORS_OTEL_ENDPOINT` |
 | Redis, Postgres | 6379, 5432 | See *Internal only* | Always | Secret files |
 
 An admin API without internet access works: set `Admin__PriceListUrl=` (or an internal copy), `Admin__CheckForReleases=false`,
@@ -172,9 +172,9 @@ and add Foundry prices by hand ([providers and models](providers-and-models.md#l
 
 | Destination | Port / protocol | Purpose | When | Configured in |
 |---|---|---|---|---|
-| Token issuer (`DataApi:Authority`) | 443 HTTPS | **Back-channel:** discovery and JWKS to validate client-credentials tokens | When an authority is set (defaults to `UME_OIDC_AUTHORITY`, never to the provider saved in the setup wizard); not needed with Data API keys only | `UME_DATA_AUTHORITY` → `DataApi__Authority` |
-| Postgres | 5432 | Read-only role `ume_data` | Always | Secret file |
-| OpenTelemetry Collector | As above | Telemetry, `data.read` events | Only if set | `UME_OTEL_ENDPOINT` |
+| Token issuer (`DataApi:Authority`) | 443 HTTPS | **Back-channel:** discovery and JWKS to validate client-credentials tokens | When an authority is set (defaults to `FORS_OIDC_AUTHORITY`, never to the provider saved in the setup wizard); not needed with Data API keys only | `FORS_DATA_AUTHORITY` → `DataApi__Authority` |
+| Postgres | 5432 | Read-only role `fors_data` | Always | Secret file |
+| OpenTelemetry Collector | As above | Telemetry, `data.read` events | Only if set | `FORS_OTEL_ENDPOINT` |
 
 The Data API does not use Redis ([`init-deployment.sh`](../deploy/init-deployment.sh): "read-only role, no pepper, no Redis").
 
@@ -182,7 +182,7 @@ The Data API does not use Redis ([`init-deployment.sh`](../deploy/init-deploymen
 
 | Destination | Port / protocol | Purpose | When |
 |---|---|---|---|
-| Postgres (`postgres:5432` on the gateway project's `data` network) | 5432 TLS, `verify-full` | Database `keycloak`, role `ume_keycloak` | Always |
+| Postgres (`postgres:5432` on the gateway project's `data` network) | 5432 TLS, `verify-full` | Database `keycloak`, role `fors_keycloak` | Always |
 | `login.microsoftonline.com` | 443 HTTPS | Back-channel to Entra ID: discovery, token endpoint, JWKS | Only when Entra ID is brokered |
 | `<adfs host>` | 443 HTTPS | Back-channel to AD FS | Only when AD FS is brokered |
 | Domain controllers | LDAPS (`ldaps://`; port 636 is the LDAPS standard, 3269 the global catalog over TLS) | User federation to Active Directory | Only with LDAP federation. The repository states only `ldaps://`: **port not set by the gateway; agree with infra** |
@@ -197,12 +197,12 @@ gateway host's:
 | From | To | Port | When |
 |---|---|---|---|
 | Admins' browsers | Admin host (proxy) or `<host>:9443` | 443 / 9443 | Always |
-| Admins' browsers | The OIDC provider's authorization and end-session endpoints (`UME_OIDC_AUTHORITY`) | 443 | Sign-in and sign-out |
+| Admins' browsers | The OIDC provider's authorization and end-session endpoints (`FORS_OIDC_AUTHORITY`) | 443 | Sign-in and sign-out |
 | Admins' browsers | Brokered provider (`login.microsoftonline.com`, the AD FS host), redirected to by Keycloak | 443 | Only when brokered |
-| Data API integrations | The token endpoint of `UME_DATA_AUTHORITY` | 443 | Client-credentials tokens |
+| Data API integrations | The token endpoint of `FORS_DATA_AUTHORITY` | 443 | Client-credentials tokens |
 
 The admin UI loads nothing from other hosts: it is served by the admin API, whose Content-Security-Policy allows only
-`'self'` for scripts, styles, fonts and `connect-src` (`src/Ume.LlmGateway.AdminApi/Program.cs`).
+`'self'` for scripts, styles, fonts and `connect-src` (`src/Fors.AdminApi/Program.cs`).
 
 ### The Docker host or cluster nodes
 
@@ -218,7 +218,7 @@ Never open these on the host firewall. In Compose they are not published at all 
 
 | Service | Port | Protocol | Clients | Access control |
 |---|---|---|---|---|
-| Postgres | 5432 | TLS required, SCRAM-SHA-256 | Migrations (`ume_migrator`), gateway (`ume_gateway`), admin API (`ume_admin`), Data API (`ume_data`), Keycloak (`ume_keycloak`, database `keycloak` only) | [`pg_hba.conf`](../deploy/postgres/pg_hba.conf); network `data` (`internal: true`) |
+| Postgres | 5432 | TLS required, SCRAM-SHA-256 | Migrations (`fors_migrator`), gateway (`fors_gateway`), admin API (`fors_admin`), Data API (`fors_data`), Keycloak (`fors_keycloak`, database `keycloak` only) | [`pg_hba.conf`](../deploy/postgres/pg_hba.conf); network `data` (`internal: true`) |
 | Redis | 6379 | TLS only (`port 0`), ACL user `gateway`, `default` off | Gateway, admin API | [`redis.conf`](../deploy/redis/redis.conf), [`users.acl.example`](../deploy/redis/users.acl.example); network `data` |
 | Gateway operations endpoint | 8443 | HTTPS, signed with the key pepper | Admin API (`https://gateway:8443`) | Network `edge` |
 | Keycloak management | 9000 | HTTP | Keycloak's own health check inside the container | Never published ([`Dockerfile`](../deploy/keycloak/Dockerfile)) |
@@ -243,7 +243,7 @@ without a proxy.
 443 on the proxy to clients and admins. `init-deployment.sh` writes `deploy/proxy/nginx.conf`.
 
 **Hardening.** `compose.prod.yaml` is already hardened. The older Aspire route, `deploy/generated/docker-compose.yaml` plus
-[`compose.hardening.yaml`](../deploy/compose.hardening.yaml), publishes the same two ports (`UME_GATEWAY_*`, `UME_ADMIN_*`)
+[`compose.hardening.yaml`](../deploy/compose.hardening.yaml), publishes the same two ports (`FORS_GATEWAY_*`, `FORS_ADMIN_*`)
 and removes the database and cache ports; it has no Data API.
 
 **Rolling updates** ([`compose.rolling.yaml`](../deploy/compose.rolling.yaml), `init-deployment.sh --proxy --rolling`): a
@@ -257,7 +257,7 @@ while the other serves. Both gateway slots carry the network alias `gateway`, so
 ### (b) Portainer
 
 [`compose.portainer.yaml`](../deploy/compose.portainer.yaml) is the same stack and the same ports (8443, 9443, 10443 with
-the `data` profile), but **binds `0.0.0.0` by default** (`UME_GATEWAY_BIND`, `UME_ADMIN_BIND`, `UME_DATA_BIND`): firewall
+the `data` profile), but **binds `0.0.0.0` by default** (`FORS_GATEWAY_BIND`, `FORS_ADMIN_BIND`, `FORS_DATA_BIND`): firewall
 the ports to the proxy ([runbook](runbook.md#portainer-and-other-hosts-without-shell-access)). The `bootstrap` container
 has no network access beyond the internal `data` network. Rolling updates are not supported (Portainer recreates every
 container at once), and PKI certificates for the public listeners are not supported.
@@ -288,13 +288,13 @@ else and allows these flows (rendered in CI, not run with enforcement in this re
 
 List the Ingress controller's pod network under *Settings > Trusted proxies* ([kubernetes.md](kubernetes.md#install), step 5).
 The datastores component's Postgres accepts the roles from any pod address (its own copy of `pg_hba.conf`), so a
-NetworkPolicy (the component's `ume-postgres`) is what keeps other pods out.
+NetworkPolicy (the component's `fors-postgres`) is what keeps other pods out.
 
 ### (d) The Keycloak project on the same host, or an external OIDC provider
 
 **External OIDC provider** (Keycloak elsewhere, Entra ID, AD FS): nothing listens for it on the gateway host. The admin API
-needs back-channel egress to `UME_OIDC_AUTHORITY` (or the provider entered in the setup wizard) on 443, the admins'
-browsers need to reach it, and the Data API needs egress to `UME_DATA_AUTHORITY` when it takes tokens. No deploy file
+needs back-channel egress to `FORS_OIDC_AUTHORITY` (or the provider entered in the setup wizard) on 443, the admins'
+browsers need to reach it, and the Data API needs egress to `FORS_DATA_AUTHORITY` when it takes tokens. No deploy file
 pins the provider's host: the Compose `edge` network and the Kubernetes NetworkPolicies allow outbound 443 to any address,
 so an egress firewall or proxy is where the provider's host is allowed; with setup mode, allow it before the wizard's test,
 or the test fails with `authority_unreachable`. Authority URLs: `https://<keycloak>/realms/<realm>`,
@@ -303,14 +303,14 @@ or the test fails with `authority_unreachable`. Authority URLs: `https://<keyclo
 
 **The Keycloak project** ([keycloak.md](keycloak.md), [`deploy/keycloak/compose.yaml`](../deploy/keycloak/compose.yaml)):
 
-- Keycloak listens on 8443 in the container, published on `UME_KEYCLOAK_BIND:UME_KEYCLOAK_PORT` (default 11443; the bind
-  follows `UME_ADMIN_BIND`, so `0.0.0.0` in proxy mode). HTTP is off (`KC_HTTP_ENABLED=false`); management port 9000 is
+- Keycloak listens on 8443 in the container, published on `FORS_KEYCLOAK_BIND:FORS_KEYCLOAK_PORT` (default 11443; the bind
+  follows `FORS_ADMIN_BIND`, so `0.0.0.0` in proxy mode). HTTP is off (`KC_HTTP_ENABLED=false`); management port 9000 is
   not published.
 - The proxy forwards `https://auth.example.se` to it, re-encrypting, with `X-Forwarded-For`, `-Proto` and `-Host`. Open
   11443 to the proxy only.
-- Keycloak joins the gateway project's `data` network (`ume-gateway_data`, `UME_GATEWAY_DATA_NETWORK`) to reach Postgres on
-  5432; `pg_hba.conf` lets `ume_keycloak` into database `keycloak` only.
-- The admin API reaches Keycloak by its public name (`UME_OIDC_AUTHORITY=https://auth.example.se/realms/ume`), so it goes
+- Keycloak joins the gateway project's `data` network (`fors-gateway_data`, `FORS_GATEWAY_DATA_NETWORK`) to reach Postgres on
+  5432; `pg_hba.conf` lets `fors_keycloak` into database `keycloak` only.
+- The admin API reaches Keycloak by its public name (`FORS_OIDC_AUTHORITY=https://auth.example.se/realms/fors`), so it goes
   out and back in through the proxy: the Docker host must be able to resolve that name and reach the proxy on 443. If the
   proxy's certificate comes from a private CA, add that CA to the services' trust store with `--ca-file`
   ([runbook](runbook.md#reverse-proxy-and-pki)).
@@ -321,7 +321,7 @@ From [keycloak.md](keycloak.md#identity-providers-brokered-or-direct):
 
 | Setup | Browser (admins) | Keycloak back-channel | Gateway host |
 |---|---|---|---|
-| Brokered Entra ID | `login.microsoftonline.com:443`; redirect URI `https://auth.example.se/realms/ume/broker/entra/endpoint` | `login.microsoftonline.com:443` (discovery, token, JWKS) | Nothing new |
+| Brokered Entra ID | `login.microsoftonline.com:443`; redirect URI `https://auth.example.se/realms/fors/broker/entra/endpoint` | `login.microsoftonline.com:443` (discovery, token, JWKS) | Nothing new |
 | Brokered AD FS | `<adfs host>:443` | `<adfs host>:443` (`/adfs/.well-known/openid-configuration`) | Nothing new |
 | LDAP federation to AD | Only Keycloak | Domain controllers over LDAPS (`ldaps://`, read-only bind account); 636, or 3269 for the global catalog: **agree with infra** | Nothing new |
 
@@ -341,13 +341,13 @@ Directory ([keycloak.md](keycloak.md#identity-providers-brokered-or-direct)).
   certificate from a private or municipal CA needs that CA in the services' trust store (`--ca-file`,
   [runbook](runbook.md#reverse-proxy-and-pki)). The server's port is its own: **not set by the gateway; agree with infra**.
 
-### (g) A client platform on another host (for example Ume.Rag)
+### (g) A client platform on another host (for example Källa)
 
 | From the client platform | To | Port | Why |
 |---|---|---|---|
-| Its back end | Gateway public URL (`UME_GATEWAY_PUBLIC_URL`; through the proxy, or `<gateway host>:8443` direct) | 443 / 8443 | Model calls with a virtual key, WebSocket for live audio |
+| Its back end | Gateway public URL (`FORS_GATEWAY_PUBLIC_URL`; through the proxy, or `<gateway host>:8443` direct) | 443 / 8443 | Model calls with a virtual key, WebSocket for live audio |
 | Its back end | Data API (through your proxy or API gateway, or `<host>:10443`) | 443 / 10443 | Only if it reads usage or catalogue data |
-| Its back end | The OIDC provider (Keycloak project at `https://auth.example.se/realms/ume`, or yours) | 443 | Its own sign-in back-channel and, for the Data API, client-credentials tokens |
+| Its back end | The OIDC provider (Keycloak project at `https://auth.example.se/realms/fors`, or yours) | 443 | Its own sign-in back-channel and, for the Data API, client-credentials tokens |
 | Its users' browsers | The OIDC provider | 443 | Sign-in, when it shares the realm |
 
 If the platform's calls must pass a key restricted to client addresses, the address the gateway sees is the platform's
@@ -356,7 +356,7 @@ Nothing on the platform host needs to be reachable from the gateway.
 
 ### Local development
 
-Aspire (`src/Ume.LlmGateway.AppHost`) chooses its own ports for the dashboard, Keycloak, the fake LLM and the services. They
+Aspire (`src/Fors.AppHost`) chooses its own ports for the dashboard, Keycloak, the fake LLM and the services. They
 are for developers on their own machine only and are never opened in a firewall; see
 [local development](local-development.md).
 
@@ -406,14 +406,14 @@ Change a port in one place; the internal 8443 stays as it is.
 
 | Port | Setting | File |
 |---|---|---|
-| Gateway host port 8443 | `UME_GATEWAY_PORT` (`--gateway-port`), bind `UME_GATEWAY_BIND` (`--bind`) | `deploy/.env` (written by `init-deployment.sh`); Portainer stack variables |
-| Admin host port 9443 | `UME_ADMIN_PORT` (`--admin-port`), `UME_ADMIN_BIND` | same |
-| Second slots 8444, 9444 | `UME_GATEWAY_B_PORT`, `UME_ADMIN_B_PORT` (default: the first port + 1) | `deploy/.env` |
-| Data API 10443 | `UME_DATA_PORT`, `UME_DATA_BIND` | `deploy/.env`; Portainer stack variables |
-| Keycloak 11443 | `UME_KEYCLOAK_PORT` (`init-keycloak.sh --port`), `UME_KEYCLOAK_BIND` (`--bind`) | `deploy/keycloak/.env` |
-| Internal 8443 of every app | `Kestrel__Endpoints__Https__Url` and the probe's `UME_HEALTHCHECK_URL`; Kubernetes `containerPort`/Service `port` | Compose files; `deploy/kubernetes/base/*.yaml`. Keep at 8443 |
+| Gateway host port 8443 | `FORS_GATEWAY_PORT` (`--gateway-port`), bind `FORS_GATEWAY_BIND` (`--bind`) | `deploy/.env` (written by `init-deployment.sh`); Portainer stack variables |
+| Admin host port 9443 | `FORS_ADMIN_PORT` (`--admin-port`), `FORS_ADMIN_BIND` | same |
+| Second slots 8444, 9444 | `FORS_GATEWAY_B_PORT`, `FORS_ADMIN_B_PORT` (default: the first port + 1) | `deploy/.env` |
+| Data API 10443 | `FORS_DATA_PORT`, `FORS_DATA_BIND` | `deploy/.env`; Portainer stack variables |
+| Keycloak 11443 | `FORS_KEYCLOAK_PORT` (`init-keycloak.sh --port`), `FORS_KEYCLOAK_BIND` (`--bind`) | `deploy/keycloak/.env` |
+| Internal 8443 of every app | `Kestrel__Endpoints__Https__Url` and the probe's `FORS_HEALTHCHECK_URL`; Kubernetes `containerPort`/Service `port` | Compose files; `deploy/kubernetes/base/*.yaml`. Keep at 8443 |
 | Postgres 5432, Redis 6379 | Postgres default port; `tls-port` in `redis.conf`; the connection strings | `deploy/redis/redis.conf`; `deploy/secrets/<service>/ConnectionStrings__*` |
-| Gateway operations URL | `UME_GATEWAY_OPERATIONS_URL` → `Gateway__OperationsUrl` (default `https://gateway:8443`) | `deploy/.env`; Kubernetes `ume-adminapi-config` |
-| OTLP endpoint | `UME_OTEL_ENDPOINT` → `OTEL_EXPORTER_OTLP_ENDPOINT`; Kubernetes ConfigMap literal | `deploy/.env`, overlay |
+| Gateway operations URL | `FORS_GATEWAY_OPERATIONS_URL` → `Gateway__OperationsUrl` (default `https://gateway:8443`) | `deploy/.env`; Kubernetes `fors-adminapi-config` |
+| OTLP endpoint | `FORS_OTEL_ENDPOINT` → `OTEL_EXPORTER_OTLP_ENDPOINT`; Kubernetes ConfigMap literal | `deploy/.env`, overlay |
 | Proxy upstreams | Generated from the ports above | `deploy/proxy/nginx.conf` (from `nginx.conf.example`) |
 | Provider hosts and ports | The provider's base URL | Admin UI (database), not a file |

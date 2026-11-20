@@ -8,7 +8,7 @@ resources:
   - postgres.yaml
   - redis.yaml
 configMapGenerator:
-  - name: ume-postgres-config
+  - name: fors-postgres-config
     files: [init.sql, pg_hba.conf]
-  - name: ume-redis-config
+  - name: fors-redis-config
     files: [redis.conf]

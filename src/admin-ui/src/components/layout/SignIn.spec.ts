@@ -50,8 +50,8 @@ describe('the sign-in page in setup mode', () => {
   it('says how to set up sign-in, and offers no sign-in, when it is not set up and setup is closed', async () => {
     const { wrapper } = await signInPage({ configured: false, open: false })
     const text = wrapper.get('[data-test=not-configured]').text()
-    expect(text).toContain('UME_OIDC_AUTHORITY')
-    expect(text).toContain('UME_SETUP_REOPEN')
+    expect(text).toContain('FORS_OIDC_AUTHORITY')
+    expect(text).toContain('FORS_SETUP_REOPEN')
     expect(wrapper.find('[data-test=sign-in]').exists()).toBe(false)
     expect(wrapper.find('[data-test=set-up]').exists()).toBe(false)
     expect(wrapper.find('a').exists()).toBe(false)

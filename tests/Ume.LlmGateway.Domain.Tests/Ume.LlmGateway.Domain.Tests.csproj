@@ -1,5 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Ume.LlmGateway.Domain\Ume.LlmGateway.Domain.csproj" />
-  </ItemGroup>
-</Project>

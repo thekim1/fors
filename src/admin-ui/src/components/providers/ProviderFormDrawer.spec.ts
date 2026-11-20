@@ -201,14 +201,14 @@ describe('ProviderFormDrawer delete', () => {
 
   it('shows why the models cannot be deleted', async () => {
     remove.mockImplementation(async () => {
-      throw new ApiError(409, 'DELETE', { detail: "The provider's models are used in the routes ume/chat. Remove them from the routes first." })
+      throw new ApiError(409, 'DELETE', { detail: "The provider's models are used in the routes fors/chat. Remove them from the routes first." })
     })
     const wrapper = mountForm({ ...saved, deploymentCount: 2 })
     await button(wrapper, 'Delete').trigger('click')
     await button(wrapper, 'Delete provider and 2 models').trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('used in the routes ume/chat')
+    expect(wrapper.text()).toContain('used in the routes fors/chat')
     expect(wrapper.emitted('deleted')).toBeUndefined()
   })
 })

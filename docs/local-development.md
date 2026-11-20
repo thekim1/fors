@@ -55,7 +55,7 @@ With `stream_options.include_usage`, the fake LLM's chat chunks carry `"usage":n
 ## Running from Visual Studio
 
 1. Install Visual Studio 2022 17.14+ (or newer) with the .NET 10 SDK, Docker Desktop (running), Node 24+, and run `dotnet dev-certs https --trust` once.
-2. Open `UmeLlmGateway.slnx`, set `Ume.LlmGateway.AppHost` as startup project, profile **https**.
+2. Open `Fors.slnx`, set `Fors.AppHost` as startup project, profile **https**.
 3. Right-click the AppHost project > **Manage User Secrets** and paste the dev secrets JSON
    (`Parameters:*` for pepper, dev-key, OIDC secret, dev user password, Redis and **Postgres**
    passwords, plus `DevelopmentVolumes:Postgres`). Keep them stable: the Postgres volume stores the
@@ -88,8 +88,8 @@ with `Section__Key` environment variables (for example `Ollama__Enabled=true`, d
 and with a generated `Setup__Secret` (parameter `setup-secret`), so [setup mode](identity-and-roles.md#setup-mode) opens and
 the admin API prints the setup code in its console log in the dashboard. A database whose setup is already done (any
 earlier run with the AppHost's sign-in values marked it completed) stays closed: also set `"Setup:Reopen"` to a new value,
-which the AppHost passes on. In the wizard, the bundled Keycloak's realm (`http://localhost:<keycloak port>/realms/ume`,
-allowed over http in Development), the client `ume-admin` and the `oidc-client-secret` parameter are the values to test.
+which the AppHost passes on. In the wizard, the bundled Keycloak's realm (`http://localhost:<keycloak port>/realms/fors`,
+allowed over http in Development), the client `fors-admin` and the `oidc-client-secret` parameter are the values to test.
 Remove both settings to go back.
 
 The wizard's browser test is `tests/e2e/specs/setup.spec.ts`: on a stack in setup mode with a fresh database
@@ -99,7 +99,7 @@ The wizard's browser test is `tests/e2e/specs/setup.spec.ts`: on a stack in setu
 bundled Keycloak's values, tests as `viewer` and `gateway-admin`, saves and signs in, with the axe and target-size checks on
 every step. Saving closes setup, so each run needs a fresh database; on any other stack the file is skipped. When the admin
 UI is not on port 5173 (another program holds it), set `ADMIN_UI_URL` to its address and add that address's `/signin-oidc`
-to the `ume-admin` client's redirect URIs in the bundled Keycloak.
+to the `fors-admin` client's redirect URIs in the bundled Keycloak.
 
 ## Admin UI code
 
@@ -120,9 +120,9 @@ set `Ollama__Enabled=true` before starting. FakeLlm is the default test provider
 Stop **this exact AppHost** before backend/AppHost edits or builds:
 
 ```powershell
-aspire stop --apphost src\Ume.LlmGateway.AppHost\Ume.LlmGateway.AppHost.csproj --non-interactive
-dotnet build UmeLlmGateway.slnx -v q -nologo
-dotnet test --solution UmeLlmGateway.slnx
+aspire stop --apphost src\Fors.AppHost\Fors.AppHost.csproj --non-interactive
+dotnet build Fors.slnx -v q -nologo
+dotnet test --solution Fors.slnx
 Set-Location src\admin-ui
 npm run lint
 npm run typecheck
@@ -190,10 +190,10 @@ To hunt for flakes, run the workflow *Flake hunt* (Actions tab): it runs the bac
 and lists every test that failed. It also runs once a week.
 
 **Known flakes stay out of the pull request pipeline.** A test that has failed intermittently because of timing or a race
-is marked `[Trait(TestCategory.Name, TestCategory.Flaky)]` (`tests/Ume.LlmGateway.TestKit/TestCategory.cs`) with a comment
+is marked `[Trait(TestCategory.Name, TestCategory.Flaky)]` (`tests/Fors.TestKit/TestCategory.cs`) with a comment
 saying why. *Verify* runs `dotnet test ... --filter-not-trait "Category=Flaky"`; locally `dotnet test` runs every
 test, and *Flake hunt* runs the marked ones too, so they are still watched. Run only the pipeline's set with
-`dotnet test --solution UmeLlmGateway.slnx --filter-not-trait "Category=Flaky"`, or only the flaky ones with
+`dotnet test --solution Fors.slnx --filter-not-trait "Category=Flaky"`, or only the flaky ones with
 `--filter-trait "Category=Flaky"`. The trait is a to-do, not a home: fix the test and remove it. Marked now:
 
 | Test | Why |
@@ -210,7 +210,7 @@ Browser tests (`tests\e2e`, Playwright) need a running stack. Use the separate t
 development data is never touched:
 
 ```powershell
-.\scripts\Start-E2E.ps1          # own Docker volume (ume-e2e-postgres), reset on every start, demo data, fake LLM on
+.\scripts\Start-E2E.ps1          # own Docker volume (fors-e2e-postgres), reset on every start, demo data, fake LLM on
 Set-Location tests\e2e
 npm ci
 npx playwright install chromium
@@ -233,7 +233,7 @@ two routing examples through the UI, so it changes the (disposable) test databas
 
 ## Website
 
-`site/` builds the public website (<https://thekim1.github.io/llmgateway/>): the product page, Getting started, Benchmarks
+`site/` builds the public website (<https://thekim1.github.io/fors/>): the product page, Getting started, Benchmarks
 and every documentation page listed in `site/content.mjs`, rendered from the Markdown files in `docs/`. The workflow
 `.github/workflows/pages.yml` builds it on every pull request that touches the site or the docs, and publishes it to
 GitHub Pages on `main`. To add a page, write the Markdown file in `docs/` and add it to `DOCS` in `site/content.mjs`.

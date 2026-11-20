@@ -5,7 +5,7 @@ param(
     # gatewaydb (default), or keycloak for the optional Keycloak (deploy/keycloak); see Backup-Database.ps1.
     [ValidateSet('gatewaydb', 'keycloak')][string]$Database = 'gatewaydb',
     # The Compose project of the optional Keycloak, checked to be stopped before its database is restored.
-    [string]$KeycloakProject = 'ume-keycloak'
+    [string]$KeycloakProject = 'fors-keycloak'
 )
 $ErrorActionPreference = 'Stop'
 if (-not $ConfirmRestore) { throw "Restore replaces $Database objects. Stop the services that use it and explicitly pass -ConfirmRestore." }
@@ -21,7 +21,7 @@ if ($Database -eq 'gatewaydb') {
 }
 $id = docker ps -q --filter "label=com.docker.compose.project=$ComposeProject" --filter 'label=com.docker.compose.service=postgres'
 if ($LASTEXITCODE -ne 0 -or @($id).Count -ne 1 -or -not $id) { throw 'Select exactly one running production Postgres container.' }
-$file = '/var/lib/postgresql/data/ume-restore-' + [Guid]::NewGuid().ToString('N') + '.dump'
+$file = '/var/lib/postgresql/data/fors-restore-' + [Guid]::NewGuid().ToString('N') + '.dump'
 try {
     docker cp $Backup "${id}:$file"
     if ($LASTEXITCODE -ne 0) { throw 'Copying backup failed.' }

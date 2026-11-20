@@ -6,11 +6,11 @@ import re
 import sys
 from pathlib import Path
 
-NAMES = {"fake": "Fake LLM (floor)", "ume": "Ume", "bifrost": f"Bifrost {os.environ.get('BIFROST_VERSION', 'v2.5.1')}",
+NAMES = {"fake": "Fake LLM (floor)", "fors": "Fors", "bifrost": f"Bifrost {os.environ.get('BIFROST_VERSION', 'v2.5.1')}",
          "eneo": f"eneo {os.environ.get('ENEO_VERSION', 'v2.2.3')}"}
-APP = {"ume": ["ume-gateway"], "bifrost": ["bifrost"], "eneo": ["eneo-backend", "eneo-worker"]}  # the worker writes eneo's audit events
-PLATFORMS = ("ume", "bifrost", "eneo")
-HARNESS = {"ume": ("ume-gateway", "fake-llm", "ume-db", "ume-redis"), "bifrost": ("bifrost", "fake-llm", "bifrost-db", None)}
+APP = {"fors": ["fors-gateway"], "bifrost": ["bifrost"], "eneo": ["eneo-backend", "eneo-worker"]}  # the worker writes eneo's audit events
+PLATFORMS = ("fors", "bifrost", "eneo")
+HARNESS = {"fors": ("fors-gateway", "fake-llm", "fors-db", "fors-redis"), "bifrost": ("bifrost", "fake-llm", "bifrost-db", None)}
 
 
 def read_runs(folder: Path):

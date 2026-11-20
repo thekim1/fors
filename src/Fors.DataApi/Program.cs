@@ -1,0 +1,46 @@
+using Scalar.AspNetCore;
+using Fors.DataApi;
+using Fors.DataApi.Authentication;
+using Fors.DataApi.Feeds;
+using Fors.Infrastructure;
+
+if (await WebDefaults.ExitIfHealthProbeAsync(args))
+{
+    return;
+}
+
+var builder = WebApplication.CreateBuilder(args);
+builder.AddDeploymentSecrets();
+builder.AddServiceDefaults();
+builder.AddGatewayDatabase();
+builder.AddDataApiServices();
+builder.AddForsWebDefaults(maxRequestBodySize: 16 * 1024);
+builder.Services.AddOpenApi(o => o.AddDocumentTransformer((doc, _, _) =>
+{
+    doc.Info.Title = "Fors Data API";
+    doc.Info.Description = "Read-only usage, security and catalogue data for BI, management and security teams. "
+        + "Authenticate with an OAuth 2.0 client-credentials access token or a Data API key (Authorization: Bearer fors-dk-..., or X-Api-Key). Feeds are incremental: pass nextCursor as 'after'. "
+        + "Add format=csv or format=ndjson (or the matching Accept header) for bulk loads. See docs/data-access.md.";
+    return Task.CompletedTask;
+}));
+
+var app = builder.Build();
+app.UseForsWebDefaults();
+app.UseForsSecurityHeaders(o => o.NoStorePrefixes.Add("/v1"));
+app.UseApiReferencePolicy("/scalar", ScalarOptions.NonceHttpContextItemKey);
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
+app.Use((http, next) => DataApiAuthentication.LogReadsAsync(http, () => next(http)));
+app.MapDefaultEndpoints();
+if (app.Configuration.GetValue($"{DataApiOptions.SectionName}:{nameof(DataApiOptions.PublishApiReference)}", true))
+{
+    app.MapOpenApi();
+    app.MapScalarApiReference(o => o.WithTitle("Fors Data API").WithNonce().DisableDefaultFonts());
+    app.MapGet("/", () => Results.Redirect("/scalar")).ExcludeFromDescription();
+}
+app.MapGroup("/v1").RequireRateLimiting(DataApiServices.PerClientRateLimit).MapDataEndpoints();
+
+await app.RunAsync();
+
+public partial class Program;

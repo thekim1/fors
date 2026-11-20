@@ -16,7 +16,7 @@
 </helmet>
 <div style="padding:64px; background:#E4E4E1; min-height:100vh; font-family:Geist, ui-sans-serif, system-ui, sans-serif; color:#16161A; display:flex; flex-direction:column; gap:48px">
   <header style="display:flex; flex-direction:column; gap:8px; max-width:880px">
-    <span style="font-size:13px; font-weight:600; color:#4A4A52">AI Gateway · Design system v1</span>
+    <span style="font-size:13px; font-weight:600; color:#4A4A52">Fors · Design system v1</span>
     <h1 style="margin:0; font-size:44px; line-height:48px; font-weight:600; letter-spacing:-0.03em">One system, three themes</h1>
     <p style="margin:0; font-size:16px; line-height:24px; color:#4A4A52; text-wrap:pretty">Calm surfaces, one accent, and status shown with words and shapes, not color alone. Every pair passes WCAG 2.2 AA. The source is <span style="font-family:'Geist Mono', monospace">design-system/DESIGN.md</span>, <span style="font-family:'Geist Mono', monospace">tokens.css</span> and <span style="font-family:'Geist Mono', monospace">tailwind.config.js</span>. Give all three to the LLM.</p>
   </header>
@@ -138,7 +138,7 @@ class Component extends DCLogic {
       ],
       swatches: ['--fg', '--fg-2', '--fg-3', '--accent', '--surface', '--sunken', '--border-input', '--accent-soft', '--ok', '--warn', '--danger', '--chart-muted'].map(n => ({ n: n.slice(2), v: `var(${n})` })),
       badges: [b('Active', 'ok'), b('Grace period', 'warn'), b('Revoked', 'danger'), b('Expired', 'neutral'), b('Chat', 'accent')],
-      rows: [{ name: 'Case summariser', prefix: 'ume-sk-7f3a…', status: 'Active', used: '2 min', bg: T.ok[0], fg: T.ok[1] }, { name: 'Permit triage', prefix: 'ume-sk-9b02…', status: 'Grace period', used: '14 min', bg: T.warn[0], fg: T.warn[1] }, { name: 'Translation pilot', prefix: 'ume-sk-5d9f…', status: 'Revoked', used: '3 wk', bg: T.danger[0], fg: T.danger[1] }],
+      rows: [{ name: 'Case summariser', prefix: 'fors-sk-7f3a…', status: 'Active', used: '2 min', bg: T.ok[0], fg: T.ok[1] }, { name: 'Permit triage', prefix: 'fors-sk-9b02…', status: 'Grace period', used: '14 min', bg: T.warn[0], fg: T.warn[1] }, { name: 'Translation pilot', prefix: 'fors-sk-5d9f…', status: 'Revoked', used: '3 wk', bg: T.danger[0], fg: T.danger[1] }],
       type: [
         { token: 'display', size: '44px', lh: '48px', w: 600, ls: '-0.03em', f: 'Geist', sample: '214 080 kr' },
         { token: 'title-1', size: '30px', lh: '36px', w: 600, ls: '-0.025em', f: 'Geist', sample: 'Virtual keys' },
@@ -146,7 +146,7 @@ class Component extends DCLogic {
         { token: 'heading', size: '16px', lh: '22px', w: 600, ls: '0', f: 'Geist', sample: 'Needs attention' },
         { token: 'body', size: '14px', lh: '20px', w: 400, ls: '0', f: 'Geist', sample: 'Requests fail straight away.' },
         { token: 'caption', size: '12px', lh: '16px', w: 500, ls: '0', f: 'Geist', sample: 'Last used · 24 h' },
-        { token: 'mono', size: '13px', lh: '18px', w: 500, ls: '0', f: "'Geist Mono', monospace", sample: 'ume-sk-7f3a… chat-default' },
+        { token: 'mono', size: '13px', lh: '18px', w: 500, ls: '0', f: "'Geist Mono', monospace", sample: 'fors-sk-7f3a… chat-default' },
       ],
       space: [['space-1', 4], ['space-2', 8], ['space-3', 12], ['space-4', 16], ['space-5', 20], ['space-6', 24], ['space-8', 32], ['space-10', 40]].map(([n, v]) => ({ n, v: v + 'px' })),
       rules: [

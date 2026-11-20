@@ -1,0 +1,151 @@
+namespace Fors.Domain;
+
+/// <summary>
+/// What a <see cref="GatewayEndpoint"/> is: its client path, the name routing conditions see, the provider path and
+/// capability it needs, and the kinds of model it serves. One entry per enum value (see <see cref="GatewayEndpoints"/>).
+/// </summary>
+/// <param name="Endpoint">The endpoint this entry describes.</param>
+/// <param name="RoutingName">The value of the <c>endpoint</c> variable in routing conditions.</param>
+/// <param name="ClientPath">The path clients call, e.g. <c>/v1/chat/completions</c>.</param>
+/// <param name="UpstreamPath">Path appended to a provider's base URL; null when the endpoint never reaches a provider.</param>
+/// <param name="RequiredCapability">What a provider must support to serve the endpoint; <see cref="ProviderCapabilities.None"/> = no provider can.</param>
+/// <param name="IsAudio">A multipart speech-to-text upload instead of a JSON body.</param>
+/// <param name="IsRealtime">A live WebSocket session.</param>
+/// <param name="SupportsStreaming">A client may ask for a streamed (SSE) answer.</param>
+/// <param name="HasOutputTokens">The answer is billed for output tokens (embeddings are not).</param>
+/// <param name="ModelKinds">The kinds of model the endpoint serves; none when it never reaches a provider.</param>
+public sealed record GatewayEndpointInfo(
+    GatewayEndpoint Endpoint,
+    string RoutingName,
+    string ClientPath,
+    string? UpstreamPath,
+    ProviderCapabilities RequiredCapability,
+    bool IsAudio,
+    bool IsRealtime,
+    bool SupportsStreaming,
+    bool HasOutputTokens,
+    params ModelKind[] ModelKinds)
+{
+    /// <summary>A multipart image upload (the files to edit, an optional mask) instead of a JSON body.</summary>
+    public bool IsImageUpload { get; init; }
+
+    /// <summary>Speaks the Anthropic protocol (request, answer and error shape) rather than OpenAI's.</summary>
+    public bool IsAnthropic { get; init; }
+
+    /// <summary>
+    /// Costs nothing: no budget is reserved and the provider's token counts are not charged (token counting reports
+    /// <c>input_tokens</c> it did not consume).
+    /// </summary>
+    public bool IsFree { get; init; }
+
+    /// <summary>
+    /// The body is a batch of independent inputs (embeddings): a model's context window limits each input, not the
+    /// whole request, so the context check uses the longest input (<see cref="Usage.CostCalculator.EstimateLongestInputTokens"/>).
+    /// </summary>
+    public bool ContextWindowPerInput { get; init; }
+
+    /// <summary>
+    /// The context window is not checked before sending: a reranker scores each document against the query separately
+    /// and providers split or truncate long documents themselves, so the size of the whole request says nothing.
+    /// </summary>
+    public bool IgnoresContextWindow { get; init; }
+
+    /// <summary>
+    /// An answer without token counts is charged by the request-size estimate instead of nothing: rerankers that bill per
+    /// search (Cohere's <c>meta.billed_units.search_units</c>, as on Azure AI Foundry) report no tokens.
+    /// </summary>
+    public bool EstimatesUnreportedUsage { get; init; }
+
+    /// <summary>
+    /// The path the endpoint had before the rename to Fors, still served until 0.13 (left out of the OpenAPI document);
+    /// null when it had none.
+    /// </summary>
+    public string? LegacyClientPath { get; init; }
+
+    /// <summary>The answer is billed per generated image (and per token for models that report tokens).</summary>
+    public bool IsImage => Serves(ModelKind.Image);
+
+    private readonly int _kindMask = ModelKinds.Aggregate(0, (mask, kind) => mask | (1 << (int)kind));
+
+    /// <summary>Whether a model of <paramref name="kind"/> can be used with this endpoint.</summary>
+    public bool Serves(ModelKind kind) => (_kindMask & (1 << (int)kind)) != 0;
+
+    /// <summary>Whether a provider with <paramref name="capabilities"/> can serve this endpoint.</summary>
+    public bool IsSupportedBy(ProviderCapabilities capabilities) =>
+        RequiredCapability != ProviderCapabilities.None && (capabilities & RequiredCapability) == RequiredCapability;
+}
+
+/// <summary>The one table of endpoint semantics, indexed by enum value: lookups are an array access.</summary>
+public static class GatewayEndpoints
+{
+    private static readonly GatewayEndpointInfo[] Table = Build(
+    [
+        new(GatewayEndpoint.ChatCompletions, "chat_completions", "/v1/chat/completions", "chat/completions", ProviderCapabilities.ChatCompletions,
+            IsAudio: false, IsRealtime: false, SupportsStreaming: true, HasOutputTokens: true, ModelKind.Chat),
+        new(GatewayEndpoint.Embeddings, "embeddings", "/v1/embeddings", "embeddings", ProviderCapabilities.Embeddings,
+            IsAudio: false, IsRealtime: false, SupportsStreaming: false, HasOutputTokens: false, ModelKind.Embedding) { ContextWindowPerInput = true },
+        new(GatewayEndpoint.Responses, "responses", "/v1/responses", "responses", ProviderCapabilities.Responses,
+            IsAudio: false, IsRealtime: false, SupportsStreaming: true, HasOutputTokens: true, ModelKind.Chat),
+        new(GatewayEndpoint.AnthropicMessages, "anthropic_messages", "/v1/messages", "messages", ProviderCapabilities.AnthropicMessages,
+            IsAudio: false, IsRealtime: false, SupportsStreaming: true, HasOutputTokens: true, ModelKind.Chat) { IsAnthropic = true },
+        new(GatewayEndpoint.AnthropicCountTokens, "anthropic_count_tokens", "/v1/messages/count_tokens", "messages/count_tokens", ProviderCapabilities.AnthropicMessages,
+            IsAudio: false, IsRealtime: false, SupportsStreaming: false, HasOutputTokens: false, ModelKind.Chat) { IsAnthropic = true, IsFree = true },
+        new(GatewayEndpoint.Models, "models", "/v1/models", null, ProviderCapabilities.None,
+            IsAudio: false, IsRealtime: false, SupportsStreaming: false, HasOutputTokens: false),
+        new(GatewayEndpoint.AudioTranscriptions, "audio_transcriptions", "/v1/audio/transcriptions", "audio/transcriptions", ProviderCapabilities.AudioTranscriptions,
+            IsAudio: true, IsRealtime: false, SupportsStreaming: true, HasOutputTokens: true, ModelKind.Transcription),
+        new(GatewayEndpoint.AudioTranslations, "audio_translations", "/v1/audio/translations", "audio/translations", ProviderCapabilities.AudioTranscriptions,
+            IsAudio: true, IsRealtime: false, SupportsStreaming: true, HasOutputTokens: true, ModelKind.Transcription),
+
+        // Images answer in one piece: streaming (partial images) is not supported, the handler refuses `stream`.
+        new(GatewayEndpoint.ImageGenerations, "image_generations", "/v1/images/generations", "images/generations", ProviderCapabilities.Images,
+            IsAudio: false, IsRealtime: false, SupportsStreaming: false, HasOutputTokens: true, ModelKind.Image),
+        new(GatewayEndpoint.ImageEdits, "image_edits", "/v1/images/edits", "images/edits", ProviderCapabilities.Images,
+            IsAudio: false, IsRealtime: false, SupportsStreaming: false, HasOutputTokens: true, ModelKind.Image) { IsImageUpload = true },
+
+        // Live transcription uses speech-to-text models on /v1/realtime.
+        new(GatewayEndpoint.Realtime, "realtime", "/v1/realtime", "realtime", ProviderCapabilities.Realtime,
+            IsAudio: false, IsRealtime: true, SupportsStreaming: false, HasOutputTokens: true, ModelKind.Realtime, ModelKind.Transcription),
+        // Reranking: Cohere-compatible JSON (query + documents in, index + relevance_score out), passed through unchanged.
+        new(GatewayEndpoint.Rerank, "rerank", "/v1/rerank", "rerank", ProviderCapabilities.Rerank,
+            IsAudio: false, IsRealtime: false, SupportsStreaming: false, HasOutputTokens: false, ModelKind.Rerank) { IgnoresContextWindow = true, EstimatesUnreportedUsage = true },
+        new(GatewayEndpoint.RealtimeTranslations, "realtime_translations", "/v1/realtime/translations", "realtime/translations", ProviderCapabilities.Realtime,
+            IsAudio: false, IsRealtime: true, SupportsStreaming: false, HasOutputTokens: true, ModelKind.SpeechTranslation),
+        new(GatewayEndpoint.Context, "context", "/v1/fors/context", null, ProviderCapabilities.None,
+            IsAudio: false, IsRealtime: false, SupportsStreaming: false, HasOutputTokens: false) { LegacyClientPath = "/v1/ume/context" },
+    ]);
+
+    private static readonly GatewayEndpoint[][] ByKind = BuildByKind();
+
+    /// <summary>Every endpoint, in enum order.</summary>
+    public static IReadOnlyList<GatewayEndpointInfo> All => Table;
+
+    public static GatewayEndpointInfo Info(GatewayEndpoint endpoint) =>
+        (uint)endpoint < (uint)Table.Length ? Table[(int)endpoint] : throw new ArgumentOutOfRangeException(nameof(endpoint), endpoint, "Unknown gateway endpoint.");
+
+    /// <summary>The endpoints a model of <paramref name="kind"/> can be used with.</summary>
+    public static IReadOnlyList<GatewayEndpoint> ServingKind(ModelKind kind) =>
+        (uint)kind < (uint)ByKind.Length ? ByKind[(int)kind] : [];
+
+    private static GatewayEndpointInfo[] Build(GatewayEndpointInfo[] entries)
+    {
+        var table = new GatewayEndpointInfo[entries.Max(e => (int)e.Endpoint) + 1];
+        foreach (var entry in entries)
+        {
+            table[(int)entry.Endpoint] = entry;
+        }
+
+        return table;
+    }
+
+    private static GatewayEndpoint[][] BuildByKind()
+    {
+        var byKind = new GatewayEndpoint[Enum.GetValues<ModelKind>().Max(k => (int)k) + 1][];
+        for (var kind = 0; kind < byKind.Length; kind++)
+        {
+            byKind[kind] = [.. Table.Where(e => e is not null && e.Serves((ModelKind)kind)).Select(e => e.Endpoint)];
+        }
+
+        return byKind;
+    }
+}

@@ -4,11 +4,11 @@
 # restart of the gateway and admin API while a pod in the cluster sends requests to their Services. Fails if a single
 # request is lost.
 #
-#   deploy/tests/kubernetes-e2e.sh           # needs kind, kubectl and the local images ume-llm-gateway/*:latest
+#   deploy/tests/kubernetes-e2e.sh           # needs kind, kubectl and the local images fors/*:latest
 #   KEEP_CLUSTER=1 deploy/tests/kubernetes-e2e.sh    # leave the cluster running afterwards
 set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cluster="${KIND_CLUSTER:-ume-e2e}"; ns=ume-e2e
+cluster="${KIND_CLUSTER:-fors-e2e}"; ns=fors-e2e
 # Local builds are tagged :latest, which Kubernetes always pulls; the test loads them under their own tag instead.
 tag=e2e
 work="$(mktemp -d)"
@@ -23,8 +23,8 @@ trap cleanup EXIT
 kind get clusters 2>/dev/null | grep -qx "$cluster" || kind create cluster --name "$cluster" --wait 120s
 kubectl config use-context "kind-$cluster" >/dev/null
 for svc in gateway adminapi migrations dataapi; do
-  docker tag "ume-llm-gateway/$svc:latest" "ume-llm-gateway/$svc:$tag"
-  kind load docker-image --name "$cluster" "ume-llm-gateway/$svc:$tag"
+  docker tag "fors/$svc:latest" "fors/$svc:$tag"
+  kind load docker-image --name "$cluster" "fors/$svc:$tag"
 done
 
 ./deploy/init-deployment.sh --no-chown --yes --oidc-authority https://login.microsoftonline.com/common/v2.0 \
@@ -40,15 +40,15 @@ namespace: $ns
 resources: [../base]
 components: [../components/datastores, ../components/dataapi]
 images:
-  - {name: ume-llm-gateway/gateway, newTag: $tag}
-  - {name: ume-llm-gateway/adminapi, newTag: $tag}
-  - {name: ume-llm-gateway/migrations, newTag: $tag}
-  - {name: ume-llm-gateway/dataapi, newTag: $tag}
+  - {name: fors/gateway, newTag: $tag}
+  - {name: fors/adminapi, newTag: $tag}
+  - {name: fors/migrations, newTag: $tag}
+  - {name: fors/dataapi, newTag: $tag}
 configMapGenerator:
-  - name: ume-adminapi-config
+  - name: fors-adminapi-config
     behavior: merge
     literals: [Oidc__Authority=https://login.microsoftonline.com/common/v2.0, Gateway__BaseUrl=https://llm.test]
-  - name: ume-dataapi-config
+  - name: fors-dataapi-config
     behavior: merge
     literals: [DataApi__Authority=https://login.microsoftonline.com/common/v2.0]
 YAML

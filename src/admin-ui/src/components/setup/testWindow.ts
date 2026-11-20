@@ -3,9 +3,9 @@
  * that page tells the wizard and closes. The message carries nothing but its type: the wizard reads the result from
  * `GET /bff/setup/state`.
  */
-export const TEST_WINDOW_NAME = 'ume-gateway-setup-test'
-export const TEST_DONE_MESSAGE = 'ume-gateway-setup-test-done'
-const CHANNEL = 'ume-gateway-setup'
+export const TEST_WINDOW_NAME = 'fors-gateway-setup-test'
+export const TEST_DONE_MESSAGE = 'fors-gateway-setup-test-done'
+const CHANNEL = 'fors-gateway-setup'
 
 /**
  * Opens the window from the click itself (a window opened after an await is blocked), empty until the test's address is known.

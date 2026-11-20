@@ -40,7 +40,7 @@ The **sign-in page** depends on what `/bff/user` reports (`signIn.configured`, `
 | yes | no | **Sign in** |
 | no | yes | **Set up sign-in** (the wizard), no sign-in: there is no provider to sign in at yet |
 | yes | yes (a re-open) | **Set up sign-in** and **Sign in**: the current sign-in keeps working until the wizard saves |
-| no | no | No button: the deployment must set `UME_OIDC_AUTHORITY`, or open setup again with a new `UME_SETUP_REOPEN` value and a restart of the admin API |
+| no | no | No button: the deployment must set `FORS_OIDC_AUTHORITY`, or open setup again with a new `FORS_SETUP_REOPEN` value and a restart of the admin API |
 
 After a sign-in the admin API could not complete it sends the browser to `/?signin=failed`; the page then says so (the
 sign-in was interrupted or expired, the provider refused it, or the sign-in values changed meanwhile) and **Sign in**
@@ -179,7 +179,7 @@ The data comes from `GET /api/settings/version` ([docs/admin-api.md](admin-api.m
 **Settings > Branding** (gateway-admin) sets what the console shows as its owner, at the top of the side menu, in the phone
 header and on the sign-in page:
 
-- **Organisation name**, shown under *AI Gateway* and in the sign-in text (*Admin console for ...*). At most 80 characters;
+- **Organisation name**, shown under *Fors* and in the sign-in text (*Admin console for ...*). At most 80 characters;
   empty shows no name. The default is *Umeå kommun*.
 - **Logo**, shown at 36 × 36 pixels in place of the built-in icon: PNG, JPEG, WebP or SVG, at most 256 KB (the admin API
   detects the type from the file, not its name). SVG files with scripts, event handlers, `javascript:` links or embedded

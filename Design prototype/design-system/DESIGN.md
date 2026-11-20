@@ -1,12 +1,12 @@
-# AI Gateway Admin — Design System (for LLM implementation)
+# Fors Admin — Design System (for LLM implementation)
 
-You are implementing the admin UI for Umeå kommun's LLM gateway. Follow this document exactly.
+You are implementing the admin UI for Fors, an LLM gateway. Follow this document exactly.
 Files: `tokens.css` (CSS variables, 3 themes, resets, focus ring) · `tailwind.config.js` (maps tokens to utilities).
 Visual references: `Admin Desktop.dc.html`, `Admin Mobile.dc.html`, `Design System.dc.html`.
 
 ## 0. Hard rules
 1. **Only tokens.** Never write hex/rgb in components. Use Tailwind classes from the config (`bg-surface`, `text-fg-2`, `rounded-card`).
-2. **Themes** switch with `document.documentElement.dataset.theme = 'light' | 'dark' | 'lumen'`. Persist in `localStorage('ume-theme')`; default from `prefers-color-scheme` (dark → `dark`, else `light`). Never use `dark:` variants.
+2. **Themes** switch with `document.documentElement.dataset.theme = 'light' | 'dark' | 'lumen'`. Persist in `localStorage('fors-theme')`; default from `prefers-color-scheme` (dark → `dark`, else `light`). Never use `dark:` variants.
 3. **WCAG 2.2 AA** is the legal floor (DOS-lagen → EN 301 549 → WCAG 2.1 AA; design to 2.2 AA). Token pairs already pass; don't invent new pairs.
 4. **UI language is English.** Swedish proper nouns (förvaltning names, team names) and Swedish API error messages get `lang="sv"` on their element.
 5. **One primary button per view.** Max two words per button label, one word/short phrase per badge.

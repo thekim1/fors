@@ -1,0 +1,187 @@
+{
+  "realm": "fors",
+  "enabled": true,
+  "displayName": "Fors (utveckling)",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "gateway-admin" },
+      { "name": "department-admin" },
+      { "name": "viewer" },
+      { "name": "team-admin" },
+      { "name": "usage.aggregate", "description": "Data API permission (docs/data-access.md)" },
+      { "name": "usage.detail", "description": "Data API permission (docs/data-access.md)" },
+      { "name": "security.read", "description": "Data API permission (docs/data-access.md)" },
+      { "name": "catalog.read", "description": "Data API permission (docs/data-access.md)" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "fors-admin",
+      "name": "LLM Gateway BFF",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${FORS_OIDC_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "https://localhost:5173/signin-oidc",
+        "https://localhost:7212/signin-oidc"
+      ],
+      "webOrigins": [ "https://localhost:5173", "https://localhost:7212" ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://localhost:5173/##https://localhost:5173/signout-callback-oidc##https://localhost:7212/##https://localhost:7212/signout-callback-oidc"
+      },
+      "protocolMappers": [
+        {
+          "name": "gateway-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "roles",
+            "multivalued": "true",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "department-codes",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "departmentCodes",
+            "claim.name": "departmentCodes",
+            "multivalued": "true",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "team-codes",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "teamCodes",
+            "claim.name": "teamCodes",
+            "multivalued": "true",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "false",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "fors-data-dev",
+      "name": "Data API example integration (client credentials)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${FORS_DATA_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "data-permissions",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": { "claim.name": "roles", "multivalued": "true", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "false", "userinfo.token.claim": "false" }
+        },
+        {
+          "name": "data-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.custom.audience": "fors-data-api", "access.token.claim": "true", "id.token.claim": "false" }
+        }
+      ]
+    }
+  ],
+  "groups": [
+    { "name": "IFO-medarbetare" }
+  ],
+  "users": [
+    {
+      "username": "gateway-admin",
+      "firstName": "Gateway",
+      "lastName": "Administrator",
+      "email": "gateway-admin@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": [ "gateway-admin" ],
+      "attributes": { "departmentCodes": [ "1000", "3000", "5000" ] },
+      "credentials": [ { "type": "password", "value": "${FORS_DEV_USER_PASSWORD}", "temporary": false } ]
+    },
+    {
+      "username": "department-admin",
+      "firstName": "Department",
+      "lastName": "Administrator",
+      "email": "department-admin@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": [ "department-admin" ],
+      "attributes": { "departmentCodes": [ "1000" ] },
+      "credentials": [ { "type": "password", "value": "${FORS_DEV_USER_PASSWORD}", "temporary": false } ]
+    },
+    {
+      "username": "viewer",
+      "firstName": "Read-only",
+      "lastName": "Viewer",
+      "email": "viewer@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": [ "viewer" ],
+      "attributes": { "departmentCodes": [ "1000" ] },
+      "credentials": [ { "type": "password", "value": "${FORS_DEV_USER_PASSWORD}", "temporary": false } ]
+    },
+    {
+      "username": "group-member",
+      "firstName": "Group",
+      "lastName": "Member",
+      "email": "group-member@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": [ "viewer" ],
+      "groups": [ "/IFO-medarbetare" ],
+      "credentials": [ { "type": "password", "value": "${FORS_DEV_USER_PASSWORD}", "temporary": false } ]
+    },
+    {
+      "username": "team-admin",
+      "firstName": "Team",
+      "lastName": "Administrator",
+      "email": "team-admin@example.invalid",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": [ "team-admin" ],
+      "attributes": { "teamCodes": [ "digitalisering-ai" ] },
+      "credentials": [ { "type": "password", "value": "${FORS_DEV_USER_PASSWORD}", "temporary": false } ]
+    },
+    {
+      "username": "service-account-fors-data-dev",
+      "enabled": true,
+      "serviceAccountClientId": "fors-data-dev",
+      "realmRoles": [ "usage.aggregate", "usage.detail", "security.read", "catalog.read" ]
+    }
+  ]
+}

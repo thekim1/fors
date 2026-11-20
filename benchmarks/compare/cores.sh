@@ -30,10 +30,10 @@ for rep in $(seq "$REPEATS"); do
     export APP_CPUS FAKE_CPUS PG_CPUS REDIS_CPUS
     source ./lib.sh
     log "$name, run $rep: gateway $APP_CPUS, fake LLM $FAKE_CPUS, Postgres $PG_CPUS, Redis $REDIS_CPUS"
-    start_platform ume
-    warm_up ume
+    start_platform fors
+    warm_up fors
     n=$(threads "$APP_CPUS")
-    for f in 32 64; do measure ume true $((f * n)) "$DURATION" "cores/$name-r$rep-vus_$((f * n))"; done
+    for f in 32 64; do measure fors true $((f * n)) "$DURATION" "cores/$name-r$rep-vus_$((f * n))"; done
     stop_all
   done
 done
@@ -47,7 +47,7 @@ for f in sorted(glob.glob('results/cores/*-vus_*.json')):
     d = json.load(open(f)); c = json.load(open(f[:-5] + '.cpu.json'))
     name, rep, vus = re.match(r'.*/(.+)-r(\d+)-vus_(\d+)\.json', f).groups()
     rows.append((name, int(vus), int(rep), d['rps'], d['duration_ms']['med'], d['duration_ms']['p(99)'],
-                 c['ume-gateway']['cpu_ns'] / 1e6 / d['requests']))
+                 c['fors-gateway']['cpu_ns'] / 1e6 / d['requests']))
 with open('results/cores/report.md', 'w') as out:
     out.write('# Gateway CPU per message by CPU layout (streaming chat)\n\n')
     out.write('| Layout | Clients | Run | Requests/s | Median ms | p99 ms | Gateway CPU ms/req |\n|---|---:|---:|---:|---:|---:|---:|\n')

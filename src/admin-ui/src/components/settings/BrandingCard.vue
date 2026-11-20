@@ -124,7 +124,7 @@ onMounted(load)
             label="Organisation name"
             :placeholder="'Umeå kommun'"
             :error="errors.organisationName"
-            :hint="`Shown under “AI Gateway”. At most ${MAX_NAME} characters; leave empty to show no name.`"
+            :hint="`Shown under “Fors”. At most ${MAX_NAME} characters; leave empty to show no name.`"
           />
         </div>
         <InlineError v-if="formError" :message="formError" />

@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # Boots the Portainer stack (compose.portainer.yaml) the way a new deployment for the setup wizard starts it, with only
-# UME_DOMAIN and the images, and checks setup mode end to end up to the wizard's session (thekim1/llmgateway#100): the
+# FORS_DOMAIN and the images, and checks setup mode end to end up to the wizard's session (thekim1/fors#100): the
 # admin API prints a setup code on its standard output, /bff/user says sign-in is not configured and setup is open, a
 # wrong code is refused, the printed code gives a setup session, a restart within the hour prints the same code; then
-# the stack is declared with UME_OIDC_AUTHORITY, and setup counts as completed and closes (404). The test sign-in at a
+# the stack is declared with FORS_OIDC_AUTHORITY, and setup counts as completed and closes (404). The test sign-in at a
 # real provider is not part of it.
 #
-#   deploy/tests/setup-mode-boot.sh     # uses the local images ume-llm-gateway/*:latest, or GATEWAY_IMAGE,
+#   deploy/tests/setup-mode-boot.sh     # uses the local images fors/*:latest, or GATEWAY_IMAGE,
 #                                       # ADMINAPI_IMAGE and MIGRATIONS_IMAGE; needs Docker with Compose, curl and jq
 set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-work="$(mktemp -d)"; project=ume-setup-boot; host=llm-admin.setup.test; port=19443
-unset UME_OIDC_AUTHORITY UME_OIDC_CLIENT_ID UME_OIDC_CLIENT_SECRET UME_GATEWAY_HOST UME_GATEWAY_PUBLIC_URL UME_ADMIN_HOST \
-  UME_SETUP_REOPEN UME_DATA_AUTHORITY COMPOSE_PROFILES
-export GATEWAY_IMAGE="${GATEWAY_IMAGE:-ume-llm-gateway/gateway:latest}"
-export ADMINAPI_IMAGE="${ADMINAPI_IMAGE:-ume-llm-gateway/adminapi:latest}"
-export MIGRATIONS_IMAGE="${MIGRATIONS_IMAGE:-ume-llm-gateway/migrations:latest}"
-export UME_DOMAIN=setup.test UME_GATEWAY_BIND=127.0.0.1 UME_ADMIN_BIND=127.0.0.1 UME_GATEWAY_PORT=18443 UME_ADMIN_PORT="$port"
+work="$(mktemp -d)"; project=fors-setup-boot; host=llm-admin.setup.test; port=19443
+unset FORS_OIDC_AUTHORITY FORS_OIDC_CLIENT_ID FORS_OIDC_CLIENT_SECRET FORS_GATEWAY_HOST FORS_GATEWAY_PUBLIC_URL FORS_ADMIN_HOST \
+  FORS_SETUP_REOPEN FORS_DATA_AUTHORITY COMPOSE_PROFILES
+export GATEWAY_IMAGE="${GATEWAY_IMAGE:-fors/gateway:latest}"
+export ADMINAPI_IMAGE="${ADMINAPI_IMAGE:-fors/adminapi:latest}"
+export MIGRATIONS_IMAGE="${MIGRATIONS_IMAGE:-fors/migrations:latest}"
+export FORS_DOMAIN=setup.test FORS_GATEWAY_BIND=127.0.0.1 FORS_ADMIN_BIND=127.0.0.1 FORS_GATEWAY_PORT=18443 FORS_ADMIN_PORT="$port"
 stack=(docker compose -p "$project" -f "$repo/deploy/compose.portainer.yaml")
 cleanup() { "${stack[@]}" down -v >/dev/null 2>&1 || true; rm -rf "$work"; }
 trap cleanup EXIT
@@ -59,7 +59,7 @@ for _ in $(seq 30); do [ "$(codes | wc -l)" -ge 2 ] && break; sleep 2; done
 [ "$(codes | tail -n 1)" = "$code" ] || fail "a restart within the hour printed another code"
 echo "ok: a restart within the hour prints the same code"
 
-export UME_OIDC_AUTHORITY=https://idp.setup.test/realms/ume
+export FORS_OIDC_AUTHORITY=https://idp.setup.test/realms/fors
 up
 declared='The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed'
 # grep reads all of the logs (no -q): with pipefail, grep -q leaving early fails the pipeline through SIGPIPE.

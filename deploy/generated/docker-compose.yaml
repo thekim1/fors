@@ -11,7 +11,7 @@ services:
     volumes:
       - type: "volume"
         target: "/var/lib/postgresql/data"
-        source: "ume.llmgateway.apphost-c111786e34-postgres-data"
+        source: "fors.apphost-895ec0f466-postgres-data"
         read_only: false
     networks:
       - "aspire"
@@ -98,7 +98,7 @@ services:
       REDIS_PASSWORD: "${REDIS_PASSWORD}"
       REDIS_URI: "redis://:${REDIS_PASSWORD}@redis:6379"
       Security__KeyPepper: "${KEY_PEPPER}"
-      Oidc__ClientId: "ume-admin"
+      Oidc__ClientId: "fors-admin"
       Gateway__BaseUrl: "https://gateway:${GATEWAY_PORT}"
       Gateway__OperationsUrl: "https://gateway:${GATEWAY_PORT}"
     ports:
@@ -116,5 +116,5 @@ networks:
   aspire:
     driver: "bridge"
 volumes:
-  ume.llmgateway.apphost-c111786e34-postgres-data:
+  fors.apphost-895ec0f466-postgres-data:
     driver: "local"

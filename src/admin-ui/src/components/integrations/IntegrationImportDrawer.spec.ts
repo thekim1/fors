@@ -53,11 +53,11 @@ describe('IntegrationImportDrawer', () => {
     expect(button(wrapper, 'Create').attributes('aria-disabled')).toBe('true')
 
     await wrapper.find('textarea').setValue(preset.manifest)
-    api.import.mockResolvedValue(result('Created', 'ume-sk-secret'))
+    api.import.mockResolvedValue(result('Created', 'fors-sk-secret'))
     await button(wrapper, 'Create').trigger('click')
     await flushPromises()
     expect(api.import).toHaveBeenCalledWith(preset.manifest)
-    expect(wrapper.emitted('imported')?.[0]?.[0]).toMatchObject({ keys: [{ secret: 'ume-sk-secret' }] })
+    expect(wrapper.emitted('imported')?.[0]?.[0]).toMatchObject({ keys: [{ secret: 'fors-sk-secret' }] })
   })
 
   it('shows differences as warnings and does not offer to create when nothing is missing', async () => {

@@ -20,7 +20,7 @@ meaning, so it catches what rules cannot, at the price of latency and some GPU c
 
 - **Off** (default): no checks.
 - **Record**: the request is checked and sent on unchanged. What the guard found is recorded on the usage record
-  (`GuardFlags`, shown as *Content guard* on the request in *Usage*), the response gets `x-ume-guard: flagged`, and the
+  (`GuardFlags`, shown as *Content guard* on the request in *Usage*), the response gets `x-fors-guard: flagged`, and the
   security event `gateway.content.flagged` is logged. Use it first, to see what the guard would catch before refusing
   anything.
 - **Block**: a flagged request is refused with `400 content_blocked` before any model is called (and costs nothing); a

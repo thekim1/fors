@@ -17,7 +17,7 @@ onMounted(() => {
 })
 
 /** The website's guide for application developers (it replaced the Getting started page). */
-const guideUrl = 'https://thekim1.github.io/llmgateway/start/'
+const guideUrl = 'https://thekim1.github.io/fors/start/'
 const baseUrl = computed(() => (catalog.catalog?.gatewayBaseUrl ?? '').replace(/\/+$/, '') + '/v1')
 const routes = computed(() => catalog.catalog?.routes ?? [])
 const models = computed(() => catalog.catalog?.models ?? [])

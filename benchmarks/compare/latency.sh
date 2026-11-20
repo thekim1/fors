@@ -5,15 +5,15 @@
 #
 #   ./latency.sh                                   400 ms to first token, 25 ms ±30 % per word, 200-word answers
 #   PROFILE=stalls FAKE_STALL_P=0.01 FAKE_STALL_MS=1500 ./latency.sh
-#   PLATFORMS="ume" VUS="1 64" DURATION=20 ./latency.sh
+#   PLATFORMS="fors" VUS="1 64" DURATION=20 ./latency.sh
 #   PROFILE=document PROBE_PAYLOAD=document FAKE_TTFT_MS=500 FAKE_PREFILL_MS_PER_1K=60 FAKE_ANSWER_WORDS=500 \
 #     VUS="1 8 32 64 128 256" DURATION=60 ./latency.sh     ten-page document in a five-message conversation
 #
-# Needs the images from README.md and a Release build of benchmarks/Ume.LlmGateway.Benchmarks (the probe).
+# Needs the images from README.md and a Release build of benchmarks/Fors.Benchmarks (the probe).
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PLATFORMS="${PLATFORMS:-fake ume bifrost}" # eneo still works: PLATFORMS=eneo
+PLATFORMS="${PLATFORMS:-fake fors bifrost}" # eneo still works: PLATFORMS=eneo
 VUS="${VUS:-1 16 64 256}"
 DURATION="${DURATION:-30}" # seconds per scenario
 PROFILE="${PROFILE:-realistic}"
@@ -23,18 +23,18 @@ export FAKE_PREFILL_MS_PER_1K="${FAKE_PREFILL_MS_PER_1K:-0}" PROBE_PAYLOAD="${PR
 source ./lib.sh
 
 OUT="results/latency/$PROFILE"
-BIN="$REPO/benchmarks/Ume.LlmGateway.Benchmarks/bin/Release/net10.0"
-[[ -f "$BIN/Ume.LlmGateway.Benchmarks.dll" ]] || { echo "Build the benchmarks in Release first" >&2; exit 1; }
+BIN="$REPO/benchmarks/Fors.Benchmarks/bin/Release/net10.0"
+[[ -f "$BIN/Fors.Benchmarks.dll" ]] || { echo "Build the benchmarks in Release first" >&2; exit 1; }
 results_dir "results/latency" && results_dir "$OUT"
 
-url_of() { case $1 in fake) echo http://fake-llm:8080 ;; ume) echo http://ume-gateway:8080 ;; bifrost) echo http://bifrost:8080 ;; eneo) echo http://eneo-backend:8000/api/v1 ;; esac; }
+url_of() { case $1 in fake) echo http://fake-llm:8080 ;; fors) echo http://fors-gateway:8080 ;; bifrost) echo http://bifrost:8080 ;; eneo) echo http://eneo-backend:8000/api/v1 ;; esac; }
 
 # The probe runs as a container on the compose network, on the load generator's cores (like k6).
 probe() { # platform vus seconds out-file
   docker run --rm --network platform-compare_default --cpuset-cpus "$K6_CPUS" -e PROBE_PAYLOAD -e ENEO_KEY="${ENEO_KEY:-}" -e ENEO_ASSISTANT="${ENEO_ASSISTANT:-}" \
     -v "$BIN:/probe:ro" -v "$PWD/$OUT:/out" --entrypoint /usr/share/dotnet/dotnet \
     mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra \
-    /probe/Ume.LlmGateway.Benchmarks.dll stream-probe "$1" "$(url_of "$1")" "$2" "$3" "/out/$4" "${KEY:-}"
+    /probe/Fors.Benchmarks.dll stream-probe "$1" "$(url_of "$1")" "$2" "$3" "/out/$4" "${KEY:-}"
 }
 
 for platform in $PLATFORMS; do

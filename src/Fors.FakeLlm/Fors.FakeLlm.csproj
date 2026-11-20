@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <ContainerRepository>fors/fake-llm</ContainerRepository>
+    <ContainerFamily>noble-chiseled</ContainerFamily>
+    <NoWarn>$(NoWarn);CA1861</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fors.ServiceDefaults\Fors.ServiceDefaults.csproj" />
+  </ItemGroup>
+</Project>
+
+

@@ -146,7 +146,7 @@
     "pricing_overrides": [
       {
         "id": "po-fake-chat",
-        "name": "fake-chat at the Ume seed's prices",
+        "name": "fake-chat at Fors seed's prices",
         "scope_kind": "global",
         "match_type": "exact",
         "pattern": "fake-chat",

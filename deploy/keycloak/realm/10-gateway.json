@@ -1,7 +1,7 @@
 {
-  "realm": "ume",
+  "realm": "$(env:FORS_KEYCLOAK_REALM)",
   "enabled": true,
-  "displayName": "$(env:UME_KEYCLOAK_REALM_DISPLAY_NAME:-LLM Gateway)",
+  "displayName": "$(env:FORS_KEYCLOAK_REALM_DISPLAY_NAME:-LLM Gateway)",
   "sslRequired": "external",
   "registrationAllowed": false,
   "resetPasswordAllowed": false,
@@ -79,22 +79,22 @@
   },
   "clients": [
     {
-      "clientId": "ume-admin",
+      "clientId": "$(env:FORS_KEYCLOAK_ADMIN_CLIENT_ID)",
       "name": "LLM Gateway admin UI",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "secret": "$(file:UTF-8:/run/import-secrets/ume-admin-client-secret)",
+      "secret": "$(file:UTF-8:/run/import-secrets/admin-client-secret)",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
-      "redirectUris": ["$(env:UME_ADMIN_PUBLIC_URL)/signin-oidc"],
-      "webOrigins": ["$(env:UME_ADMIN_PUBLIC_URL)"],
+      "redirectUris": ["$(env:FORS_ADMIN_PUBLIC_URL)/signin-oidc"],
+      "webOrigins": ["$(env:FORS_ADMIN_PUBLIC_URL)"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "$(env:UME_ADMIN_PUBLIC_URL)/##$(env:UME_ADMIN_PUBLIC_URL)/signout-callback-oidc"
+        "post.logout.redirect.uris": "$(env:FORS_ADMIN_PUBLIC_URL)/##$(env:FORS_ADMIN_PUBLIC_URL)/signout-callback-oidc"
       },
       "protocolMappers": [
         {
@@ -154,6 +154,6 @@
     }
   ],
   "scopeMappings": [
-    { "client": "ume-admin", "roles": ["gateway-admin", "department-admin", "team-admin", "viewer"] }
+    { "client": "$(env:FORS_KEYCLOAK_ADMIN_CLIENT_ID)", "roles": ["gateway-admin", "department-admin", "team-admin", "viewer"] }
   ]
 }

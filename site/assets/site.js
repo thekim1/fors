@@ -6,7 +6,7 @@
   // Theme
   const themeButtons = document.querySelectorAll('[data-theme-set]')
   const showTheme = () => themeButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.themeSet === root.dataset.theme)))
-  themeButtons.forEach(b => b.addEventListener('click', () => { root.dataset.theme = b.dataset.themeSet; store('ume-site-theme', b.dataset.themeSet); showTheme() }))
+  themeButtons.forEach(b => b.addEventListener('click', () => { root.dataset.theme = b.dataset.themeSet; store('fors-site-theme', b.dataset.themeSet); showTheme() }))
   showTheme()
 
   // Mobile menu: closes with Esc (focus back on the button), a tap outside it, or by following a link.

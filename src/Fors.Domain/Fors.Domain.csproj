@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <InternalsVisibleTo Include="Fors.Domain.Tests" />
+    <InternalsVisibleTo Include="Fors.Benchmarks" />
+  </ItemGroup>
+</Project>

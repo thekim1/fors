@@ -39,7 +39,7 @@ function openSetup(event: MouseEvent): void {
     <div class="material-overlay flex w-full max-w-md flex-col gap-5 rounded-dialog p-8">
       <BrandMark size="lg" />
       <div>
-        <h1 id="page-title" tabindex="-1" class="text-title-2 text-fg outline-none">Sign in to AI Gateway</h1>
+        <h1 id="page-title" tabindex="-1" class="text-title-2 text-fg outline-none">Sign in to Fors</h1>
         <p class="mt-1 text-body text-fg-2">
           {{ branding.organisationName ? `Admin console for ${branding.organisationName}.` : 'Admin console.' }} Use your organisation account.
         </p>
@@ -62,8 +62,8 @@ function openSetup(event: MouseEvent): void {
       <p v-else-if="!configured" role="status" class="flex gap-2 text-small text-fg-2" data-test="not-configured">
         <AppIcon name="info" />
         <span>
-          Sign-in is not set up. The deployment must set the identity provider (<code class="font-mono">UME_OIDC_AUTHORITY</code>), or open setup mode again:
-          give <code class="font-mono">UME_SETUP_REOPEN</code> a new value and restart the admin API.
+          Sign-in is not set up. The deployment must set the identity provider (<code class="font-mono">FORS_OIDC_AUTHORITY</code>), or open setup mode again:
+          give <code class="font-mono">FORS_SETUP_REOPEN</code> a new value and restart the admin API.
         </span>
       </p>
       <UiButton v-else variant="primary" size="lg" icon="login" :href="href" data-test="sign-in">Sign in</UiButton>

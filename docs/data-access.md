@@ -55,7 +55,7 @@ Three channels, each with one job:
 
 ### Log category and event names
 
-Every security event is written by the logger category **`Ume.LlmGateway.Security`** (constant
+Every security event is written by the logger category **`Fors.Security`** (constant
 `SecurityEvents.Category`). Filtering on that category is how a collector separates security events from
 operational logs. Each record has a stable event name (the `EventId` name, exported by OpenTelemetry as the event
 name) and a fixed set of attributes. Attribute names are part of the contract: they are only ever added to, never
@@ -67,7 +67,7 @@ renamed or removed, within a major version.
 | 1002 | `gateway.pii.action` | Gateway | A key's PII policy found personal data (blocked, redacted, rerouted on-prem or only detected) | `RequestId`, `Action`, `Categories`, `KeyId`, `KeyPrefix`, `TeamId`, `DepartmentId`, `Endpoint` |
 | 1005 | `gateway.content.flagged` | Gateway | The key's content guard flagged a request or answer (recorded or blocked); categories only, never text | `RequestId`, `Action`, `Part`, `Flags`, `KeyId`, `KeyPrefix`, `TeamId`, `DepartmentId`, `Endpoint` |
 | 1003 | `gateway.request.refused` | Gateway | A request was refused by policy: attachment not allowed, model or provider not allowed for the key, provider tool or provider storage not allowed (`tool_not_allowed`, `storage_not_allowed`) | `RequestId`, `ErrorCode`, `KeyId`, `KeyPrefix`, `TeamId`, `DepartmentId`, `Endpoint` |
-| 1006 | `gateway.delegation.refused` | Gateway | An integration's request to act as another key (`x-ume-on-behalf-of`) was refused ([integrations](integrations.md#acting-as-a-key)) | `Reason` (`not_credential`, `key_not_assigned`, `key_revoked`, `key_expired`, `key_disabled`, `owner_inactive`, `no_common_residency`), `RequestId`, `OnBehalfOf`, `Endpoint`, `KeyId`, `KeyPrefix`, `TeamId`, `DepartmentId` (the credential key's) |
+| 1006 | `gateway.delegation.refused` | Gateway | An integration's request to act as another key (`x-fors-on-behalf-of`) was refused ([integrations](integrations.md#acting-as-a-key)) | `Reason` (`not_credential`, `key_not_assigned`, `key_revoked`, `key_expired`, `key_disabled`, `owner_inactive`, `no_common_residency`), `RequestId`, `OnBehalfOf`, `Endpoint`, `KeyId`, `KeyPrefix`, `TeamId`, `DepartmentId` (the credential key's) |
 | 2001 | `admin.change` | Admin API | Every audit log entry (key created, revoked, rotated or revealed; provider, budget, rule or config changed; configuration or usage exported, `Action` `export`) | `Actor`, `Action`, `EntityType`, `EntityId` |
 | 2002 | `admin.signin` | Admin API | A user signed in (not when a session is extended) | `Actor`, `SourceAddress`, `Roles`, `Departments`, `SessionId` |
 | 2007 | `admin.signin.failed` | Admin API | A sign-in callback could not be completed (`Reason` `callback_failed`: a forged, expired or replayed callback, one started before the sign-in values changed, or the provider's error); no session is created | `Reason`, `SourceAddress` |
@@ -134,7 +134,7 @@ set. `deploy/otel/collector-siem.example.yaml` is a starting point for an OpenTe
 distribution) that:
 
 1. receives OTLP from both services,
-2. keeps only records from the `Ume.LlmGateway.Security` category in the SIEM pipeline,
+2. keeps only records from the `Fors.Security` category in the SIEM pipeline,
 3. exports them to syslog (RFC 5424; works with QRadar, ArcSight and most SIEMs), with commented-out exporters for
    Splunk HEC, Elastic and Azure Monitor (Microsoft Sentinel).
 
@@ -143,7 +143,7 @@ Push over OTLP is best-effort: if the collector is down, events can be lost. `Au
 
 ## Phase 2: Data API
 
-`src/Ume.LlmGateway.DataApi` is a separate, optional service. An adopter can deploy it in another network zone, point
+`src/Fors.DataApi` is a separate, optional service. An adopter can deploy it in another network zone, point
 it at a read replica (`ConnectionStrings:gatewaydb`), or not deploy it at all. Deployment and identity-provider setup
 are in the [runbook](runbook.md#data-api-optional); the contract is the OpenAPI document at `/openapi/v1.json`
 (public; it contains no data) with a browsable reference at `/scalar`. Set `DataApi:PublishApiReference=false` to serve
@@ -151,12 +151,12 @@ neither.
 
 ### Access
 
-- **Read-only, enforced by the database.** The service connects as `ume_data`, which has `SELECT` only. Tables that
+- **Read-only, enforced by the database.** The service connects as `fors_data`, which has `SELECT` only. Tables that
   hold secrets are granted column by column, so the role cannot read key hashes, encrypted key secrets, provider
   credentials or base URLs, or the Data Protection key ring. A bug in the API cannot leak them. The tests run as this
   role with the real `app-roles.sql`.
 - **Machine authentication.** OAuth 2.0 client-credentials access tokens from the adopter's IdP
-  (`DataApi:Authority`, audience `DataApi:Audience`, default `ume-data-api`), or Data API keys created by gateway
+  (`DataApi:Authority`, audience `DataApi:Audience`, default `fors-data-api`), or Data API keys created by gateway
   admins in the admin UI (see [Data API keys](#data-api-keys)). Each integration is its own client or key, with its
   own audit trail (`data.read` events), rate limit (`DataApi:RequestsPerMinute`, default 600) and revocation.
 - **Permissions are consumer classes**, read from the claims in `DataApi:PermissionClaims` (default `scope`, `scp`
@@ -166,7 +166,7 @@ neither.
 | Permission | Endpoints | Data |
 |---|---|---|
 | `usage.aggregate` | `GET /v1/usage/aggregate?from=&to=&granularity=day\|month` | Totals per period, department (with cost-centre code), model, provider, residency and endpoint: requests, successful requests, tokens, audio seconds, cost in USD. No key- or team-level rows; small departments folded (see phase 3). `from`/`to` are inclusive dates in `DataApi:TimeZone`. |
-| `usage.detail` | `GET /v1/usage/records` (feed) | One row per request with key, team and department ids, model, provider, tokens, audio seconds (speech to text), cost, latency, provider time (`upstreamMs`), time to first token (`timeToFirstTokenMs`, streamed answers) and the provider's own time to first token (`providerFirstTokenMs`, streamed answers, without fallbacks or gateway time), outcome, routing rule. A live audio session (endpoint `Realtime` or `RealtimeTranslations`) is one row; its latency is the session length. For a request an integration made as an assigned key, `viaKeyId` is its credential key; `runId` and `step` are the client's opaque ids (`x-ume-run-id`, `x-ume-step`). PII categories only if `DataApi:Detail:IncludePiiCategories`. |
+| `usage.detail` | `GET /v1/usage/records` (feed) | One row per request with key, team and department ids, model, provider, tokens, audio seconds (speech to text), cost, latency, provider time (`upstreamMs`), time to first token (`timeToFirstTokenMs`, streamed answers) and the provider's own time to first token (`providerFirstTokenMs`, streamed answers, without fallbacks or gateway time), outcome, routing rule. A live audio session (endpoint `Realtime` or `RealtimeTranslations`) is one row; its latency is the session length. For a request an integration made as an assigned key, `viaKeyId` is its credential key; `runId` and `step` are the client's opaque ids (`x-fors-run-id`, `x-fors-step`). PII categories only if `DataApi:Detail:IncludePiiCategories`. |
 | `security.read` | `GET /v1/security/auth-failures`, `/requests`, `/audit` (feeds); `GET /v1/security/keys` | Refused keys; requests with a PII action or a policy refusal (with PII categories); the admin audit log with its masked before/after details and who made each entry (`actorName`, `actorRoles`, `actorDepartments`, `sourceAddress`, `sessionId`, `requestId`, `userAgent`; empty for entries written before these were recorded); every key's status, expiry, last use and policies. |
 | `catalog.read` | `GET /v1/catalog/departments`, `teams`, `keys`, `providers`, `models`, `prices`, `budgets` | Dimensions for joining. Departments carry `memberGroups` (the identity provider groups whose members belong to the department) and teams their `code`. Keys are id, team, name, prefix, creation time and, for [integrations](integrations.md), `integrationId` and `integrationRole` only. Budgets carry `limitUsd`. Token quotas have `unit` `Tokens`, `limitTokens` and an optional `residency` (their USD limit is 0). A model's `residency` is its own when it differs from its provider's, else null; `usage.aggregate` reports the model's residency when it has one. |
 
@@ -174,17 +174,17 @@ neither.
 
 For integrations that cannot get OAuth tokens (or adopters without an IdP client for them), a gateway admin creates a
 **Data API key** under *Access → Data API access* in the admin UI (`/api/data-access/keys`, gateway-admin only): a
-name, the permissions from the table above (ticked per key) and an optional expiry date. The key (`ume-dk-` + 43
-characters, distinct from gateway keys `ume-sk-`) is shown once, with a curl and PowerShell example against
+name, the permissions from the table above (ticked per key) and an optional expiry date. The key (`fors-dk-` + 43
+characters, distinct from gateway keys `fors-sk-`) is shown once, with a curl and PowerShell example against
 `DataApi:PublicUrl` of the admin API.
 
-- **Use:** `Authorization: Bearer ume-dk-…` or `X-Api-Key: ume-dk-…`. A request presenting a key is authenticated by
+- **Use:** `Authorization: Bearer fors-dk-…` or `X-Api-Key: fors-dk-…`. A request presenting a key is authenticated by
   the key handler; anything else goes to OIDC token validation. A token can never gain permissions through the key
   claim, and a key never through `scope`/`roles`.
 - **Identity:** the caller is `key:<name>` in `data.read` events and in the per-client rate limit, so names are unique.
 - **Storage:** only the SHA-256 of the key is stored. No pepper is used (unlike gateway keys): the Data API may run in
   another network zone and should not hold the gateway's pepper, and a pepper adds nothing for a 256-bit random
-  secret. `ume_data` may read the hash columns of `DataApiKeys` (and update `LastUsedAt` only); it still cannot read
+  secret. `fors_data` may read the hash columns of `DataApiKeys` (and update `LastUsedAt` only); it still cannot read
   gateway key hashes.
 - **Revocation and expiry:** the Data API caches each lookup for `DataApi:KeyCacheSeconds` (default 30, 0–300) per
   instance, so a revoked key keeps working for at most that long; expiry is checked on every request. Use of a revoked

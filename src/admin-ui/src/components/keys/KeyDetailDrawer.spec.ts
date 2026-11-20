@@ -8,11 +8,11 @@ import KeyDetailDrawer from './KeyDetailDrawer.vue'
 const reveal = vi.fn()
 vi.mock('@/api', () => ({ api: { keys: { reveal: (...a: unknown[]) => reveal(...a) }, budgets: { list: vi.fn().mockResolvedValue([]) } } }))
 
-const SECRET = 'ume-sk-AbC1' + 'x'.repeat(32)
+const SECRET = 'fors-sk-AbC1' + 'x'.repeat(32)
 
 function key(overrides: Partial<VirtualKey> = {}): VirtualKey {
   return {
-    id: 'k1', teamId: 't', teamName: 'Team', departmentId: 'd', departmentName: 'Dept', name: 'App', description: null, prefix: 'ume-sk-AbC1',
+    id: 'k1', teamId: 't', teamName: 'Team', departmentId: 'd', departmentName: 'Dept', name: 'App', description: null, prefix: 'fors-sk-AbC1',
     status: 'Active', isEnabled: true, createdAt: '2026-10-01T00:00:00Z', createdBy: 'me', expiresAt: null, revokedAt: null, graceUntil: null,
     lastUsedAt: null, allowedModels: [], allowedResidencies: [], allowedProviders: ['ollama-cloud'], piiPolicy: 'Off', attachmentPolicy: 'Allowed',
     requestsPerMinute: null, tokensPerMinute: null, rotatedToKeyId: null, canReveal: true, ...overrides,
@@ -45,7 +45,7 @@ describe('KeyDetailDrawer secret', () => {
     const wrapper = mountDrawer('gateway-admin', key())
     await flushPromises()
     const text = wrapper.find('[data-testid="key-secret"]').text()
-    expect(text.startsWith('ume-sk-AbC1')).toBe(true)
+    expect(text.startsWith('fors-sk-AbC1')).toBe(true)
     expect(text).toContain('••••')
     expect(text).not.toContain('xxxx')
     expect(reveal).not.toHaveBeenCalled()

@@ -57,7 +57,7 @@ watch(
   <form class="grid gap-5" novalidate data-test="sign-in-step" @submit.prevent="emit('test')">
     <TextField
       id="setup-authority" v-model="form.authority" label="Provider address (authority)" :error="errors.authority" :disabled="signIn.authority.locked"
-      :hint="hintOf('authority', 'The issuer address, for example https://login.example.org/realms/ume or https://login.microsoftonline.com/<tenant ID>/v2.0.')"
+      :hint="hintOf('authority', 'The issuer address, for example https://login.example.org/realms/fors or https://login.microsoftonline.com/<tenant ID>/v2.0.')"
       inputmode="url" mono
     />
     <TextField

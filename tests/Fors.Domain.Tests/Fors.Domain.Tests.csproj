@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Fors.Domain\Fors.Domain.csproj" />
+  </ItemGroup>
+</Project>

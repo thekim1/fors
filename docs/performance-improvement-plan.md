@@ -24,14 +24,14 @@ after a change, and replace the figures there and here, so numbers never come fr
 All need Docker and must run in Release. Use the same machine for before/after; numbers are not comparable across hosts.
 
 ```bash
-dotnet run -c Release --project benchmarks/Ume.LlmGateway.Benchmarks -- --filter '*Pipeline*'   # end-to-end, in-process
-dotnet run -c Release --project benchmarks/Ume.LlmGateway.Benchmarks -- --filter '*Provider*'   # streaming/JSON leg
-dotnet run -c Release --project benchmarks/Ume.LlmGateway.Benchmarks -- audit                  # DB/Redis calls per request
-PLATFORMS="fake ume" benchmarks/compare/scale.sh                                              # load + vCPU scaling in containers
+dotnet run -c Release --project benchmarks/Fors.Benchmarks -- --filter '*Pipeline*'   # end-to-end, in-process
+dotnet run -c Release --project benchmarks/Fors.Benchmarks -- --filter '*Provider*'   # streaming/JSON leg
+dotnet run -c Release --project benchmarks/Fors.Benchmarks -- audit                  # DB/Redis calls per request
+PLATFORMS="fake fors" benchmarks/compare/scale.sh                                              # load + vCPU scaling in containers
 ```
 
 Rebuild the gateway image first for the container tests:
-`dotnet publish src/Ume.LlmGateway.Gateway -c Release /t:PublishContainer -p:ContainerImageTag=compare`.
+`dotnet publish src/Fors.Gateway -c Release /t:PublishContainer -p:ContainerImageTag=compare`.
 Usage-writer queue depth under load can be read from `GET /health/operations` (HMAC-signed; see
 `OperationsSignature`, the compare stack's pepper is in `benchmarks/compare/lib.sh`).
 
@@ -47,7 +47,7 @@ is kept as it was planned.
 **Evidence.** Two Redis round trips remain before the first byte: the rate-limit script (pipelined with the
 circuit-state lookup) and the budget reservation script.
 
-**Where.** `RedisRateLimiter`, `RedisSpendLedger` (`src/Ume.LlmGateway.Infrastructure/Stores/RateLimiter.cs`, `SpendLedger.cs`),
+**Where.** `RedisRateLimiter`, `RedisSpendLedger` (`src/Fors.Infrastructure/Stores/RateLimiter.cs`, `SpendLedger.cs`),
 `GatewayRequestHandler.HandleAsync` steps 4–8 (the stages are in `RequestStages`), `BudgetService.ReserveAsync`.
 
 **Approach.** The budget estimate depends on the routing result, which runs between the two. Options: reserve with an
@@ -162,7 +162,7 @@ request, in five scenarios, and leaves out time.
 Suggested opening prompt:
 
 > Read `docs/performance-improvement-plan.md` and `docs/performance.md`. Start with item 1 (rate limit and budget in one
-> Redis round trip). Measure with `PLATFORMS="fake ume" benchmarks/compare/scale.sh` and the `audit`, implement the change with
+> Redis round trip). Measure with `PLATFORMS="fake fors" benchmarks/compare/scale.sh` and the `audit`, implement the change with
 > tests, then re-run the whole baseline (see *Measuring* in `docs/performance.md`) and update `docs/performance.md`,
 > the website (`site/content.mjs`), `CHANGELOG.md` and this plan with the results.
 

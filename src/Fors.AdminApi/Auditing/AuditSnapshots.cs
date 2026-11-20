@@ -1,0 +1,113 @@
+using System.Text.Json.Serialization;
+using Fors.AdminApi.Catalog;
+using Fors.AdminApi.RoutingRules;
+using Fors.Domain;
+using Fors.Domain.Entities;
+using Fors.Domain.Routing;
+using Fors.Infrastructure.Stores;
+
+namespace Fors.AdminApi.Auditing;
+
+// Audit snapshots: what an entity's stored settings were before and after a change. They hold only the entity's own
+// columns, so an entry does not depend on which navigations were loaded or on the clock, and never a secret.
+
+public sealed record RetentionSettingsAudit(int UsageRetentionDays, int? AuditRetentionDays)
+{
+    public static RetentionSettingsAudit Of(GatewaySettings s) => new(s.UsageRetentionDays, s.AuditRetentionDays);
+}
+
+public sealed record NetworkSettingsAudit(IReadOnlyList<string> TrustedProxies)
+{
+    public static NetworkSettingsAudit Of(GatewaySettings s) => new([.. s.TrustedProxies]);
+}
+
+public sealed record RequestLogSettingsAudit(bool LogAllRequests, DateTimeOffset? LogAllRequestsUntil)
+{
+    public static RequestLogSettingsAudit Of(GatewaySettings s) => new(s.LogAllRequests, s.LogAllRequestsUntil);
+}
+
+/// <summary>Branding before and after a change; the logo by its type, size and hash, never its bytes.</summary>
+public sealed record BrandingAudit(string OrganisationName, string? LogoContentType, int? LogoBytes, string? LogoSha256)
+{
+    public static BrandingAudit Of(Branding b) => new(b.OrganisationName, b.LogoContentType, b.Logo?.Length,
+        b.Logo is { } logo ? Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(logo)) : null);
+}
+
+/// <summary>The stored sign-in values before and after a change; of the client secret only whether it is set, when, and its expiry.</summary>
+public sealed record SignInSettingsAudit(
+    string? Authority, string? ClientId, string? RoleClaim, string? DepartmentClaim, string? TeamClaim, string? GroupClaim, IReadOnlyList<string> ExtraScopes,
+    SignInCredentialAudit ClientSecret)
+{
+    public static SignInSettingsAudit Of(SignInSettings s) => new(s.Authority, s.ClientId, s.RoleClaim, s.DepartmentClaim, s.TeamClaim, s.GroupClaim,
+        [.. s.ExtraScopes], new SignInCredentialAudit(!string.IsNullOrEmpty(s.EncryptedClientSecret), s.ClientSecretSetAt, s.ClientSecretExpiresOn));
+}
+
+/// <summary>The client secret in <see cref="SignInSettingsAudit"/>: set, when, and the expiry entered with it; never the value or its ciphertext.</summary>
+public sealed record SignInCredentialAudit(bool Set, DateTimeOffset? SetAt, DateOnly? ExpiresOn);
+
+public sealed record KeyRotationAudit(KeyAudit PreviousKey, KeyAudit Key);
+
+/// <summary>A reveal or copy of a key's secret: which key, never the secret.</summary>
+public sealed record KeyAccessAudit(string Name, string Prefix);
+
+public sealed record DataApiKeyAudit(
+    Guid Id, string Name, string? Description, string Prefix, IReadOnlyList<string> Permissions, DateTimeOffset? ExpiresAt, DateTimeOffset? RevokedAt)
+{
+    public static DataApiKeyAudit Of(DataApiKey k) => new(k.Id, k.Name, k.Description, k.Prefix, [.. k.Permissions], k.ExpiresAt, k.RevokedAt);
+}
+
+public sealed record ProviderAudit(
+    Guid Id, string Name, string? DisplayName, ProviderType Type, string BaseUrl, ProviderAuthMode AuthMode, bool HasCredential,
+    DataResidency Residency, ProviderCapabilities[] Capabilities, bool IsEnabled, bool IsDrained, int TimeoutSeconds, bool AutoUpdatePrices)
+{
+    public static ProviderAudit Of(ProviderAccount p) => new(
+        p.Id, p.Name, p.DisplayName, p.Type, p.BaseUrl, p.AuthMode, !string.IsNullOrEmpty(p.EncryptedCredential), p.Residency,
+        ProviderCatalogService.Capabilities(p.SupportedCapabilities), p.IsEnabled, p.IsDrained, p.TimeoutSeconds, p.AutoUpdatePrices);
+}
+
+public sealed record CircuitAudit(CircuitState State);
+
+public sealed record ModelAudit(
+    Guid Id, Guid ProviderId, string Name, string UpstreamModel, ModelKind Kind, ParameterProfile ParameterProfile, int? ContextWindow,
+    bool IsEnabled, IReadOnlyList<string> Features, bool AutoUpdatePrice, string? Description, string? BaseModel,
+    DataResidency? Residency = null, string? Publisher = null, string? RequestBaseUrl = null, ProviderAuthMode? RequestAuthMode = null,
+    int? MaxOutputTokens = null)
+{
+    public static ModelAudit Of(ModelDeployment m) => new(
+        m.Id, m.ProviderAccountId, m.Name, m.UpstreamModel, m.Kind, m.ParameterProfile, m.ContextWindow, m.IsEnabled, [.. m.Features],
+        m.AutoUpdatePrice, m.Description, m.BaseModel, m.Residency, m.Publisher, m.RequestBaseUrl, m.RequestAuthMode, m.MaxOutputTokens);
+}
+
+public sealed record RouteAudit(Guid Id, string Name, string? Description, ModelKind Kind, bool IsEnabled, IReadOnlyList<RouteTargetAudit> Targets)
+{
+    public static RouteAudit Of(RouteAlias r) => new(
+        r.Id, r.Name, r.Description, r.Kind, r.IsEnabled,
+        [.. r.Targets.OrderBy(t => t.Priority).ThenBy(t => t.ModelDeploymentId).Select(t => new RouteTargetAudit(t.ModelDeploymentId, t.Priority, t.Weight))]);
+}
+
+public sealed record RouteTargetAudit(Guid ModelId, int Priority, int Weight);
+
+public sealed record RoutingRuleAudit(
+    Guid Id, string Name, bool IsEnabled, bool IsTemplate, int Priority, RoutingScope Scope, IReadOnlyList<Guid> ScopeIds, string Condition, bool Chain,
+    IReadOnlyList<RuleTargetView> Targets, IReadOnlyList<string> Fallbacks)
+{
+    public static RoutingRuleAudit Of(RoutingRule r) => new(
+        r.Id, r.Name, r.IsEnabled, r.IsTemplate, r.Priority, r.Scope, [.. r.ScopeIds], r.Condition, r.Chain,
+        [.. r.Targets.Select(t => new RuleTargetView(t.Model, t.Weight))], [.. r.Fallbacks]);
+}
+
+public sealed record RulePriorityAudit(Guid Id, int Priority);
+
+/// <summary>Why a rule was deleted, deactivated or lost an owner along with its team or department; <c>ScopeIds</c> are the owners left.</summary>
+public sealed record RuleScopeRemovalAudit(
+    string Reason,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? IsEnabled = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<Guid>? ScopeIds = null);
+
+public sealed record BudgetAudit(BudgetScope Scope, Guid ScopeId, decimal LimitUsd, BudgetPeriod Period, IReadOnlyList<int> AlertThresholds, bool IsActive,
+    BudgetUnit Unit = BudgetUnit.Usd, long LimitTokens = 0, DataResidency? Residency = null)
+{
+    public static BudgetAudit Of(Budget b) => new(b.Scope, b.ScopeId, b.LimitUsd, b.Period, [.. b.AlertThresholds], b.IsActive, b.Unit, b.LimitTokens, b.Residency);
+}
+
+public sealed record AlertAudit(bool Acknowledged);

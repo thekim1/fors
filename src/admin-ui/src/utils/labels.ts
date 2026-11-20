@@ -141,7 +141,7 @@ export const PROVIDER_STORAGE_HINT =
   'Lets requests ask the provider to keep the conversation (store, background responses, conversations). Off: refused, and Responses API requests are sent with store: false.'
 
 export const REQUIRE_MAX_RESIDENCY_HINT =
-  'Every request must send the x-ume-max-residency header (OnPrem, Eu or External), or it is refused. The header can only narrow the residencies above.'
+  'Every request must send the x-fors-max-residency header (OnPrem, Eu or External), or it is refused. The header can only narrow the residencies above.'
 
 /** A key's part in an integration (docs/integrations.md). */
 export const INTEGRATION_ROLE: Record<IntegrationRole, { label: string; description: string }> = {
@@ -161,7 +161,7 @@ export const INTEGRATION_SCOPE: Record<string, { label: string; description: str
   'usage.read': { label: 'Read usage', description: 'Usage and budget status of the integration’s own keys (Integration API).' },
   'organisation.read': {
     label: 'Read the organisation',
-    description: 'Every department and team in the key’s context (/v1/ume/context), not only those of the integration’s keys.',
+    description: 'Every department and team in the key’s context (/v1/fors/context), not only those of the integration’s keys.',
   },
 }
 
@@ -286,7 +286,7 @@ export const SIGN_IN_SOURCE: Record<SignInValueSource, { label: string; tone: To
 
 /**
  * Every reason a setup test sign-in can end with, as the admin API names them: the refusals of `POST /bff/setup/test` and the
- * results of its callback. The source is `SetupTestReasons` in src/Ume.LlmGateway.AdminApi/Setup/SetupProvider.cs (without
+ * results of its callback. The source is `SetupTestReasons` in src/Fors.AdminApi/Setup/SetupProvider.cs (without
  * `passed`); keep this list equal to it. SETUP_TEST_REASON has a text for each (labels.spec.ts).
  */
 export const SETUP_TEST_REASONS = [
@@ -317,7 +317,7 @@ export type SetupTestReason = (typeof SETUP_TEST_REASONS)[number]
 /** Why a test sign-in could not start or failed: the step that failed and what to do. */
 export const SETUP_TEST_REASON: Record<SetupTestReason, string> = {
   authority_invalid:
-    'The provider address is not valid. Enter the full https address of the provider’s issuer, without a query or #, for example https://login.example.org/realms/ume.',
+    'The provider address is not valid. Enter the full https address of the provider’s issuer, without a query or #, for example https://login.example.org/realms/fors.',
   authority_unreachable:
     'The admin API could not reach the provider address. Check the address, and that the admin API can reach the provider through the network and any proxy.',
   tls: 'The admin API does not trust the provider’s certificate. Add the provider’s certificate authority to the admin API’s trusted certificates, or check the address.',
@@ -356,7 +356,7 @@ export function setupTestReasonText(reason: string | null | undefined): string {
 
 /**
  * The reasons `POST /bff/setup/complete` refuses to save with (`setup_test_required`): `SetupService.CompleteAsync` in
- * src/Ume.LlmGateway.AdminApi/Setup/SetupService.cs. Keep this list equal to it.
+ * src/Fors.AdminApi/Setup/SetupService.cs. Keep this list equal to it.
  */
 export const SETUP_COMPLETE_REASONS = ['unknown_test', 'not_latest', 'not_passed', 'not_gateway_admin', 'values_changed'] as const
 export type SetupCompleteReason = (typeof SETUP_COMPLETE_REASONS)[number]
