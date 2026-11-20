@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.12.1 - 2026-11-20
+
+Patch release: a gateway upgraded from 0.11 reads its stored secrets again. No migration, no configuration change.
+**Rolling update: yes** from 0.12.0; from 0.11 as for 0.12.0 ([upgrade guide](docs/upgrade-guide.md#0121-stored-secrets-readable-after-the-rename)).
+
 - **A gateway upgraded from 0.11 reads its stored secrets again** (#116): 0.12.0 renamed the Data Protection
   application name and purposes, so the provider credentials and the sign-in client secret saved in the setup wizard no
   longer unprotected after an in-place upgrade. They keep their names from before the rename now (`Ume.LlmGateway`,

@@ -11,6 +11,17 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
+## 0.12.1: stored secrets readable after the rename
+
+- **Rolling update: yes** from 0.12.0. No migration, no configuration change. From 0.11, upgrade straight to 0.12.1 and
+  follow the 0.12.0 steps below (rolling update: no); skip 0.12.0.
+- **What 0.12.0 broke:** it renamed the Data Protection application name and purposes, so after an in-place upgrade from
+  0.11 the provider credentials and the sign-in client secret saved in the setup wizard no longer unprotected
+  (thekim1/fors#116). 0.12.1 uses the names from before the rename again, and what 0.11 saved is readable.
+- **If you already run 0.12.0:** after upgrading, enter again the provider credentials and the sign-in client secret
+  you saved or changed under 0.12.0 (in the admin console, or with `FORS_SETUP_REOPEN` and the wizard). Admin sessions
+  started under 0.12.0 end: sign in again.
+
 ## 0.12.0: the rename to Fors
 
 The gateway is now called **Fors**, and the RAG platform that was called Ume.Rag is now **Källa**. Every name that

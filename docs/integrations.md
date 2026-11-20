@@ -223,7 +223,7 @@ chatbot's model picker and the check on save.
 ```json
 {
   "object": "fors.context",
-  "gateway": { "version": "0.12.0", "admin_url": "https://…", "integration_api_url": "https://adminapi:8443/integration/v1",
+  "gateway": { "version": "0.12.1", "admin_url": "https://…", "integration_api_url": "https://adminapi:8443/integration/v1",
                "organisation_name": "Umeå kommun", "oidc_authority": "https://idp.example.se/realms/fors", "features": ["max-residency", "model-facts", "integrations"] },
   "key": { "id": "…", "name": "Källa api", "prefix": "fors-sk-AbC1", "team_id": "…", "integration_role": "Credential",
            "integration_scopes": ["usage.read"], "require_max_residency": true, "allowed_residencies": [] },
