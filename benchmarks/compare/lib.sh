@@ -34,15 +34,25 @@ container_stats() {
     python3 -c 'import json,sys; s=json.load(sys.stdin); print(s["cpu_stats"]["cpu_usage"]["total_usage"], s["memory_stats"].get("usage", 0))'
 }
 
+# Rows the platform has stored per message so far: the gateway's usage records, Bifrost's request logs. Bifrost drops a
+# log entry when its write queue is full (plugins/logging/writer.go), so rows per request show whether all were logged.
+records_of() { case "$1" in ume) echo 'SELECT count(*) FROM "UsageRecords"' ;; bifrost) echo 'SELECT count(*) FROM logs' ;; esac; }
+stored_records() {
+  local q; q=$(records_of "$1"); [[ -n "$q" ]] || return 1
+  read -r svc db < <(db_of "$1")
+  "${COMPOSE[@]}" exec -T "$svc" psql -U postgres -d "$db" -tAc "$q"
+}
+
 # Postgres statements and Redis commands executed so far (everything: request path and background work).
-db_of() { case "$1" in ume) echo "ume-db gatewaydb" ;; eneo) echo "eneo-db eneo" ;; esac; }
-redis_of() { case "$1" in ume) echo ume-redis ;; eneo) echo eneo-redis ;; esac; }
+db_of() { case "$1" in ume) echo "ume-db gatewaydb" ;; eneo) echo "eneo-db eneo" ;; bifrost) echo "bifrost-db bifrost" ;; esac; }
+redis_of() { case "$1" in ume) echo ume-redis ;; eneo) echo eneo-redis ;; esac; } # Bifrost has no Redis: reported as null
 pg_calls() {
   read -r svc db < <(db_of "$1")
   "${COMPOSE[@]}" exec -T "$svc" psql -U postgres -d "$db" -tAc \
     "SELECT coalesce(sum(calls), 0) FROM pg_stat_statements WHERE query NOT ILIKE '%pg_stat_statements%'"
 }
 redis_calls() {
+  [[ -n "$(redis_of "$1")" ]] || return 1
   "${COMPOSE[@]}" exec -T "$(redis_of "$1")" redis-cli INFO stats | tr -d '\r' | awk -F: '/^total_commands_processed/ {print $2}'
 }
 
@@ -50,18 +60,22 @@ services_for() {
   case "$1" in
     ume) echo "ume-gateway $(for i in $(seq 2 "${REPLICAS:-1}"); do printf 'ume-gateway-%s ' "$i"; done)ume-db ume-redis fake-llm" ;;
     eneo) echo "eneo-backend eneo-worker eneo-db eneo-redis fake-llm" ;;
+    bifrost) echo "bifrost bifrost-db fake-llm" ;;
     fake) echo "fake-llm" ;;
   esac
 }
 
 k6() { # target stream vus duration out
   "${COMPOSE[@]}" --profile tools run --rm -e TARGET="$1" -e STREAM="$2" -e VUS="$3" -e DURATION="$4" -e OUT="$5" -e KEY="${KEY:-}" -e NO_REUSE="${NO_REUSE:-false}" -e UME_TARGETS="${UME_TARGETS:-}" \
-    -e ENEO_ASSISTANT="${ENEO_ASSISTANT:-}" -e ENEO_KEY="${ENEO_KEY:-}" \
+    -e ENEO_ASSISTANT="${ENEO_ASSISTANT:-}" -e ENEO_KEY="${ENEO_KEY:-}" -e BIFROST_MODEL="${BIFROST_MODEL:-fake-chat}" \
     k6 run -q /scripts/chat.js 2>&1 | grep -vE '^\s*$|level=warn' || true
 }
 
+# The virtual key in bifrost/config.json (prefix sk-bf-, plugins/governance/main.go).
+BIFROST_KEY="sk-bf-compare-0123456789abcdef"
+
 start_platform() {
-  "${COMPOSE[@]}" --profile ume --profile eneo down -v --remove-orphans >/dev/null 2>&1 || true
+  "${COMPOSE[@]}" --profile ume --profile eneo --profile bifrost down -v --remove-orphans >/dev/null 2>&1 || true
   case "$1" in
     fake)
       "${COMPOSE[@]}" up -d fake-llm >/dev/null
@@ -97,31 +111,46 @@ start_platform() {
         [[ "$ENEO_KEY" == sk_* ]] || { echo "Creating the eneo service API key failed" >&2; exit 1; }
       fi
       ;;
+    bifrost)
+      # bifrost/config.json seeds everything on first start (providers, virtual key, budgets, rate limit, prices).
+      "${COMPOSE[@]}" --profile bifrost up -d --wait bifrost-db fake-llm >/dev/null
+      "${COMPOSE[@]}" exec -T bifrost-db psql -U postgres -d bifrost -qc "CREATE EXTENSION IF NOT EXISTS pg_stat_statements" >/dev/null
+      "${COMPOSE[@]}" --profile bifrost up -d bifrost >/dev/null
+      wait_http http://127.0.0.1:18100/health '^200$'
+      KEY="$BIFROST_KEY"
+      if [[ ${BIFROST_CONFIG:-config.json} == config-bare.json ]]; then KEY=""; fi # no key store: a key would be refused
+      ;;
   esac
 }
 
 # Runs one k6 scenario and stores CPU (per container), memory, Postgres statements and Redis commands next to the
 # k6 summary: results/<out>.json and results/<out>.cpu.json. <out> may contain a subfolder.
 measure() { # platform stream vus duration out
-  local platform=$1 out=$5 s cpu mem first pg_before=0 pg_after=0 redis_before=0 redis_after=0
-  local -A before=()
+  local platform=$1 out=$5 s cpu mem first pg_before=0 pg_after=0 redis_before=0 redis_after=0 records_before records_after
+  local -A before=() after=()
   results_dir "results/$(dirname "$out")"
+  # Stored rows are counted outside the CPU and statement windows, so the count itself is never measured.
+  records_before=$(stored_records "$platform" 2>/dev/null || true)
   for s in $(services_for "$platform"); do before[$s]=$(container_stats "$s" | cut -d' ' -f1); done
   # A failed probe (e.g. Postgres out of connections) must not abort the run: the count is then reported as null.
   if [[ $platform != fake ]]; then pg_before=$(pg_calls "$platform" || true); redis_before=$(redis_calls "$platform" || true); fi
   k6 "$platform" "$2" "$3" "$4" "$out"
-  sleep 3 # let background writers (usage records) catch up so their statements are counted
+  # Let background writers catch up so their statements are counted: the gateway's usage records (50 ms batches), Bifrost's
+  # log batches (at most every 5 s, plugins/logging) and its counter dump to the config store (every 10 s, governance/tracker.go).
+  if [[ $platform == bifrost ]]; then sleep 11; else sleep 3; fi
   if [[ $platform != fake ]]; then pg_after=$(pg_calls "$platform" || true); redis_after=$(redis_calls "$platform" || true); fi
+  for s in $(services_for "$platform"); do after[$s]=$(container_stats "$s"); done
+  records_after=$(stored_records "$platform" 2>/dev/null || true)
   {
     echo "{"
     first=1
     for s in $(services_for "$platform"); do
-      read -r cpu mem < <(container_stats "$s")
+      read -r cpu mem <<< "${after[$s]}"
       [[ $first == 1 ]] || echo ","
       first=0
       printf '"%s": {"cpu_ns": %s, "memory_bytes": %s}' "$s" "$((cpu - before[$s]))" "$mem"
     done
-    printf ', "pg_statements": %s, "redis_commands": %s\n' "$(delta "$pg_before" "$pg_after" 0)" "$(delta "$redis_before" "$redis_after" 1)"
+    printf ', "pg_statements": %s, "redis_commands": %s, "records_stored": %s\n' "$(delta "$pg_before" "$pg_after" 0)" "$(delta "$redis_before" "$redis_after" 1)" "$(delta "$records_before" "$records_after" 0)"
     echo "}"
   } > "results/$out.cpu.json"
 }
@@ -133,6 +162,7 @@ delta() { # before after correction → after-before-correction, or null if a pr
 warm_up() { # platform
   k6 "$1" false 8 "$WARMUP" "warmup-$1" >/dev/null
   k6 "$1" true 8 "$WARMUP" "warmup-$1" >/dev/null
+  if [[ $1 == bifrost ]]; then sleep 11; fi # its warm-up log rows and counter dump land before the first scenario
 }
 
-stop_all() { "${COMPOSE[@]}" --profile ume --profile eneo down -v --remove-orphans >/dev/null 2>&1 || true; }
+stop_all() { "${COMPOSE[@]}" --profile ume --profile eneo --profile bifrost down -v --remove-orphans >/dev/null 2>&1 || true; }

@@ -1,5 +1,6 @@
-# Side-by-side performance comparison: the Ume LLM gateway and eneo (ENEO_VERSION, default v2.2.3) against the SAME fake LLM, so only the
-# platforms themselves are measured. Driven by run.sh, which starts one platform at a time (profiles `ume` / `eneo`).
+# Side-by-side performance comparison: the Ume LLM gateway, Bifrost (BIFROST_VERSION, default v2.5.1) and eneo (ENEO_VERSION,
+# default v2.2.3) against the SAME fake LLM, so only the platforms themselves are measured. Driven by run.sh, which starts one
+# platform at a time (profiles `ume` / `bifrost` / `eneo`).
 #
 # CPU pinning keeps the components from competing; the layout is set in lib.sh (application 8-11, Postgres 12-13,
 # Redis 14-15, fake LLM 0-3, load generator 4-7) and shared by run.sh, scale.sh and latency.sh. Both platforms get
@@ -185,6 +186,45 @@ services:
     environment:
       <<: *eneo-env
       RUN_AS_WORKER: "true"
+
+  # ---------- Bifrost (official image, pinned release; see README.md) ----------
+  # Config and logs stores in Postgres on the Postgres cores, as the Ume gateway's database. Bifrost has no Redis: its
+  # rate-limit and budget counters live in process memory and are written to the config store every 10 s
+  # (plugins/governance/tracker.go). BIFROST_CONFIG=config-bare.json runs the bare proxy (no stores, no governance).
+  bifrost-db:
+    profiles: [bifrost]
+    image: postgres:17-alpine
+    <<: *pg-cpus
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "max_connections=500"]
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: bifrost
+    tmpfs: [/var/lib/postgresql/data]
+    ports: ["127.0.0.1:16432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bifrost"]
+      interval: 2s
+      retries: 30
+
+  bifrost:
+    profiles: [bifrost]
+    image: maximhq/bifrost:${BIFROST_VERSION:-v2.5.1}
+    <<: *app-cpus
+    depends_on:
+      bifrost-db: { condition: service_healthy }
+    environment:
+      # automaxprocs (transports/bifrost-http/main.go) follows CPU quotas, not CPU sets: set the vCPUs explicitly.
+      # scale.sh sets NUM_WORKERS to the number of application hardware threads.
+      GOMAXPROCS: "${NUM_WORKERS:-4}"
+      # The image's defaults (Dockerfile): info level, JSON lines.
+      LOG_LEVEL: "${BIFROST_LOG_LEVEL:-info}"
+      LOG_STYLE: json
+      # Set in the shell to read the admin API (e.g. GET /api/logs/dropped with X-Bifrost-Setup-Token); unset by default.
+      BIFROST_SETUP_TOKEN:
+    volumes:
+      - ./bifrost/${BIFROST_CONFIG:-config.json}:/app/data/config.json:ro
+    tmpfs: [/app/data/logs]
+    ports: ["127.0.0.1:18100:8080"]
 
   # ---------- load generator ----------
   k6:

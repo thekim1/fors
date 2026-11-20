@@ -5,8 +5,9 @@ import os
 import sys
 from pathlib import Path
 
-NAMES = {"fake": "Fake LLM directly (floor)", "ume": "Ume LLM gateway", "eneo": f"eneo {os.environ.get('ENEO_VERSION', 'v2.2.3')}"}
-APP = {"ume": "ume-gateway", "eneo": "eneo-backend"}
+NAMES = {"fake": "Fake LLM directly (floor)", "ume": "Ume LLM gateway", "bifrost": f"Bifrost {os.environ.get('BIFROST_VERSION', 'v2.5.1')}",
+         "eneo": f"eneo {os.environ.get('ENEO_VERSION', 'v2.2.3')}"}
+APP = {"ume": "ume-gateway", "bifrost": "bifrost", "eneo": "eneo-backend"}
 
 
 def main(folder: Path) -> None:
@@ -32,7 +33,7 @@ def main(folder: Path) -> None:
     print("| Clients | Platform | Streams/s | Errors | TTFT p50 | TTFT p95 | TTFT p99 | TTFT added | Gap p50 | Gap p99 | Gap max | Max gap per stream p95 | Gaps ≥ 250 ms | Gaps ≥ 1 s | Whole stream p50 | Whole p95 | Whole added | CPU ms/stream (app) |")
     print("|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for vus in sorted({r["vus"] for r in runs}):
-        for target in ("fake", "ume", "eneo"):
+        for target in ("fake", "ume", "bifrost", "eneo"):
             run = next((r for r in runs if r["target"] == target and r["vus"] == vus), None)
             if run is None:
                 continue

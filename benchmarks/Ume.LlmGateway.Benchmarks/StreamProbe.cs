@@ -11,9 +11,9 @@ namespace Ume.LlmGateway.Benchmarks;
 /// <summary>
 /// What a streaming client experiences, which k6 cannot show (it buffers the whole body): time to the response headers,
 /// time to the first token, the gaps between the events that follow, and the whole stream. <c>VUS</c> clients send
-/// streamed chat messages back to back for the given time against the fake LLM directly, the Ume gateway or eneo
+/// streamed chat messages back to back for the given time against the fake LLM directly, the Ume gateway, Bifrost or eneo
 /// (the same requests as <c>benchmarks/compare/k6/chat.js</c>), and the summary is written as JSON.
-/// <code>stream-probe &lt;fake|ume|eneo&gt; &lt;base url&gt; &lt;vus&gt; &lt;seconds&gt; &lt;out.json&gt; [ume key]</code>
+/// <code>stream-probe &lt;fake|ume|bifrost|eneo&gt; &lt;base url&gt; &lt;vus&gt; &lt;seconds&gt; &lt;out.json&gt; [ume or bifrost key]</code>
 /// <c>PROBE_PAYLOAD=document</c> sends a realistic long conversation instead of one question (see <see cref="Document"/>).
 /// For eneo, <c>ENEO_KEY</c> and <c>ENEO_ASSISTANT</c> send messages through a service API key, as k6/chat.js does.
 /// </summary>
@@ -84,15 +84,16 @@ public static class StreamProbe
     {
         switch (target)
         {
-            case "fake" or "ume":
+            case "fake" or "ume" or "bifrost":
                 var chat = new JsonObject
                 {
+                    // Bifrost: no provider prefix, so its virtual key's providers route the request (as k6/chat.js).
                     ["model"] = target == "ume" ? "ume/chat" : "fake-chat",
                     ["messages"] = document ? Document.Messages() : new JsonArray(new JsonObject { ["role"] = "user", ["content"] = Question }),
                     ["max_tokens"] = document ? 1500 : 400,
                     ["stream"] = true,
                 };
-                return ("v1/chat/completions", chat.ToJsonString(), target == "ume" ? h => h.Authorization = new AuthenticationHeaderValue("Bearer", key) : null);
+                return ("v1/chat/completions", chat.ToJsonString(), target is "ume" or "bifrost" ? h => h.Authorization = new AuthenticationHeaderValue("Bearer", key) : null);
             case "eneo" when Environment.GetEnvironmentVariable("ENEO_KEY") is { Length: > 0 } eneoKey:
                 return ("conversations/", new JsonObject
                 {

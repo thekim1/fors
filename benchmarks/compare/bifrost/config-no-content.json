@@ -1,0 +1,161 @@
+{
+  "$schema": "https://www.getbifrost.ai/schema",
+  "config_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": {
+      "host": "bifrost-db",
+      "port": "5432",
+      "user": "postgres",
+      "password": "postgres",
+      "db_name": "bifrost",
+      "ssl_mode": "disable"
+    }
+  },
+  "logs_store": {
+    "enabled": true,
+    "type": "postgres",
+    "config": {
+      "host": "bifrost-db",
+      "port": "5432",
+      "user": "postgres",
+      "password": "postgres",
+      "db_name": "bifrost",
+      "ssl_mode": "disable"
+    }
+  },
+  "client": {
+    "enable_logging": true,
+    "enforce_auth_on_inference": true,
+    "disable_content_logging": true
+  },
+  "providers": {
+    "openai": {
+      "keys": [
+        {
+          "name": "primary",
+          "value": "fake-key",
+          "models": [
+            "*"
+          ],
+          "weight": 1
+        }
+      ],
+      "network_config": {
+        "base_url": "http://fake-llm:8080",
+        "allow_private_network": true,
+        "default_request_timeout_in_seconds": 60
+      }
+    },
+    "fallback": {
+      "custom_provider_config": {
+        "base_provider_type": "openai"
+      },
+      "keys": [
+        {
+          "name": "fallback",
+          "value": "fake-key",
+          "models": [
+            "*"
+          ],
+          "weight": 1
+        }
+      ],
+      "network_config": {
+        "base_url": "http://fake-llm:8080",
+        "allow_private_network": true,
+        "default_request_timeout_in_seconds": 60
+      }
+    }
+  },
+  "governance": {
+    "customers": [
+      {
+        "id": "cust-bench",
+        "name": "Bench department"
+      }
+    ],
+    "teams": [
+      {
+        "id": "team-bench",
+        "name": "Bench",
+        "customer_id": "cust-bench"
+      }
+    ],
+    "virtual_keys": [
+      {
+        "id": "vk-bench",
+        "name": "bench",
+        "value": "sk-bf-compare-0123456789abcdef",
+        "is_active": true,
+        "team_id": "team-bench",
+        "rate_limit_id": "rl-vk-bench",
+        "provider_configs": [
+          {
+            "provider": "openai",
+            "weight": 1,
+            "allowed_models": [
+              "*"
+            ],
+            "key_ids": [
+              "*"
+            ]
+          },
+          {
+            "provider": "fallback",
+            "weight": 0,
+            "allowed_models": [
+              "*"
+            ],
+            "key_ids": [
+              "*"
+            ]
+          }
+        ]
+      }
+    ],
+    "rate_limits": [
+      {
+        "id": "rl-vk-bench",
+        "request_max_limit": 100000000,
+        "request_reset_duration": "1m",
+        "token_max_limit": 2000000000,
+        "token_reset_duration": "1m"
+      }
+    ],
+    "budgets": [
+      {
+        "id": "b-vk-bench",
+        "max_limit": 1000000000,
+        "reset_duration": "1M",
+        "virtual_key_id": "vk-bench"
+      },
+      {
+        "id": "b-team-bench",
+        "max_limit": 1000000000,
+        "reset_duration": "1M",
+        "team_id": "team-bench"
+      },
+      {
+        "id": "b-cust-bench",
+        "max_limit": 1000000000,
+        "reset_duration": "1M",
+        "customer_id": "cust-bench"
+      }
+    ],
+    "pricing_overrides": [
+      {
+        "id": "po-fake-chat",
+        "name": "fake-chat at the Ume seed's prices",
+        "scope_kind": "global",
+        "match_type": "exact",
+        "pattern": "fake-chat",
+        "request_types": [
+          "chat_completion",
+          "chat_completion_stream"
+        ],
+        "pricing_patch": "{\"input_cost_per_token\":0.0000025,\"output_cost_per_token\":0.00001}"
+      }
+    ]
+  }
+}

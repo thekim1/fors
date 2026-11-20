@@ -1,0 +1,13 @@
+{
+  "$schema": "https://www.getbifrost.ai/schema",
+  "client": {
+    "enable_logging": false,
+    "enforce_auth_on_inference": false
+  },
+  "providers": {
+    "openai": {
+      "keys": [{ "name": "primary", "value": "fake-key", "models": ["*"], "weight": 1 }],
+      "network_config": { "base_url": "http://fake-llm:8080", "allow_private_network": true, "default_request_timeout_in_seconds": 60 }
+    }
+  }
+}
