@@ -11,7 +11,7 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
-## Unreleased (0.12.0): the rename to Fors
+## 0.12.0: the rename to Fors
 
 The gateway is now called **Fors**, and the RAG platform that was called Ume.Rag is now **Källa**. Every name that
 said "ume" changes: the projects and namespaces (`Fors.*`), the variables, the headers, the key prefix, the database

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.12.0 - 2026-11-20
+
+The rename to Fors: the gateway is now **Fors** and the RAG platform Ume.Rag is **Källa**, every "ume" name becomes
+"fors" (variables, headers, keys, the context path, database roles, Redis keys, metrics, images, the repository
+thekim1/fors), and the licence is **Apache-2.0**. The old keys, headers, context path and model facts keep working
+until 0.13. Migration `ForsRename`. **Rolling update: no.** `deploy/upgrade/upgrade-to-0.12.sh` upgrades a Compose
+installation; Portainer and Kubernetes steps are in the [upgrade guide](docs/upgrade-guide.md#0120-the-rename-to-fors)
+(thekim1/fors#114, #115).
+
 - **The website has the admin console's mark:** the favicon and the header logo show the hub icon instead of a "U".
 - **The gateway is now called Fors** (and the RAG platform Ume.Rag is now Källa, thekim1/ume-rag-platform#899). Every
   "ume" name changes: the projects and namespaces (`Fors.*`, `Fors.slnx`), the variables `UME_*` → `FORS_*`, the
@@ -15,12 +24,12 @@
   name `UME_PROVIDER_*`. The defaults of the OIDC client (`fors-admin`) and the Data API audience (`fors-data-api`)
   change. The bundled Keycloak's realm and clients are variables, so an existing one keeps realm `ume`. **Rolling
   update: no.** `deploy/upgrade/upgrade-to-0.12.sh` upgrades a Compose installation; Portainer and Kubernetes steps are
-  in the [upgrade guide](docs/upgrade-guide.md#unreleased-0120-the-rename-to-fors).
+  in the [upgrade guide](docs/upgrade-guide.md#0120-the-rename-to-fors).
 - **Licence: Apache-2.0** instead of EUPL-1.2, copyright Kim Vallén and Nichlas Löfdahl. Releases up to 0.11.0 stay
   available under EUPL-1.2.
 - **A key created just after a failed lookup is found at once.** A finished key lookup stayed shared until it was
   removed, so a lookup that started in that moment got the earlier answer (for example "unknown" for a new key) until
-  the key cache expired. Only a running lookup is shared now (found by CI on this pull request).
+  the key cache expired. Only a running lookup is shared now (found by CI on thekim1/fors#114).
 - **The default owner code of a manifest drops accents:** å, ä and ö count as a, a and o, so a name such as
   `Ålesund.Rag` gets the code `alesund-rag` (0.11 made `lesund-rag`). The preset `kalla.json` names its integration
   `Kalla`; rename an existing `Ume.Rag` integration to `Kalla` before provisioning from it.

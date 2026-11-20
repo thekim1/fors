@@ -1,7 +1,7 @@
 # Fors
 
 An LLM gateway for Swedish municipalities and other organisations. Until 0.11 it was called the Umeå kommun LLM
-gateway (`ume-llm-gateway`); upgrading from it: [upgrade guide](docs/upgrade-guide.md#unreleased-0120-the-rename-to-fors).
+gateway (`ume-llm-gateway`); upgrading from it: [upgrade guide](docs/upgrade-guide.md#0120-the-rename-to-fors).
 
 **Website and documentation: <https://thekim1.github.io/fors/>**
 
