@@ -34,7 +34,7 @@ describe('metadata-only BFF client', () => {
     const onChangeDelayed = vi.fn()
     configureClient({ onChangeDelayed })
     vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(new Response('{}', { headers: { 'Content-Type': 'application/json', 'Ume-Change-Propagation': 'delayed' } }))
+      .mockResolvedValueOnce(new Response('{}', { headers: { 'Content-Type': 'application/json', 'Fors-Change-Propagation': 'delayed' } }))
       .mockResolvedValueOnce(new Response('{}', { headers: { 'Content-Type': 'application/json' } })))
     await request('POST', '/api/keys/1/revoke')
     await request('POST', '/api/keys/2/revoke')

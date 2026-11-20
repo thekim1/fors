@@ -6,10 +6,10 @@
 #   ./deploy/keycloak/init-keycloak.sh --host auth.example.se
 #   ./deploy/keycloak/init-keycloak.sh --renew-certs          re-issue Keycloak's internal certificate only
 #
-#   --host HOST         public hostname of Keycloak (the realm URL is https://HOST/realms/ume)
+#   --host HOST         public hostname of Keycloak (the realm URL is https://HOST/realms/fors)
 #   --port PORT         host port of Keycloak's HTTPS listener (default 11443); a reverse proxy forwards HOST to it
-#   --bind ADDRESS      address that port listens on (default 127.0.0.1, or the gateway's UME_ADMIN_BIND)
-#   --admin-url URL     public URL of the gateway's admin UI (default from deploy/.env), for the ume-admin client
+#   --bind ADDRESS      address that port listens on (default 127.0.0.1, or the gateway's FORS_ADMIN_BIND)
+#   --admin-url URL     public URL of the gateway's admin UI (default from deploy/.env), for the fors-admin client
 #   --no-chown          leave the files owned by you
 set -euo pipefail
 umask 077
@@ -38,21 +38,21 @@ command -v openssl >/dev/null || die "openssl is required"
 [ -f "$gateway_env" ] || die "$gateway_env not found: run deploy/init-deployment.sh first"
 # shellcheck disable=SC1090
 . "$gateway_env"
-certs="${UME_CERTS_DIR:?UME_CERTS_DIR missing in $gateway_env}"; secrets="${UME_SECRETS_DIR:?UME_SECRETS_DIR missing in $gateway_env}"
+certs="${FORS_CERTS_DIR:?FORS_CERTS_DIR missing in $gateway_env}"; secrets="${FORS_SECRETS_DIR:?FORS_SECRETS_DIR missing in $gateway_env}"
 if [ -f "$env_file" ]; then
   # shellcheck disable=SC1090
   . "$env_file"
   # A re-run keeps what an earlier run chose unless an option says otherwise.
-  host="${host:-${UME_KEYCLOAK_HOST:-}}"; admin_url="${admin_url:-${UME_ADMIN_PUBLIC_URL:-}}"
-  port="${port:-${UME_KEYCLOAK_PORT:-}}"; bind="${bind:-${UME_KEYCLOAK_BIND:-}}"
+  host="${host:-${FORS_KEYCLOAK_HOST:-}}"; admin_url="${admin_url:-${FORS_ADMIN_PUBLIC_URL:-}}"
+  port="${port:-${FORS_KEYCLOAK_PORT:-}}"; bind="${bind:-${FORS_KEYCLOAK_BIND:-}}"
 fi
 port="${port:-11443}"
 [ -n "$host" ] || die "--host is required (the public hostname of Keycloak)"
-[ -n "$bind" ] || bind="${UME_ADMIN_BIND:-127.0.0.1}"
+[ -n "$bind" ] || bind="${FORS_ADMIN_BIND:-127.0.0.1}"
 if [ -z "$admin_url" ]; then
-  admin_url="https://${UME_ADMIN_PUBLIC_HOST:?UME_ADMIN_PUBLIC_HOST missing in $gateway_env}"
+  admin_url="https://${FORS_ADMIN_PUBLIC_HOST:?FORS_ADMIN_PUBLIC_HOST missing in $gateway_env}"
   # Without a proxy the admin UI has its own port (init-deployment.sh writes the hostname only).
-  [ "${UME_ADMIN_BIND:-127.0.0.1}" = 0.0.0.0 ] || admin_url="$admin_url:${UME_ADMIN_PORT:-9443}"
+  [ "${FORS_ADMIN_BIND:-127.0.0.1}" = 0.0.0.0 ] || admin_url="$admin_url:${FORS_ADMIN_PORT:-9443}"
 fi
 case "$admin_url" in https://*) ;; *) die "--admin-url must be an https:// URL";; esac
 
@@ -81,7 +81,7 @@ if ! openssl pkcs12 -export -nokeys -in "$certs/ca.pem" -jdktrust anyExtendedKey
   rm -f "$store"
   image="$(sed -n 's/^FROM \(.*\)$/\1/p' "$here/Dockerfile")"
   command -v docker >/dev/null || die "need OpenSSL 3.2 or later, or Docker, to write the trust store"
-  docker run --rm --user "$(id -u):$(id -g)" -v "$certs:/certs" --entrypoint keytool "$image" -importcert -noprompt -alias ume-internal-ca \
+  docker run --rm --user "$(id -u):$(id -g)" -v "$certs:/certs" --entrypoint keytool "$image" -importcert -noprompt -alias fors-internal-ca \
     -file /certs/ca.pem -keystore /certs/keycloak-import/truststore.p12 -storetype PKCS12 -storepass changeit >/dev/null \
     || die "could not write the trust store with keytool"
 fi
@@ -92,14 +92,14 @@ mkdir -p "$secrets/keycloak" "$secrets/keycloak-import/config" "$secrets/postgre
 new_file "$secrets/keycloak/db_password" && rand > "$secrets/keycloak/db_password"
 new_file "$secrets/keycloak/admin_password" && rand > "$secrets/keycloak/admin_password"
 new_file "$secrets/keycloak/import_client_secret" && rand > "$secrets/keycloak/import_client_secret"
-# Postgres creates the role ume_keycloak with this password (postgres/init.sql or add-keycloak-database.sql).
+# Postgres creates the role fors_keycloak with this password (postgres/init.sql or add-keycloak-database.sql).
 cp "$secrets/keycloak/db_password" "$secrets/postgres/keycloak_password"
 tr -d '\r\n' < "$secrets/keycloak/import_client_secret" > "$secrets/keycloak-import/config/keycloak.client-secret"
 # The admin UI's confidential client: one secret, used by the admin API and set on the client by the realm file.
 if [ ! -s "$secrets/adminapi/Oidc__ClientSecret" ]; then
   mkdir -p "$secrets/adminapi"; rand | tr -d '\n' > "$secrets/adminapi/Oidc__ClientSecret"
 fi
-tr -d '\r\n' < "$secrets/adminapi/Oidc__ClientSecret" > "$secrets/keycloak-import/ume-admin-client-secret"
+tr -d '\r\n' < "$secrets/adminapi/Oidc__ClientSecret" > "$secrets/keycloak-import/admin-client-secret"
 
 # --- Ownership: Keycloak runs as 1000, the import job as 65534, Postgres as 70 ----------------------------------------
 chown_todo=()
@@ -116,20 +116,25 @@ own 1654:1654 "$secrets/adminapi/Oidc__ClientSecret"
 
 # --- deploy/keycloak/.env ------------------------------------------------------------------------------------------
 cat > "$env_file" <<EOF
-# Settings for deploy/keycloak/compose.yaml (docs/keycloak.md). Secrets live in UME_SECRETS_DIR.
-UME_CERTS_DIR=$certs
-UME_SECRETS_DIR=$secrets
-UME_KEYCLOAK_HOST=$host
-UME_KEYCLOAK_BIND=$bind
-UME_KEYCLOAK_PORT=$port
-UME_ADMIN_PUBLIC_URL=$admin_url
-# The gateway project's internal network, where Postgres is (compose project ume-gateway).
-# UME_GATEWAY_DATA_NETWORK=ume-gateway_data
+# Settings for deploy/keycloak/compose.yaml (docs/keycloak.md). Secrets live in FORS_SECRETS_DIR.
+FORS_CERTS_DIR=$certs
+FORS_SECRETS_DIR=$secrets
+FORS_KEYCLOAK_HOST=$host
+FORS_KEYCLOAK_BIND=$bind
+FORS_KEYCLOAK_PORT=$port
+FORS_ADMIN_PUBLIC_URL=$admin_url
+# The gateway project's internal network, where Postgres is (compose project fors-gateway).
+# FORS_GATEWAY_DATA_NETWORK=fors-gateway_data
+# The realm, the admin console's client and the import client (an installation from before Fors keeps ume, ume-admin and
+# ume-realm-import; docs/upgrade-guide.md). Kept on a re-run.
+${FORS_KEYCLOAK_REALM:+FORS_KEYCLOAK_REALM=$FORS_KEYCLOAK_REALM}${FORS_KEYCLOAK_REALM:-# FORS_KEYCLOAK_REALM=fors}
+${FORS_KEYCLOAK_ADMIN_CLIENT_ID:+FORS_KEYCLOAK_ADMIN_CLIENT_ID=$FORS_KEYCLOAK_ADMIN_CLIENT_ID}${FORS_KEYCLOAK_ADMIN_CLIENT_ID:-# FORS_KEYCLOAK_ADMIN_CLIENT_ID=fors-admin}
+${FORS_KEYCLOAK_IMPORT_CLIENT_ID:+FORS_KEYCLOAK_IMPORT_CLIENT_ID=$FORS_KEYCLOAK_IMPORT_CLIENT_ID}${FORS_KEYCLOAK_IMPORT_CLIENT_ID:-# FORS_KEYCLOAK_IMPORT_CLIENT_ID=fors-realm-import}
 # Other systems' realm files (applied after realm/*.json) and the values of their \$(env:...) placeholders:
-# UME_KEYCLOAK_ADDITIONS_DIR=/srv/keycloak-additions
-# UME_KEYCLOAK_IMPORT_ENV=/srv/keycloak-additions/import.env
-# UME_KEYCLOAK_MEMORY=1536m
-# UME_KEYCLOAK_MAX_QUEUED_REQUESTS=1000
+# FORS_KEYCLOAK_ADDITIONS_DIR=/srv/keycloak-additions
+# FORS_KEYCLOAK_IMPORT_ENV=/srv/keycloak-additions/import.env
+# FORS_KEYCLOAK_MEMORY=1536m
+# FORS_KEYCLOAK_MAX_QUEUED_REQUESTS=1000
 EOF
 
 cat <<EOF
@@ -147,8 +152,8 @@ Next steps (docs/keycloak.md):
          psql -U postgres -v ON_ERROR_STOP=1 -f /dev/stdin < deploy/postgres/add-keycloak-database.sql
      (mount secrets/postgres/keycloak_password first: it is read from /run/postgres-secrets).
   2. docker compose -f deploy/keycloak/compose.yaml --env-file deploy/keycloak/.env up -d --build --wait
-  3. Point the gateway at it: UME_OIDC_AUTHORITY=https://$host/realms/ume in deploy/.env, then restart the admin API.
+  3. Point the gateway at it: FORS_OIDC_AUTHORITY=https://$host/realms/${FORS_KEYCLOAK_REALM:-fors} in deploy/.env, then restart the admin API.
   4. Forward https://$host to $bind:$port in your reverse proxy (X-Forwarded-* headers, docs/keycloak.md).
-  5. Sign in to https://$host/admin as ${UME_KEYCLOAK_ADMIN_USER:-bootstrap-admin} (password in $secrets/keycloak/admin_password),
+  5. Sign in to https://$host/admin as ${FORS_KEYCLOAK_ADMIN_USER:-bootstrap-admin} (password in $secrets/keycloak/admin_password),
      create personal admin accounts and delete the bootstrap admin.
 EOF

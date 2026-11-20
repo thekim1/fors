@@ -7,7 +7,7 @@ const suffix = () => crypto.randomUUID().slice(0, 8)
 const marker = (s: string) => `headers["x-e2e"] == "${s}"`
 
 async function createRule(page: Page, body: Record<string, unknown>): Promise<string> {
-  const response = await mutate(page, '/api/routing-rules', { targets: [{ model: 'ume/chat-onprem', weight: 1 }], scope: 'Global', ...body })
+  const response = await mutate(page, '/api/routing-rules', { targets: [{ model: 'fors/chat-onprem', weight: 1 }], scope: 'Global', ...body })
   expect(response.status(), await response.text()).toBe(201)
   return (await response.json()).id
 }
@@ -25,7 +25,7 @@ test('server errors land on the right fields', async ({ page }) => {
 
   // Duplicate name for the same owner: the 409 is shown at the top of the form and the drawer stays open.
   await drawer.getByLabel('Title', { exact: true }).fill('Premium via header')
-  await drawer.locator('#rule-target-0').fill('ume/chat-onprem')
+  await drawer.locator('#rule-target-0').fill('fors/chat-onprem')
   await create.click()
   await expect(drawer.getByText('There is already a global rule with the same name.')).toBeVisible()
   await expect(drawer).toBeVisible()
@@ -37,14 +37,14 @@ test('server errors land on the right fields', async ({ page }) => {
   await expect(drawer.getByText(/Unknown model or alias: no\/such-model/)).toBeVisible()
 
   // A scope without an owner: the owner field.
-  await drawer.locator('#rule-target-0').fill('ume/chat-onprem')
+  await drawer.locator('#rule-target-0').fill('fors/chat-onprem')
   await drawer.getByRole('radio', { name: 'Team' }).click()
   await create.click()
   await expect(drawer.locator('#rule-owner')).toHaveAttribute('aria-invalid', 'true')
   await expect(drawer).toBeVisible()
 
   // A bad condition reaches the condition field when the server is asked directly.
-  const bad = await mutate(page, '/api/routing-rules', { name: `Browser rule ${suffix()}`, scope: 'Global', condition: 'headers["x" ==', targets: [{ model: 'ume/chat-onprem', weight: 1 }] })
+  const bad = await mutate(page, '/api/routing-rules', { name: `Browser rule ${suffix()}`, scope: 'Global', condition: 'headers["x" ==', targets: [{ model: 'fors/chat-onprem', weight: 1 }] })
   expect(bad.status()).toBe(400)
   expect(Object.keys((await bad.json()).errors)).toContain('condition')
 })
@@ -85,7 +85,7 @@ test('usage shows the rule that routed a request', async ({ page }) => {
   const name = `Browser rule ${s}`
   const id = await createRule(page, { name, condition: marker(s) })
   try {
-    await expect.poll(async () => (await gatewayCall(page, key.secret, { 'x-e2e': s })).headers()['x-ume-rule']).toBe(id)
+    await expect.poll(async () => (await gatewayCall(page, key.secret, { 'x-e2e': s })).headers()['x-fors-rule']).toBe(id)
     const response = await gatewayCall(page, key.secret, { 'x-e2e': s })
     const requestId = response.headers()['x-request-id']
     await expect.poll(async () => (await page.request.get(`/api/usage/requests/${requestId}`)).status()).toBe(200)
@@ -205,7 +205,7 @@ test('an expired session on the routing rules page sends the user to sign in', a
   await page.context().clearCookies()
   await page.getByRole('button', { name: 'Test a request' }).click()
   const dialog = page.getByRole('dialog', { name: 'Test a request' })
-  await dialog.getByLabel('Model the client asks for').fill('ume/chat-standard')
+  await dialog.getByLabel('Model the client asks for').fill('fors/chat-standard')
   await dialog.getByRole('button', { name: 'Run test' }).click()
   await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible()
 })

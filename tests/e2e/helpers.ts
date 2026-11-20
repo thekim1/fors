@@ -21,7 +21,7 @@ export function appHostSecret(parameter: string, variable: string): string {
   const directory = process.env.APPDATA
     ? join(process.env.APPDATA, 'Microsoft', 'UserSecrets')
     : join(homedir(), '.microsoft', 'usersecrets')
-  const secrets = JSON.parse(readFileSync(join(directory, 'ume-llm-gateway-apphost-dev', 'secrets.json'), 'utf8').replace(/^\uFEFF/, ''))
+  const secrets = JSON.parse(readFileSync(join(directory, 'fors-apphost-dev', 'secrets.json'), 'utf8').replace(/^\uFEFF/, ''))
   const value: unknown = secrets[`Parameters:${parameter}`]
   if (typeof value !== 'string' || !value) throw new Error(`Start the AppHost to generate development credentials, or set ${variable}.`)
   return value
@@ -31,7 +31,7 @@ function developmentPassword(): string {
   return appHostSecret('dev-user-password', 'E2E_PASSWORD')
 }
 
-const appHost = join(import.meta.dirname, '..', '..', 'src', 'Ume.LlmGateway.AppHost', 'Ume.LlmGateway.AppHost.csproj')
+const appHost = join(import.meta.dirname, '..', '..', 'src', 'Fors.AppHost', 'Fors.AppHost.csproj')
 
 function aspire(...args: string[]): string {
   return execFileSync('aspire', [...args, '--apphost', appHost, '--non-interactive'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 60_000 })
@@ -55,7 +55,7 @@ export function keycloakAuthority(): string {
   // Not the management endpoint (internal): the one the realm is served on.
   const url = resources.find(resource => resource.name?.startsWith('keycloak'))?.urls?.find(candidate => !candidate.isInternal)?.url
   if (!url) throw new Error('No keycloak resource in the running AppHost: set E2E_OIDC_AUTHORITY.')
-  return `${url.replace(/\/$/, '')}/realms/ume`
+  return `${url.replace(/\/$/, '')}/realms/fors`
 }
 
 /** Sets a secret field's value without a locator fill, which a failed assertion would show in its call log. */
@@ -162,19 +162,19 @@ export async function gatewayCall(page: Page, secret: string, headers: Record<st
   const catalogue = await (await page.request.get('/api/catalog')).json()
   return page.request.post(`${catalogue.gatewayBaseUrl}/v1/chat/completions`, {
     headers: { Authorization: `Bearer ${secret}`, ...headers },
-    data: { model: 'ume/chat-standard', messages: [{ role: 'user', content: 'Synthetic routing rule check' }], max_tokens: 16 },
+    data: { model: 'fors/chat-standard', messages: [{ role: 'user', content: 'Synthetic routing rule check' }], max_tokens: 16 },
   })
 }
 
-/** The x-ume-rule header of a request that carries the marker header, or null when no rule applied. */
+/** The x-fors-rule header of a request that carries the marker header, or null when no rule applied. */
 export async function appliedRule(page: Page, secret: string, marker: string): Promise<string | null> {
   const response = await gatewayCall(page, secret, { 'x-e2e': marker })
   expect(response.status()).toBe(200)
-  return response.headers()['x-ume-rule'] ?? null
+  return response.headers()['x-fors-rule'] ?? null
 }
 
 export const themes = ['light', 'dark', 'lumen'] as const
-export const themeStorageKey = 'ume-theme'
+export const themeStorageKey = 'fors-theme'
 
 /** Every page in src/admin-ui/src/router/index.ts, plus the 404 page. Keep in sync with the router. */
 export const pages = ['/', '/usage', '/pii-incidents', '/operations', '/keys', '/organisation', '/catalog',

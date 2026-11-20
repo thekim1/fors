@@ -1,4 +1,4 @@
-# Handover: Umeå kommun LLM Gateway
+# Handover: Fors
 
 Current state for a fresh agent or developer. History lives in git and [CHANGELOG.md](CHANGELOG.md); the design is in
 [docs/architecture.md](docs/architecture.md) and [docs/adr.md](docs/adr.md); the API contract is [docs/admin-api.md](docs/admin-api.md).
@@ -11,11 +11,11 @@ Everything in the original scope and the routing rules feature is implemented, t
 |---|---|
 | Gateway (data plane), Admin API (BFF, RBAC, CRUD, reports, ops, config import/export, audit), MigrationService, FakeLlm | Done |
 | Routing rules (engine, gateway, admin API, admin UI, usage visibility) | Done, see [docs/routing-rules.md](docs/routing-rules.md) |
-| Integrations (platforms such as Ume.Rag; ADR 020, 021) | Done: phases 1 to 3 (integrations, credential and assigned keys, `/v1/ume/context`, model facts, acting as an assigned key within the credential key's residencies, run metadata, stream cost, the Integration API, the scope `organisation.read`, department member groups; in 0.10.2 the organisation name and Integration API address in the context, and provisioning from a manifest by the migration service or from a preset in the admin console, ADR 022; in 0.11.0 the sign-in provider in the context, manifests without an owner and moving an integration with its credential keys). The contract is `docs/openapi/integrations.json`; `IntegrationContract` (test kit) holds the answers to it, so change both together. Webhooks not planned, see [docs/integrations.md](docs/integrations.md#phases) |
-| Setup mode (the admin console's sign-in set in a browser wizard; thekim1/llmgateway#100) | Done in 0.11.0, see [docs/identity-and-roles.md](docs/identity-and-roles.md#setup-mode). A deployment that sets `Oidc:Authority` never sees it. Known gaps: the Data API does not follow the wizard (`UME_DATA_AUTHORITY`); the setup callback limit is shared when `Admin:AuditSourceAddress` is `None` (#105) |
+| Integrations (platforms such as Källa; ADR 020, 021) | Done: phases 1 to 3 (integrations, credential and assigned keys, `/v1/fors/context`, model facts, acting as an assigned key within the credential key's residencies, run metadata, stream cost, the Integration API, the scope `organisation.read`, department member groups; in 0.10.2 the organisation name and Integration API address in the context, and provisioning from a manifest by the migration service or from a preset in the admin console, ADR 022; in 0.11.0 the sign-in provider in the context, manifests without an owner and moving an integration with its credential keys). The contract is `docs/openapi/integrations.json`; `IntegrationContract` (test kit) holds the answers to it, so change both together. Webhooks not planned, see [docs/integrations.md](docs/integrations.md#phases) |
+| Setup mode (the admin console's sign-in set in a browser wizard; thekim1/fors#100) | Done in 0.11.0, see [docs/identity-and-roles.md](docs/identity-and-roles.md#setup-mode). A deployment that sets `Oidc:Authority` never sees it. Known gaps: the Data API does not follow the wizard (`FORS_DATA_AUTHORITY`); the setup callback limit is shared when `Admin:AuditSourceAddress` is `None` (#105) |
 | Admin UI (`src/admin-ui`) | Done: Vue 3, Pinia, Reka UI, Tailwind v4, English, light/dark/Lumen |
 | Aspire AppHost, Compose publish with mandatory hardening, backup/restore | Done; `deploy/Test-Deployment.ps1` passes |
-| Data-plane performance | Benchmarked and optimised, see [docs/performance.md](docs/performance.md) (`benchmarks/Ume.LlmGateway.Benchmarks`) |
+| Data-plane performance | Benchmarked and optimised, see [docs/performance.md](docs/performance.md) (`benchmarks/Fors.Benchmarks`) |
 | Tests | Domain, gateway, admin API, integration (Testcontainers), UI (Vitest) and Playwright e2e (34 tests, own test database via `scripts/Start-E2E.ps1`) all pass |
 
 The project is not a production approval, legal attestation or WCAG certification (see the release gates in
@@ -38,9 +38,16 @@ The project is not a production approval, legal attestation or WCAG certificatio
    other docs from it, so numbers never come from mixed runs. Do not keep older figures anywhere.
 
 7. **Integrations:** possible next steps are in *Other platforms later* in [docs/integrations.md](docs/integrations.md)
-   (webhooks, a platform-wide cap on acted requests). Decisions for Ume.Rag are posted on thekim1/ume-rag-platform#580.
+   (webhooks, a platform-wide cap on acted requests). Decisions for Källa are posted on thekim1/ume-rag-platform#580.
    Department member groups read the token's group claim only (`DepartmentMembership`); a directory lookup for users
    with more groups than fit in a token, and refusing guests or other tenants at sign-in, are not built.
+
+8. **The rename to Fors (0.12.0):** the names from before it are accepted until 0.13 (the upgrade guide's 0.12.0 section).
+   Remove them in 0.13: `VirtualKeyHasher`/`DataApiKeyHasher.LegacyKeyPrefix`, `GatewayHeaders.Legacy` (and its
+   `Read`/`Write` second name, the `: ume-cost-usd=` comment), `GatewayEndpointInfo.LegacyClientPath`, the `ume` facts
+   in `ModelListEndpoint` and in `docs/openapi/integrations.json`, `UME_PROVIDER_` in `ConfigTransfer`, the Portainer
+   bootstrap's copy from `ume-certs`/`ume-secrets` with those two volumes, and `deploy/upgrade/` (`LegacyNameTests`
+   covers them). Källa follows in thekim1/ume-rag-platform#899.
 
 ## Conventions and gotchas
 
@@ -50,48 +57,48 @@ The project is not a production approval, legal attestation or WCAG certificatio
 - **CI minutes are limited:** run `scripts/Test-BeforePush.ps1` before pushing, open pull requests as drafts until the
   change is finished or ready for review, squash-merge (agents: [AGENTS.md](AGENTS.md));
   see *CI and Actions minutes* in docs/local-development.md for what runs when. Give every new job a `timeout-minutes`.
-- **Tests:** `dotnet test --solution UmeLlmGateway.slnx` (Microsoft Testing Platform, set in `global.json`); xUnit v3 + Shouldly. Do not assert on the whole content of a shared table or list in
+- **Tests:** `dotnet test --solution Fors.slnx` (Microsoft Testing Platform, set in `global.json`); xUnit v3 + Shouldly. Do not assert on the whole content of a shared table or list in
   AdminApi/Gateway tests; assert on your own rows (the AdminApi tests run serially because they share one database).
 - **Hot path:** the request handler, adapters, stores and caches are performance-critical. Run the benchmarks (`-- --filter *Pipeline*`, `*Provider*`) and the `audit` before and after changing them,
   and keep "no Postgres on the request path" and the Redis round-trip budget in [docs/performance.md](docs/performance.md) true.
 - **Where things live** (see *Code layout* in [docs/architecture.md](docs/architecture.md)):
   - Endpoint semantics (routing name, paths, capability, model kinds, audio/realtime/streaming flags) only in `GatewayEndpoints` (Domain); do not add endpoint switches.
-  - Redis keys and channels only in `RedisKeys` (all under `ume:`; the ACL in `deploy/redis/users.acl.example` depends on it).
+  - Redis keys and channels only in `RedisKeys` (all under `fors:`; the ACL in `deploy/redis/users.acl.example` depends on it).
   - Key rotation lineage and budget spend queries in `GatewayQueries` (Infrastructure), shared by gateway and admin API.
   - Data retention (ADR 016): usage before `GatewaySettings.UsageRetainedFrom` exists only in `UsageMonthlyTotals`. New code that sums
     usage must read totals before that boundary and records from it on (`GatewayQueries.CostsIn`, `UsageQueries.Facts`, the Data API
-    aggregate SQL). Only the database function `ume_retention_step` deletes usage, refused-key, alert or audit rows; change it in a new
+    aggregate SQL). Only the database function `fors_retention_step` deletes usage, refused-key, alert or audit rows; change it in a new
     migration (`CREATE OR REPLACE`), never by granting `DELETE` to an app role.
   - Gateway-wide settings live in the single `GatewaySettings` row; the gateway reads it with the catalogue (trusted proxies), so a
     change the gateway must see publishes `InvalidationKind.Config`.
   - Provider failures carry a `FailureKind`: only `Transient` counts toward the circuit breaker; `ClientError` is answered without fallback.
   - Every accepted gateway request is accounted exactly once (`RequestAccounting.AccountAsync`); new failure paths must go through it.
     The HTTP, live-session and model-list entry points share their stages through `RequestStages`, not copies.
-  - Admin API code is grouped by feature (`src/Ume.LlmGateway.AdminApi/<Feature>/`, namespace per folder; see *Code layout*). Endpoints stay
+  - Admin API code is grouped by feature (`src/Fors.AdminApi/<Feature>/`, namespace per folder; see *Code layout*). Endpoints stay
     thin; logic belongs in the feature's service (`OrganisationService`, `KeyService`, `ProviderCatalogService`, `BudgetAdminService`,
     `RoutingRuleService`, `ReportService`, `OperationsService`, `GatewaySettingsService`, ...), request and response records in its
     `*Contracts.cs`. Register a new service in `AdminServices` and map new endpoints from `AdminEndpoints`. `AdminContext` carries the signed-in user (`ctx.Keys()`, `ctx.Teams()`, `ctx.Actor`, `ctx.SaveAsync(...)`):
     never pass a `ClaimsPrincipal` around. Throw `ApiFaultException` (English message) for client errors, a 404 from `NotFound` (`?? throw NotFound.Key()`; an entity
     owned outside the user's departments goes through `OwnerScopeResolver.VisibleOrNotFoundAsync`); audit with the snapshot records in `AuditSnapshots.cs`, never entities.
-  - Gateway code is grouped the same way (`src/Ume.LlmGateway.Gateway/<Feature>/`: `Requests`, `Authentication`, `Routing`, `Budgets`,
+  - Gateway code is grouped the same way (`src/Fors.Gateway/<Feature>/`: `Requests`, `Authentication`, `Routing`, `Budgets`,
     `Usage`, `Forms`, `Realtime`, `Operations`). Register new services in `GatewayServices`, not in `Program.cs`; all are singletons.
   - Gateway refusals are a `GatewayError` from the catalogue in `GatewayErrors.cs` (status, code, English message); add new ones there, not inline.
   - A new gateway endpoint is one entry in `GatewayEndpoints` (Domain) plus its OpenAPI summary in `GatewayRoutes`; uploads go through
     `MultipartFormReader` with their own `MultipartRules`; provider adapters read complete answers with `ReadCompleteAsync`.
   - Every cost, budget, spend counter and reservation is in USD; there is no other currency (SEK was removed in 0.8.1; its last columns and
     the `ExchangeRates` table were dropped by `DropSekLeftovers`).
-  - Web hosts use the ServiceDefaults helpers (`AddUmeWebDefaults`/`UseUmeWebDefaults`, `UseUmeSecurityHeaders`, `ExitIfHealthProbeAsync`); CSV cells go through `CsvCell` (Domain).
+  - Web hosts use the ServiceDefaults helpers (`AddForsWebDefaults`/`UseForsWebDefaults`, `UseForsSecurityHeaders`, `ExitIfHealthProbeAsync`); CSV cells go through `CsvCell` (Domain).
   - Options are validated on start (DataAnnotations/`IValidatableObject`) through `AddValidatedOptions<T>(section)` (ServiceDefaults); add a range or `[Required]` with each new setting.
 - **Analyzers:** warnings are errors (`AnalysisLevel latest-recommended`, some CA rules in `NoWarn`). Use `[LoggerMessage]` logging.
-- **AppHost:** `src/Ume.LlmGateway.AppHost`. Stop the exact AppHost (`aspire stop --apphost ...`) before backend builds. File-based AppHosts cannot use `DistributedApplicationTestingBuilder`, hence Testcontainers in the integration tests.
+- **AppHost:** `src/Fors.AppHost`. Stop the exact AppHost (`aspire stop --apphost ...`) before backend builds. File-based AppHosts cannot use `DistributedApplicationTestingBuilder`, hence Testcontainers in the integration tests.
   Never use `dotnet run` for the AppHost. Project-local skills are in `.agents/skills`.
 - **Dev secrets:** from the Aspire user-secret store; never print them or save browser auth state. This machine's secrets set `Seed:Enabled=False` and `FakeLlm:Enabled=False`; `scripts/Start-E2E.ps1` overrides both.
 - **Moving the AppHost changes the Docker volume identity:** set `DevelopmentVolumes:Postgres` (and `Ollama`) in user secrets to reuse existing data (see README).
 - **Compose:** never deploy `deploy/generated/docker-compose.yaml` without `deploy/compose.hardening.yaml`.
 - **Playwright:** artifacts (trace, screenshot, video) are off on purpose so show-once keys cannot be captured; the helper paces admin requests to stay under the 120 requests/minute limit.
 - **Packages:** central package management in `Directory.Packages.props`. Keycloak hosting exists only as a preview package. The AppHost SDK supplies `Aspire.Hosting.AppHost` implicitly (no PackageVersion for it).
-  Testcontainers: use `TestPostgres` from `tests/Ume.LlmGateway.TestKit` (image constant, migrate before the host starts); shared test auth, XSRF clients and `CapturingLoggerProvider` live there too.
-- **Container images:** the pinned .NET base image digest and container user are in `Directory.Build.targets`; a service opts in with `<UmeServiceContainer>true</UmeServiceContainer>`.
+  Testcontainers: use `TestPostgres` from `tests/Fors.TestKit` (image constant, migrate before the host starts); shared test auth, XSRF clients and `CapturingLoggerProvider` live there too.
+- **Container images:** the pinned .NET base image digest and container user are in `Directory.Build.targets`; a service opts in with `<ForsServiceContainer>true</ForsServiceContainer>`.
 - **C# parser quirk:** `case "x" when a?["b"] is { } y:` fails to parse; use if/else.
 - **Icons:** after adding an icon name run `python src/admin-ui/scripts/subset-icons.py` (needs `fonttools[woff]`).
 - **Do not log or save** prompts, responses, key plaintext, provider credentials or raw environment snapshots.

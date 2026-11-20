@@ -37,10 +37,10 @@ jobs:
           git diff --exit-code -- deploy/compose.portainer.yaml || { echo "Run deploy/build-portainer-stack.sh and commit compose.portainer.yaml"; exit 1; }
       - name: Local image defaults are untagged dev images
         run: |
-          # ${X_IMAGE:-ume-llm-gateway/<service>:latest} is the locally built image; a release bundle pins the pushed one
+          # ${X_IMAGE:-fors/<service>:latest} is the locally built image; a release bundle pins the pushed one
           # (release.yml derives the real version from the pushed git tag, not from a committed version).
-          stale="$(grep -Hn 'ume-llm-gateway/[a-z]*:' deploy/compose.prod.yaml deploy/compose.portainer.template.yaml deploy/compose.portainer.yaml | grep -v ':latest}' || true)"
-          stale="$stale$(grep -rHn 'image: ume-llm-gateway/' deploy/kubernetes | grep -v ':latest$' || true)"
+          stale="$(grep -Hn 'fors/[a-z]*:' deploy/compose.prod.yaml deploy/compose.portainer.template.yaml deploy/compose.portainer.yaml | grep -v ':latest}' || true)"
+          stale="$stale$(grep -rHn 'image: fors/' deploy/kubernetes | grep -v ':latest$' || true)"
           stale="$stale$(grep -Hn 'newTag:' deploy/kubernetes/example/kustomization.yaml | grep -v 'newTag: \"latest\"' || true)"
           [ -z "$stale" ] || { echo "Local image defaults must stay pinned to :latest:"; echo "$stale"; exit 1; }
       - name: Kubernetes manifests are up to date and render
@@ -57,11 +57,11 @@ jobs:
           kubectl kustomize "$RUNNER_TEMP/k8s/example" | grep -c 'kind: NetworkPolicy'
       - name: Production Compose files are valid
         env:
-          UME_CERTS_DIR: /certs
-          UME_SECRETS_DIR: /secrets
-          UME_OIDC_AUTHORITY: https://idp.example.se
-          UME_GATEWAY_HOST: llm.example.se
-          UME_GATEWAY_PUBLIC_URL: https://llm.example.se
+          FORS_CERTS_DIR: /certs
+          FORS_SECRETS_DIR: /secrets
+          FORS_OIDC_AUTHORITY: https://idp.example.se
+          FORS_GATEWAY_HOST: llm.example.se
+          FORS_GATEWAY_PUBLIC_URL: https://llm.example.se
           GATEWAY_IMAGE: gateway
           ADMINAPI_IMAGE: adminapi
           MIGRATIONS_IMAGE: migrations
@@ -70,13 +70,13 @@ jobs:
             docker compose -f "$file" --profile data config --quiet
           done
           docker compose -f deploy/compose.prod.yaml -f deploy/compose.rolling.yaml --profile data config --quiet
-          # UME_DOMAIN alone names the hosts of the Portainer stack (#98): no UME_GATEWAY_HOST or UME_GATEWAY_PUBLIC_URL.
-          env -u UME_GATEWAY_HOST -u UME_GATEWAY_PUBLIC_URL UME_DOMAIN=example.se \
+          # FORS_DOMAIN alone names the hosts of the Portainer stack (#98): no FORS_GATEWAY_HOST or FORS_GATEWAY_PUBLIC_URL.
+          env -u FORS_GATEWAY_HOST -u FORS_GATEWAY_PUBLIC_URL FORS_DOMAIN=example.se \
             docker compose -f deploy/compose.portainer.yaml config > "$RUNNER_TEMP/portainer-domain.yaml"
           grep -q 'Gateway__BaseUrl: https://llm.example.se$' "$RUNNER_TEMP/portainer-domain.yaml"
-          grep -q 'UME_ADMIN_HOST: llm-admin.example.se$' "$RUNNER_TEMP/portainer-domain.yaml"
+          grep -q 'FORS_ADMIN_HOST: llm-admin.example.se$' "$RUNNER_TEMP/portainer-domain.yaml"
           # Setup mode (#100). The variables above are the previous release's (authority, gateway host, public URL; no
-          # UME_DOMAIN, no setup variables): the admin API is declared, Setup__Reopen is empty, and the client id and claim
+          # FORS_DOMAIN, no setup variables): the admin API is declared, Setup__Reopen is empty, and the client id and claim
           # names are not passed as values that would lock the wizard (empty is unset; the code's defaults apply).
           for files in deploy/compose.prod.yaml "deploy/compose.prod.yaml deploy/compose.rolling.yaml" deploy/compose.portainer.yaml; do
             # shellcheck disable=SC2046
@@ -85,21 +85,21 @@ jobs:
                 and ([to_entries[] | select((.key | test("^Oidc__(ClientId|RoleClaim|DepartmentClaim|TeamClaim|GroupClaim|ExtraScopes__0)$"))
                        and .value != "")] | length == 0)' >/dev/null
           done
-          # A new deployment for the setup wizard: every file renders without UME_OIDC_AUTHORITY, and nothing declares sign-in.
+          # A new deployment for the setup wizard: every file renders without FORS_OIDC_AUTHORITY, and nothing declares sign-in.
           for files in deploy/compose.prod.yaml "deploy/compose.prod.yaml deploy/compose.rolling.yaml" deploy/compose.portainer.yaml; do
             # shellcheck disable=SC2046
-            env -u UME_OIDC_AUTHORITY docker compose $(printf -- '-f %s ' $files) --profile data config --format json | jq -e '[.services[]
+            env -u FORS_OIDC_AUTHORITY docker compose $(printf -- '-f %s ' $files) --profile data config --format json | jq -e '[.services[]
               | .environment // {} | to_entries[] | select((.key | test("^Oidc__|^DataApi__Authority$|^Gateway__OidcAuthority$")) and .value != "")]
               | length == 0' >/dev/null
           done
           # The Portainer stack with only the domain and the images (the release asset pins the images).
-          env -u UME_OIDC_AUTHORITY -u UME_GATEWAY_HOST -u UME_GATEWAY_PUBLIC_URL UME_DOMAIN=example.se \
+          env -u FORS_OIDC_AUTHORITY -u FORS_GATEWAY_HOST -u FORS_GATEWAY_PUBLIC_URL FORS_DOMAIN=example.se \
             docker compose -f deploy/compose.portainer.yaml --profile data config --format json | jq -e '.services
               | .adminapi.environment.Oidc__Authority == "" and .adminapi.environment.Setup__Reopen == ""
-                and .bootstrap.environment.UME_GATEWAY_HOST == "llm.example.se"' >/dev/null
+                and .bootstrap.environment.FORS_GATEWAY_HOST == "llm.example.se"' >/dev/null
       - name: Setup mode in the deploy forms
         # The Portainer bootstrap (run as the stack runs it) and init-deployment.sh: the setup secret once, a client secret
-        # only with the authority, a declared sign-in and UME_SETUP_REOPEN kept on a re-run (deploy/tests/setup-mode-deploy.sh).
+        # only with the authority, a declared sign-in and FORS_SETUP_REOPEN kept on a re-run (deploy/tests/setup-mode-deploy.sh).
         run: bash deploy/tests/setup-mode-deploy.sh
       - uses: actions/setup-dotnet@v5
         with:
@@ -122,18 +122,18 @@ jobs:
           # every job on the runner's address and has failed whole test runs; Google's mirror of Docker Hub is not subject to it.
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
         run: |
-          dotnet build UmeLlmGateway.slnx -c Release --nologo
+          dotnet build Fors.slnx -c Release --nologo
           # Tests marked [Trait(TestCategory.Name, TestCategory.Flaky)] (timing or race dependent) run locally and in the
           # weekly flake hunt, not here: a known flake should not fail a pull request (docs/local-development.md).
-          dotnet test --solution UmeLlmGateway.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
-          dotnet list UmeLlmGateway.slnx package --vulnerable --include-transitive --format json > /tmp/ume-package-audit.json
-          python -c "import json; d=json.load(open('/tmp/ume-package-audit.json')); p=[p for x in d.get('projects',[]) for f in x.get('frameworks',[]) for k in ('topLevelPackages','transitivePackages') for p in f.get(k,[]) if p.get('vulnerabilities')]; assert not p, 'Vulnerable .NET dependencies detected'"
+          dotnet test --solution Fors.slnx -c Release --no-build --filter-not-trait "Category=Flaky"
+          dotnet list Fors.slnx package --vulnerable --include-transitive --format json > /tmp/fors-package-audit.json
+          python -c "import json; d=json.load(open('/tmp/fors-package-audit.json')); p=[p for x in d.get('projects',[]) for f in x.get('frameworks',[]) for k in ('topLevelPackages','transitivePackages') for p in f.get(k,[]) if p.get('vulnerabilities')]; assert not p, 'Vulnerable .NET dependencies detected'"
       - name: Scan the service base image
         # The pinned runtime image (Directory.Build.targets) is shared by every service; fail on fixable HIGH/CRITICAL so a
         # stale digest does not ship known runtime CVEs. Every run scans it, which also catches CVEs published since it was
         # pinned; the weekly flake hunt scans it too.
         run: |
-          image="$(dotnet msbuild src/Ume.LlmGateway.Gateway -getProperty:ContainerBaseImage)"
+          image="$(dotnet msbuild src/Fors.Gateway -getProperty:ContainerBaseImage)"
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.67.2 image --quiet --scanners vuln \
             --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
       - name: Verify UI
@@ -155,11 +155,11 @@ jobs:
         # Only the release uses it (release.yml attaches it to the GitHub release).
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          dotnet publish src/Ume.LlmGateway.AdminApi -c Release -o /tmp/ume-release /p:PublishAdminUi=true
-          dnx Microsoft.Sbom.DotNetTool@4.1.13 -y -- generate -b /tmp/ume-release -bc src -pn Ume.LlmGateway -pv "$(dotnet msbuild src/Ume.LlmGateway.AdminApi -getProperty:Version)" -ps "Umea kommun" -nsb https://www.umea.se/llm-gateway -V Warning
+          dotnet publish src/Fors.AdminApi -c Release -o /tmp/fors-release /p:PublishAdminUi=true
+          dnx Microsoft.Sbom.DotNetTool@4.1.13 -y -- generate -b /tmp/fors-release -bc src -pn Fors -pv "$(dotnet msbuild src/Fors.AdminApi -getProperty:Version)" -ps "Umea kommun" -nsb https://www.umea.se/llm-gateway -V Warning
       - name: Upload release SBOM only
         if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
-          name: ume-gateway-spdx
-          path: /tmp/ume-release/_manifest
+          name: fors-gateway-spdx
+          path: /tmp/fors-release/_manifest

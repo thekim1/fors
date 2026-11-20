@@ -20,7 +20,7 @@ has `proxy_buffering off`.
 
 ## Benchmarks
 
-`dotnet run -c Release --project benchmarks/Ume.LlmGateway.Benchmarks -- --filter '*ProviderBenchmarks*'`
+`dotnet run -c Release --project benchmarks/Fors.Benchmarks -- --filter '*ProviderBenchmarks*'`
 
 | Provider leg, 300 chunks | Time | Allocated |
 |---|---:|---:|
@@ -39,12 +39,12 @@ Recorded once per stream that has at least two events, tagged `provider` and `en
 
 | Metric | Meaning |
 |---|---|
-| `ume.gateway.stream.max_upstream_gap` (ms) | Longest wait for the provider's next event after the first one. Large values point at the provider. |
-| `ume.gateway.stream.max_write` (ms) | Longest time the gateway spent writing one event to the client. Large values point at the gateway (GC, thread pool) or a slow client. |
-| `ume.gateway.stream.stalls` | Count of mid-stream waits of 1 s or more. |
+| `fors.gateway.stream.max_upstream_gap` (ms) | Longest wait for the provider's next event after the first one. Large values point at the provider. |
+| `fors.gateway.stream.max_write` (ms) | Longest time the gateway spent writing one event to the client. Large values point at the gateway (GC, thread pool) or a slow client. |
+| `fors.gateway.stream.stalls` | Count of mid-stream waits of 1 s or more. |
 
-Recorded once per streamed answer, tagged `outcome`, `provider` and `endpoint`: `ume.gateway.provider.time_to_first_token`
-(ms), from sending the request to the provider that answered until its first event. Unlike `ume.gateway.time_to_first_token`
+Recorded once per streamed answer, tagged `outcome`, `provider` and `endpoint`: `fors.gateway.provider.time_to_first_token`
+(ms), from sending the request to the provider that answered until its first event. Unlike `fors.gateway.time_to_first_token`
 (until the first event reached the client) it leaves out failed fallback attempts, retries and the gateway's own time, so it
 is the provider's own responsiveness. Provider stability in the admin UI uses the same figure.
 

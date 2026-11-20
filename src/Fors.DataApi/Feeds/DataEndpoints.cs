@@ -1,0 +1,205 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Fors.Domain;
+using Fors.Domain.Entities;
+using Fors.Infrastructure.Persistence;
+using Fors.ServiceDefaults;
+
+namespace Fors.DataApi.Feeds;
+
+public static class DataEndpoints
+{
+    /// <summary>Error codes of policy refusals that the security feed includes (see gateway.request.refused).</summary>
+    private static readonly string[] RefusalCodes = ["attachment_not_allowed", "model_not_allowed"];
+
+    public static void MapDataEndpoints(this RouteGroupBuilder v1)
+    {
+        var usage = v1.MapGroup("/usage").WithTags("Usage");
+        usage.MapGet("/records", async (string? after, int? limit, HttpContext http, GatewayDbContext db, IOptions<DataApiOptions> options, TimeProvider time, CancellationToken ct) =>
+        {
+            var settings = options.Value;
+            var (cursor, size) = Feeds.Window(after, limit, settings);
+            var pii = settings.Detail.IncludePiiCategories;
+            var rows = await db.UsageRecords.AsNoTracking().Where(u => u.Id > cursor).OrderBy(u => u.Id).Take(size + 1)
+                .Select(u => new UsageRecordItem(u.Id, u.RequestId, u.Timestamp, u.VirtualKeyId, u.TeamId, u.DepartmentId, u.Endpoint,
+                    u.RequestedModel, u.ProviderAccountId, u.ProviderName, u.ModelDeploymentId, u.UpstreamModel, u.InputTokens,
+                    u.CachedInputTokens, u.OutputTokens, u.CostUsd, u.LatencyMs, u.StatusCode, u.Outcome, u.FallbackCount,
+                    u.Streamed, u.PiiActionApplied, pii ? u.PiiCategories : null, u.ErrorCode, u.RoutingRuleId, u.RoutingRuleName, u.RecordedAt, u.AudioSeconds,
+                    u.UpstreamMs, u.TimeToFirstTokenMs, u.ProviderFirstTokenMs, u.ViaKeyId, u.RunId, u.Step))
+                .ToListAsync(ct);
+            return DataResults.Feed(http, Feeds.Page(rows, cursor, size, Feeds.Cutoff(time, settings)));
+        }).RequireAuthorization(DataPermissions.UsageDetail)
+            .WithSummary("Usage records, one per request (incremental feed)");
+
+        usage.MapGet("/aggregate", async (DateOnly from, DateOnly to, string? granularity, HttpContext http, GatewayDbContext db, IOptions<DataApiOptions> options, CancellationToken ct) =>
+            DataResults.List(http, await AggregateAsync(db, options.Value, from, to, Granularity(granularity), ct)))
+            .RequireAuthorization(DataPermissions.UsageAggregate)
+            .WithSummary("Totals per day or month, department, model, provider and endpoint (from and to are inclusive dates)");
+
+        var security = v1.MapGroup("/security").WithTags("Security").RequireAuthorization(DataPermissions.SecurityRead);
+        security.MapGet("/auth-failures", async (string? after, int? limit, HttpContext http, GatewayDbContext db, IOptions<DataApiOptions> options, TimeProvider time, CancellationToken ct) =>
+        {
+            var (cursor, size) = Feeds.Window(after, limit, options.Value);
+            var rows = await db.AuthFailures.AsNoTracking().Where(f => f.Id > cursor).OrderBy(f => f.Id).Take(size + 1)
+                .Select(f => new AuthFailureItem(f.Id, f.FirstSeen, f.LastSeen, f.Reason, f.Endpoint, f.VirtualKeyId, f.KeyPrefix, f.TeamId,
+                    f.DepartmentId, f.SourceAddress, f.Count, f.RecordedAt))
+                .ToListAsync(ct);
+            return DataResults.Feed(http, Feeds.Page(rows, cursor, size, Feeds.Cutoff(time, options.Value)));
+        }).WithSummary("Refused keys, counted per reason, endpoint, key and client network (incremental feed)");
+
+        security.MapGet("/requests", async (string? after, int? limit, HttpContext http, GatewayDbContext db, IOptions<DataApiOptions> options, TimeProvider time, CancellationToken ct) =>
+        {
+            var (cursor, size) = Feeds.Window(after, limit, options.Value);
+            var rows = await db.UsageRecords.AsNoTracking()
+                .Where(u => u.Id > cursor && (u.PiiActionApplied != null || (u.ErrorCode != null && RefusalCodes.Contains(u.ErrorCode))))
+                .OrderBy(u => u.Id).Take(size + 1)
+                .Select(u => new SecurityRequestItem(u.Id, u.RequestId, u.Timestamp, u.VirtualKeyId, u.TeamId, u.DepartmentId, u.Endpoint,
+                    u.Outcome, u.StatusCode, u.ErrorCode, u.PiiActionApplied, u.PiiCategories, u.RecordedAt))
+                .ToListAsync(ct);
+            return DataResults.Feed(http, Feeds.Page(rows, cursor, size, Feeds.Cutoff(time, options.Value)));
+        }).WithSummary("Requests where personal data was found or a policy refused them (incremental feed)");
+
+        security.MapGet("/audit", async (string? after, int? limit, HttpContext http, GatewayDbContext db, IOptions<DataApiOptions> options, TimeProvider time, CancellationToken ct) =>
+        {
+            var (cursor, size) = Feeds.Window(after, limit, options.Value);
+            var rows = await db.AuditLog.AsNoTracking().Where(a => a.Id > cursor).OrderBy(a => a.Id).Take(size + 1)
+                .Select(a => new AuditItem(a.Id, a.Timestamp, a.Actor, a.Action, a.EntityType, a.EntityId, a.Details, a.RecordedAt,
+                    a.ActorName, a.ActorRoles, a.ActorDepartments, a.SourceAddress, a.SessionId, a.RequestId, a.UserAgent))
+                .ToListAsync(ct);
+            return DataResults.Feed(http, Feeds.Page(rows, cursor, size, Feeds.Cutoff(time, options.Value)));
+        }).WithSummary("Admin audit log with masked before/after details (incremental feed)");
+
+        security.MapGet("/keys", async (HttpContext http, GatewayDbContext db, TimeProvider time, CancellationToken ct) =>
+        {
+            var now = time.GetUtcNow();
+            // Projected column by column: the Data API's database role cannot read KeyHash or EncryptedSecret at all.
+            var keys = await db.VirtualKeys.AsNoTracking().OrderBy(k => k.Id).Select(k => new
+            {
+                k.Id, k.Prefix, k.Name, k.TeamId, DepartmentId = (Guid?)k.Team!.DepartmentId, k.IsEnabled, k.CreatedAt, k.CreatedBy, k.ExpiresAt,
+                k.RevokedAt, k.GraceUntil, k.RotatedToKeyId, k.LastUsedAt, k.PiiPolicy, k.AttachmentPolicy, k.AllowedModels, k.AllowedProviders,
+                k.AllowedResidencies, k.RequestsPerMinute, k.TokensPerMinute, k.AllowedIpRanges, k.AllowProviderTools, k.AllowProviderStorage,
+                k.MaxConcurrentRequests,
+            }).ToListAsync(ct);
+            return DataResults.List(http, keys.Select(k => new KeyInventoryItem(k.Id, k.Prefix, k.Name, k.TeamId, k.DepartmentId,
+                new VirtualKey { Name = k.Name, Prefix = k.Prefix, KeyHash = string.Empty, IsEnabled = k.IsEnabled, ExpiresAt = k.ExpiresAt, RevokedAt = k.RevokedAt, GraceUntil = k.GraceUntil }.GetStatus(now),
+                k.CreatedAt, k.CreatedBy, k.ExpiresAt, k.RevokedAt, k.GraceUntil, k.RotatedToKeyId, k.LastUsedAt, k.PiiPolicy,
+                k.AttachmentPolicy, k.AllowedModels, k.AllowedProviders, k.AllowedResidencies, k.RequestsPerMinute, k.TokensPerMinute, k.AllowedIpRanges,
+                k.AllowProviderTools, k.AllowProviderStorage, k.MaxConcurrentRequests)).ToList());
+        }).WithSummary("Every key with its status and policies (never the secret or its hash)");
+
+        var catalog = v1.MapGroup("/catalog").WithTags("Catalog").RequireAuthorization(DataPermissions.CatalogRead);
+        catalog.MapGet("/departments", async (HttpContext http, GatewayDbContext db, CancellationToken ct) => DataResults.List(http,
+            await db.Departments.AsNoTracking().OrderBy(d => d.Name)
+                .Select(d => new { d.Id, d.Name, d.CostCenterCode, d.IsActive, d.CreatedAt, d.MemberGroups }).ToListAsync(ct)));
+        catalog.MapGet("/teams", async (HttpContext http, GatewayDbContext db, CancellationToken ct) => DataResults.List(http,
+            await db.Teams.AsNoTracking().OrderBy(t => t.Name)
+                .Select(t => new { t.Id, t.DepartmentId, t.Name, t.IsActive, t.CreatedAt, t.Code }).ToListAsync(ct)));
+        catalog.MapGet("/keys", async (HttpContext http, GatewayDbContext db, CancellationToken ct) => DataResults.List(http,
+            await db.VirtualKeys.AsNoTracking().OrderBy(k => k.Id)
+                .Select(k => new { k.Id, k.TeamId, k.Name, k.Prefix, k.CreatedAt, k.IntegrationId, k.IntegrationRole }).ToListAsync(ct)));
+        catalog.MapGet("/providers", async (HttpContext http, GatewayDbContext db, CancellationToken ct) => DataResults.List(http,
+            await db.ProviderAccounts.AsNoTracking().OrderBy(p => p.Name)
+                .Select(p => new { p.Id, p.Name, p.DisplayName, p.Type, p.Residency, p.IsEnabled }).ToListAsync(ct)));
+        catalog.MapGet("/models", async (HttpContext http, GatewayDbContext db, CancellationToken ct) => DataResults.List(http,
+            await db.ModelDeployments.AsNoTracking().OrderBy(m => m.Name)
+                .Select(m => new { m.Id, m.Name, m.UpstreamModel, m.Kind, ProviderId = m.ProviderAccountId, m.IsEnabled, m.Residency }).ToListAsync(ct)));
+        catalog.MapGet("/prices", async (HttpContext http, GatewayDbContext db, CancellationToken ct) => DataResults.List(http,
+            await db.ModelPrices.AsNoTracking().OrderBy(p => p.ModelDeploymentId).ThenBy(p => p.EffectiveFrom)
+                .Select(p => new { ModelId = p.ModelDeploymentId, p.EffectiveFrom, p.InputPerMillionUsd, p.CachedInputPerMillionUsd, p.OutputPerMillionUsd, p.AudioPerMinuteUsd, p.AudioInputPerMillionUsd, p.AudioOutputPerMillionUsd, p.PerImageUsd, p.CacheWriteInputPerMillionUsd }).ToListAsync(ct)));
+        // Cost budgets: limits in USD. Token budgets (Unit Tokens): LimitTokens, counting only Residency when set; their USD limit is 0.
+        catalog.MapGet("/budgets", async (HttpContext http, GatewayDbContext db, CancellationToken ct) => DataResults.List(http,
+            await db.Budgets.AsNoTracking().OrderBy(b => b.Id)
+                .Select(b => new { b.Id, b.Scope, b.ScopeId, b.Period, b.LimitUsd, b.IsActive, b.Unit, b.LimitTokens, b.Residency }).ToListAsync(ct)));
+    }
+
+    /// <summary>
+    /// Totals per period (in <see cref="DataApiOptions.TimeZone"/>), department, model, provider and endpoint. A department
+    /// with fewer than <see cref="DataApiOptions.MinimumGroupSize"/> distinct keys in a period is reported without its
+    /// department (all such departments together), so a one-person team's use does not show as its own row.
+    /// </summary>
+    internal static async Task<List<AggregateItem>> AggregateAsync(GatewayDbContext db, DataApiOptions options, DateOnly from, DateOnly to, AggregateGranularity granularity, CancellationToken ct)
+    {
+        // date_trunc's field name; passed as a parameter, never spliced into the SQL.
+        var unit = EnumQuery.Name(granularity);
+        if (granularity == AggregateGranularity.Month)
+        {
+            from = new DateOnly(from.Year, from.Month, 1);
+            to = new DateOnly(to.Year, to.Month, 1).AddMonths(1).AddDays(-1);
+        }
+
+        if (to < from || to.DayNumber - from.DayNumber + 1 > options.MaxAggregateDays)
+        {
+            throw new ApiFaultException(StatusCodes.Status400BadRequest, $"'to' must be on or after 'from', and the range at most {options.MaxAggregateDays} days.");
+        }
+
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(options.TimeZone);
+        var start = LocalMidnightUtc(from, zone);
+        var end = LocalMidnightUtc(to.AddDays(1), zone);
+        var minimum = options.MinimumGroupSize;
+        var tz = options.TimeZone;
+
+        // Data retention: records from the oldest kept instant on; before it, monthly totals (Europe/Stockholm months), which
+        // only a month granularity can use. Records older than it may still exist while the job removes them; they are skipped.
+        var retainedFrom = await db.UsageRetainedFromAsync(ct);
+        var recordsFrom = retainedFrom is { } kept && kept > start ? kept : start;
+        var totalsUntil = granularity == AggregateGranularity.Month && retainedFrom is { } k && k > start ? (k < end ? k : end) : start;
+
+        var rows = await db.Database.SqlQuery<AggregateRow>($"""
+            WITH u AS (
+                SELECT date_trunc({unit}, "Timestamp" AT TIME ZONE {tz})::date AS "Period", "DepartmentId", "VirtualKeyId",
+                       "ModelDeploymentId", "ProviderAccountId", "Endpoint", 1::bigint AS "Requests",
+                       CASE WHEN "Outcome" = 'Success' THEN 1 ELSE 0 END::bigint AS "SuccessfulRequests", "InputTokens",
+                       "CachedInputTokens", "OutputTokens", "CostUsd", "AudioSeconds"
+                FROM "UsageRecords"
+                WHERE "Timestamp" >= {recordsFrom} AND "Timestamp" < {end}
+                UNION ALL
+                SELECT ("MonthStart" AT TIME ZONE 'Europe/Stockholm')::date, "DepartmentId", "VirtualKeyId",
+                       "ModelDeploymentId", "ProviderAccountId", "Endpoint", "Requests", "SuccessfulRequests", "InputTokens",
+                       "CachedInputTokens", "OutputTokens", "CostUsd", "AudioSeconds"
+                FROM "UsageMonthlyTotals"
+                WHERE "MonthStart" >= {start} AND "MonthStart" < {totalsUntil}
+            ), small AS (
+                SELECT "Period", "DepartmentId" FROM u
+                GROUP BY "Period", "DepartmentId"
+                HAVING count(DISTINCT "VirtualKeyId") < {minimum}
+            )
+            SELECT u."Period",
+                   CASE WHEN small."DepartmentId" IS NULL THEN u."DepartmentId" END AS "DepartmentId",
+                   u."ModelDeploymentId" AS "ModelId", u."ProviderAccountId" AS "ProviderId", u."Endpoint",
+                   sum(u."Requests")::bigint AS "Requests",
+                   sum(u."SuccessfulRequests")::bigint AS "SuccessfulRequests",
+                   sum(u."InputTokens")::bigint AS "InputTokens", sum(u."CachedInputTokens")::bigint AS "CachedInputTokens",
+                   sum(u."OutputTokens")::bigint AS "OutputTokens", sum(u."CostUsd") AS "CostUsd",
+                   sum(u."AudioSeconds") AS "AudioSeconds"
+            FROM u LEFT JOIN small ON small."Period" = u."Period" AND small."DepartmentId" = u."DepartmentId"
+            GROUP BY 1, 2, 3, 4, 5
+            ORDER BY 1, 2, 3, 4, 5
+            """).ToListAsync(ct);
+
+        var departments = await db.Departments.AsNoTracking().Select(d => new { d.Id, d.Name, d.CostCenterCode }).ToDictionaryAsync(d => d.Id, ct);
+        var models = await db.ModelDeployments.AsNoTracking().Select(m => new { m.Id, m.Name, m.Residency }).ToDictionaryAsync(m => m.Id, ct);
+        var providers = await db.ProviderAccounts.AsNoTracking().Select(p => new { p.Id, p.Name, p.Residency }).ToDictionaryAsync(p => p.Id, ct);
+        return [.. rows.Select(r =>
+        {
+            var department = r.DepartmentId is { } d ? departments.GetValueOrDefault(d) : null;
+            var provider = r.ProviderId is { } p ? providers.GetValueOrDefault(p) : null;
+            var model = r.ModelId is { } m ? models.GetValueOrDefault(m) : null;
+            // Where it was processed: the deployment's own residency when it has one, else its provider's.
+            return new AggregateItem(r.Period, r.DepartmentId, department?.CostCenterCode, department?.Name, r.ModelId,
+                model?.Name, r.ProviderId, provider?.Name, model?.Residency ?? provider?.Residency, r.Endpoint,
+                r.Requests, r.SuccessfulRequests, r.InputTokens, r.CachedInputTokens, r.OutputTokens, r.CostUsd, r.AudioSeconds);
+        })];
+    }
+
+    /// <summary>Case-insensitive <c>day</c> or <c>month</c>; omitted is <c>day</c>.</summary>
+    private static AggregateGranularity Granularity(string? value) =>
+        value is null ? AggregateGranularity.Day
+        : EnumQuery.TryParse<AggregateGranularity>(value, out var granularity) ? granularity
+        : throw new ApiFaultException(StatusCodes.Status400BadRequest, $"'granularity' must be {string.Join(" or ", EnumQuery.Names<AggregateGranularity>())}.");
+
+    private static DateTimeOffset LocalMidnightUtc(DateOnly date, TimeZoneInfo zone)
+    {
+        var local = date.ToDateTime(TimeOnly.MinValue);
+        return new DateTimeOffset(local, zone.GetUtcOffset(local)).ToUniversalTime();
+    }
+}

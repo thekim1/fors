@@ -4,7 +4,7 @@ umask 077
 cd /workspace
 mkdir -p certs/postgres certs/redis certs/gateway certs/adminapi certs/migrations
 mkdir -p secrets/postgres secrets/redis secrets/gateway secrets/adminapi secrets/migrations
-openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -days 1 -subj /CN=ume-compose-test-ca \
+openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -days 1 -subj /CN=fors-compose-test-ca \
   -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
 for service in postgres redis gateway adminapi; do
   openssl req -newkey rsa:2048 -nodes -keyout "certs/$service/$service.key" -out leaf.csr -subj "/CN=$service" >/dev/null 2>&1
@@ -29,7 +29,7 @@ for service in gateway adminapi migrations; do
   role="$service"
   case "$service" in adminapi) role=admin;; migrations) role=migrator;; esac
   password="$(cat "secrets/postgres/${role}_password")"
-  printf 'Host=postgres;Database=gatewaydb;Username=ume_%s;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' "$role" "$password" > "secrets/$service/ConnectionStrings__gatewaydb"
+  printf 'Host=postgres;Database=gatewaydb;Username=fors_%s;Password=%s;SSL Mode=VerifyFull;Root Certificate=/run/certs/ca.pem;GSS Encryption Mode=Disable' "$role" "$password" > "secrets/$service/ConnectionStrings__gatewaydb"
   if [ "$service" != migrations ]; then
     printf 'redis:6379,user=gateway,password=%s,ssl=true,sslHost=redis,abortConnect=false' "$(cat secrets/redis/test_password)" > "secrets/$service/ConnectionStrings__redis"
   fi

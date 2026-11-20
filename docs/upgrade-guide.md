@@ -11,6 +11,119 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
+## Unreleased (0.12.0): the rename to Fors
+
+The gateway is now called **Fors**, and the RAG platform that was called Ume.Rag is now **Källa**. Every name that
+said "ume" changes: the projects and namespaces (`Fors.*`), the variables, the headers, the key prefix, the database
+roles, the Redis keys, the metrics, the images and the repository (thekim1/fors, `https://thekim1.github.io/fors/`).
+The licence changes from EUPL-1.2 to **Apache-2.0**. Earlier releases stay available under EUPL-1.2. Examples and the
+default organisation name stay *Umeå kommun*.
+
+- **Rolling update: no.** Stop the gateway, admin API, Data API and Keycloak, rename the database roles, then start the
+  new version. The database roles, the volumes and the Redis keys change name, so the old and new versions cannot run side by
+  side. Everyone signs in again: the admin sessions lived in Redis under the old prefix.
+- **What keeps working until 0.13** (deprecated; switch now):
+  - **Keys** `ume-sk-…` and Data API keys `ume-dk-…` stay valid. New keys are `fors-sk-…` and `fors-dk-…`.
+  - **Request headers** `x-ume-*` (`x-ume-max-residency`, `x-ume-on-behalf-of`, `x-ume-session`, `x-ume-run-id`,
+    `x-ume-step`, `x-ume-stream-cost`) are still read; when both are sent, the `x-fors-*` header wins. With
+    `x-ume-stream-cost: 1` the stream ends with `: ume-cost-usd=…`, with `x-fors-stream-cost: 1` with `: fors-cost-usd=…`.
+  - **Response headers** come under both names (`x-fors-provider` and `x-ume-provider`, ...).
+  - **`/v1/ume/context`** answers like `/v1/fors/context` (it is not in the OpenAPI document).
+  - **`GET /v1/models`** lists the gateway's facts under `fors` and, as a copy, under `ume`.
+  - **Configuration documents** may name `credentialEnvironment` `UME_PROVIDER_*`. The variable must exist under that
+    name in the admin API's environment.
+- **Renamed without a fallback:**
+  - **Variables:** `UME_*` becomes `FORS_*` (`UME_DOMAIN` → `FORS_DOMAIN`, `UME_OIDC_AUTHORITY` → `FORS_OIDC_AUTHORITY`, and so on;
+    the rest of each name is unchanged).
+  - **Database roles:** `ume_migrator`, `ume_gateway`, `ume_admin`, `ume_data`, `ume_keycloak` become `fors_*`. Migration
+    `ForsRename` renames the function `ume_retention_step` to `fors_retention_step`.
+  - **Redis:** keys and the invalidation channel move from `ume:` to `fors:`. The ACL in `deploy/redis/users.acl.example`
+    follows; the Compose forms write it on every start. Budget counters are summed from Postgres again, and rate limits
+    and circuit breakers start empty. Before the stop, check that the usage journal is empty (*Operations* in the admin
+    console shows the usage writer's state). Batches still in it stay under the old key and are not written.
+  - **Metrics:** `ume.gateway.*` becomes `fors.gateway.*`: update dashboards and alerts.
+  - **Defaults:** the OIDC client id becomes `fors-admin` (was `ume-admin`), and the Data API audience
+    `fors-data-api` (was `ume-data-api`). A deployment that relied on the old defaults sets them (the upgrade script
+    does that): `FORS_OIDC_CLIENT_ID=ume-admin`, `FORS_DATA_AUDIENCE=ume-data-api`.
+  - **Images:** `ghcr.io/thekim1/fors/{gateway,adminapi,migrations,dataapi}`. The release bundle is
+    `fors-X.Y.Z.tar.gz`.
+  - **Compose:** the project `ume-gateway` becomes `fors-gateway`, and with it the database volume
+    (`fors-gateway_postgres-data`) and the network the bundled Keycloak joins (`fors-gateway_data`). The Keycloak project
+    becomes `fors-keycloak`.
+  - **Portainer:** the volumes `ume-certs` and `ume-secrets` become `fors-certs` and `fors-secrets`.
+  - **Kubernetes:** the Secrets and ConfigMaps `ume-*` become `fors-*` (`fors-adminapi-secrets`, `fors-gateway-config`, ...).
+- **Keycloak keeps its realm.** The realm, the admin console's client and the import client are now variables
+  (`FORS_KEYCLOAK_REALM`, `FORS_KEYCLOAK_ADMIN_CLIENT_ID`, `FORS_KEYCLOAK_IMPORT_CLIENT_ID`; new installations get
+  `fors`, `fors-admin`, `fors-realm-import`). An existing Keycloak keeps `ume`, `ume-admin` and `ume-realm-import`, so
+  the issuer (`https://<host>/realms/ume`) and every other system's client stay as they are. Another system's realm
+  file in `additions/` names the realm `"$(env:FORS_KEYCLOAK_REALM)"` from now on; one that still says `"ume"` keeps
+  working in a kept realm. The import's copy of the client secret is now `keycloak-import/admin-client-secret`.
+
+Back up first, as for every release: the database and the key pepper with the Data Protection certificate
+([runbook](runbook.md)).
+
+### Compose (`init-deployment.sh`)
+
+`deploy/upgrade/upgrade-to-0.12.sh` does the upgrade. Run it from the new release's directory with the old installation
+still running, and with its `deploy/.env` (and `deploy/keycloak/.env`) copied into the new `deploy/`:
+
+```bash
+./deploy/upgrade/upgrade-to-0.12.sh        # renames the variables, stops the services, renames the roles, moves the volume
+./deploy/init-deployment.sh                # writes the connection strings with the new role names; keeps your settings
+docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait
+./deploy/keycloak/init-keycloak.sh         # only with the bundled Keycloak; keeps realm ume
+docker compose -f deploy/keycloak/compose.yaml --env-file deploy/keycloak/.env up -d --build --wait
+docker volume rm ume-gateway_postgres-data # once everything runs
+```
+
+The script keeps the old files as `.env.pre-0.12`. It adds `FORS_OIDC_CLIENT_ID=ume-admin` (when the file sets an
+authority but no client) and `FORS_DATA_AUDIENCE=ume-data-api`. For Keycloak it adds `FORS_KEYCLOAK_REALM=ume`,
+`FORS_KEYCLOAK_ADMIN_CLIENT_ID=ume-admin` and `FORS_KEYCLOAK_IMPORT_CLIENT_ID=ume-realm-import`. A rolling
+installation (`compose.rolling.yaml`) is upgraded the same way; start it with its usual command afterwards.
+
+### Portainer
+
+1. **Rename the variables** in the stack: every `UME_*` becomes `FORS_*`. If you relied on the old defaults, add
+   `FORS_OIDC_CLIENT_ID=ume-admin` (when `FORS_OIDC_AUTHORITY` is set) and `FORS_DATA_AUDIENCE=ume-data-api`.
+2. **Update the stack** with the release's `compose.portainer.yaml`. The bootstrap copies the volumes `ume-certs` and
+   `ume-secrets` into `fors-certs` and `fors-secrets` once, so the key pepper and the Data Protection certificate carry over
+   (its log says so). The migration service then fails to sign in, because the roles do not have their new names yet.
+3. **Rename the roles**: open a console (`/bin/sh`) on the stack's `postgres` container and run
+
+   ```sh
+   PGPASSWORD="$(cat /run/postgres-secrets/bootstrap_password)" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "
+   DO \$\$ DECLARE r text; BEGIN FOREACH r IN ARRAY ARRAY['migrator','gateway','admin','data','keycloak'] LOOP
+     IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'ume_' || r) AND NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fors_' || r)
+     THEN EXECUTE format('ALTER ROLE %I RENAME TO %I', 'ume_' || r, 'fors_' || r); END IF; END LOOP; END \$\$;"
+   ```
+
+   (the same as `deploy/upgrade/0.12-rename-roles.sql`), then **redeploy the stack**.
+4. Once it runs, remove the volumes `<stack>_ume-certs` and `<stack>_ume-secrets` if you like. They stay declared (and
+   empty in a new stack) until 0.13.
+
+### Kubernetes
+
+1. Stop the services: `kubectl -n <namespace> scale deploy/gateway deploy/adminapi deploy/dataapi --replicas=0`.
+2. Rename the roles in your Postgres as its superuser: `psql -f deploy/upgrade/0.12-rename-roles.sql`.
+3. Re-run `./deploy/init-deployment.sh --no-chown` on the machine that holds `deploy/secrets` and `deploy/certs` (it
+   writes the connection strings with the new role names), then `./deploy/kubernetes/create-secrets.sh --namespace
+   <namespace>` (it creates the `fors-*` Secrets from the same files).
+4. In your overlay, rename the references to `ume-*` ConfigMaps and Secrets and the `ume-llm-gateway/*` images to their
+   `fors` names, and set `Oidc__ClientId=ume-admin` and `DataApi__Audience=ume-data-api` if you relied on the old
+   defaults. Apply it (`./deploy/kubernetes/deploy.sh`).
+5. Once it runs: `kubectl -n <namespace> delete secret,configmap -l app.kubernetes.io/part-of=ume-llm-gateway`.
+   This label selects only the old objects; the new ones are labelled `part-of=fors`.
+
+### Integrations (Källa and other platforms)
+
+Nothing breaks during 0.12: old keys, headers, the context path and the `ume` facts keep working. Switch to
+`x-fors-*`, `/v1/fors/context`, the `fors` facts and `: fors-cost-usd=` before 0.13. The preset `ume-rag.json` is now
+`kalla.json` (title *Källa*), and its integration is named `Kalla` (an integration's name names a directory of secret
+files, so it stays ASCII). A manifest finds its integration by name, so **rename an existing `Ume.Rag` integration to
+`Kalla`** under *Integrations* before you provision from the new preset or from a manifest that says `Kalla`;
+otherwise a second integration is created. The secret files of credential keys created from then on are under `Kalla/`
+in the integration secrets. The default owner code of a manifest drops accents now: å, ä and ö count as a, a and o.
+
 ## 0.11.0: setup mode and integration manifests without an owner
 
 The admin console's sign-in (authority, client id, client secret, claim names) can be set in a browser wizard, **setup

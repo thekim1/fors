@@ -11,7 +11,7 @@ const branding = useBrandingStore()
     <header class="mx-auto flex w-full max-w-3xl items-center gap-3">
       <BrandMark />
       <span class="min-w-0">
-        <span class="block truncate text-body font-semibold text-fg">AI Gateway</span>
+        <span class="block truncate text-body font-semibold text-fg">Fors</span>
         <span v-if="branding.organisationName" class="block truncate text-caption text-fg-3">{{ branding.organisationName }}</span>
       </span>
     </header>

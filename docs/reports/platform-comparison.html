@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ume LLM Gateway vs eneo</title>
+<title>Fors vs eneo</title>
 <style>
 /* Layout: a deck of full-screen sections (one idea each), stepped with the keyboard; prints one section per A4 page.
    Works offline: system fonts only, no external files. */
 :root {
   --bg: #f5f6f8; --panel: #ffffff; --ink: #11151b; --ink-2: #48505c; --ink-3: #6f7782;
-  --rule: #dfe2e7; --grid: #e9ebee; --ume: #2a78d6; --ume-soft: #dce9f9; --eneo: #eb6834; --eneo-soft: #fbe3d8;
+  --rule: #dfe2e7; --grid: #e9ebee; --fors: #2a78d6; --fors-soft: #dce9f9; --eneo: #eb6834; --eneo-soft: #fbe3d8;
   --floor: #9aa0a8; --good: #1f8a4c; --bad: #c4302b;
   --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
@@ -18,13 +18,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f1216; --panel: #171b21; --ink: #f1f3f5; --ink-2: #c3c8cf; --ink-3: #8e959f;
-    --rule: #2a3038; --grid: #222830; --ume: #3987e5; --ume-soft: #17304f; --eneo: #d95926; --eneo-soft: #3d2216;
+    --rule: #2a3038; --grid: #222830; --fors: #3987e5; --fors-soft: #17304f; --eneo: #d95926; --eneo-soft: #3d2216;
     --floor: #7c838c; --good: #46b978; --bad: #ef6b63; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f1216; --panel: #171b21; --ink: #f1f3f5; --ink-2: #c3c8cf; --ink-3: #8e959f;
-  --rule: #2a3038; --grid: #222830; --ume: #3987e5; --ume-soft: #17304f; --eneo: #d95926; --eneo-soft: #3d2216;
+  --rule: #2a3038; --grid: #222830; --fors: #3987e5; --fors-soft: #17304f; --eneo: #d95926; --eneo-soft: #3d2216;
   --floor: #7c838c; --good: #46b978; --bad: #ef6b63; color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -37,10 +37,10 @@ h1 { font: 700 clamp(36px, 6vw, 68px)/1.04 var(--font-display); letter-spacing: 
 h2 { font: 700 clamp(26px, 3.6vw, 40px)/1.12 var(--font-display); letter-spacing: -.015em; margin: 0; text-wrap: balance; max-width: 26ch; }
 p { margin: 0; max-width: 66ch; color: var(--ink-2); }
 .lead { font-size: clamp(18px, 1.6vw, 21px); }
-.u { color: var(--ume); } .e { color: var(--eneo); }
+.u { color: var(--fors); } .e { color: var(--eneo); }
 .hint { font: 13px var(--font-data); color: var(--ink-3); }
 .cover .inner { gap: 28px; }
-.cover-verdict { border-left: 4px solid var(--ume); padding: 6px 0 6px 18px; font-size: clamp(19px, 1.8vw, 23px); color: var(--ink); max-width: 52ch; }
+.cover-verdict { border-left: 4px solid var(--fors); padding: 6px 0 6px 18px; font-size: clamp(19px, 1.8vw, 23px); color: var(--ink); max-width: 52ch; }
 .legend-key { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 15px; color: var(--ink-2); }
 .legend-key span { display: inline-flex; align-items: center; gap: 8px; }
 .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
@@ -48,7 +48,7 @@ p { margin: 0; max-width: 66ch; color: var(--ink-2); }
 /* Headline figures */
 .figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
 .fig { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 22px 22px 20px; display: grid; gap: 8px; align-content: start; min-width: 0; }
-.fig .big { font: 700 clamp(44px, 5vw, 64px)/1 var(--font-display); letter-spacing: -.03em; color: var(--ume); font-variant-numeric: tabular-nums; }
+.fig .big { font: 700 clamp(44px, 5vw, 64px)/1 var(--font-display); letter-spacing: -.03em; color: var(--fors); font-variant-numeric: tabular-nums; }
 .fig .what { font-weight: 600; color: var(--ink); }
 .fig .vs { font: 13.5px/1.45 var(--font-data); color: var(--ink-3); }
 
@@ -60,9 +60,9 @@ p { margin: 0; max-width: 66ch; color: var(--ink-2); }
 .bar-name { font-size: 15px; color: var(--ink-2); }
 .track { position: relative; height: 34px; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .fill { height: 100%; border-radius: 0 4px 4px 0; min-width: 3px; transform-origin: left center; }
-.fill.u { background: var(--ume); } .fill.e { background: var(--eneo); } .fill.n { background: var(--floor); opacity: .55; }
+.fill.u { background: var(--fors); } .fill.e { background: var(--eneo); } .fill.n { background: var(--floor); opacity: .55; }
 .val { font: 600 15px var(--font-data); white-space: nowrap; color: var(--ink); font-variant-numeric: tabular-nums; }
-.ratio { font: 700 15px var(--font-data); color: var(--ume); }
+.ratio { font: 700 15px var(--font-data); color: var(--fors); }
 
 /* Charts */
 .chart-card { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 12px 8px; position: relative; min-width: 0; }
@@ -84,7 +84,7 @@ p { margin: 0; max-width: 66ch; color: var(--ink-2); }
 /* Overload comparison */
 .duel { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 .side { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 22px; display: grid; gap: 14px; border-top: 4px solid; }
-.side.u { border-top-color: var(--ume); } .side.e { border-top-color: var(--eneo); }
+.side.u { border-top-color: var(--fors); } .side.e { border-top-color: var(--eneo); }
 .side h3 { margin: 0; font: 700 19px var(--font-display); color: var(--ink); }
 .side dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: baseline; }
 .side dt { color: var(--ink-3); font-size: 14.5px; }
@@ -96,13 +96,13 @@ p { margin: 0; max-width: 66ch; color: var(--ink-2); }
 /* Personal data: what the model received */
 .received { display: grid; gap: 14px; }
 .msg { background: var(--panel); border: 1px solid var(--rule); border-left: 5px solid; border-radius: 8px; padding: 14px 18px; display: grid; gap: 8px; min-width: 0; }
-.msg.u { border-left-color: var(--ume); } .msg.e { border-left-color: var(--eneo); }
+.msg.u { border-left-color: var(--fors); } .msg.e { border-left-color: var(--eneo); }
 .msg .who { font-weight: 600; font-size: 15px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
 .msg .who small { font-weight: 400; color: var(--ink-3); font-size: 13.5px; }
 .msg .text { font: 15.5px/1.6 var(--font-data); color: var(--ink); overflow-wrap: anywhere; }
 mark { color: var(--ink); padding: 1px 4px; border-radius: 3px; }
 mark.leak { background: var(--eneo-soft); box-shadow: inset 0 -2px 0 var(--eneo); }
-mark.safe { background: var(--ume-soft); box-shadow: inset 0 -2px 0 var(--ume); }
+mark.safe { background: var(--fors-soft); box-shadow: inset 0 -2px 0 var(--fors); }
 .policies { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
 .policy { border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; background: var(--panel); display: grid; gap: 4px; }
 .policy b { font-size: 15px; } .policy span { font-size: 14px; color: var(--ink-2); }
@@ -114,7 +114,7 @@ mark.safe { background: var(--ume-soft); box-shadow: inset 0 -2px 0 var(--ume); 
 .matrix th, .matrix td { padding: 13px 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--rule); }
 .matrix tr:last-child td { border-bottom: 0; }
 .matrix thead th { font-size: 13px; color: var(--ink-3); font-weight: 600; }
-.matrix thead th.u { box-shadow: inset 0 3px 0 var(--ume); } .matrix thead th.e { box-shadow: inset 0 3px 0 var(--eneo); }
+.matrix thead th.u { box-shadow: inset 0 3px 0 var(--fors); } .matrix thead th.e { box-shadow: inset 0 3px 0 var(--eneo); }
 .matrix td:first-child { font-weight: 600; width: 26%; }
 .matrix td { color: var(--ink-2); }
 .yes, .no, .part { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; margin-right: 4px; white-space: nowrap; }
@@ -131,8 +131,8 @@ code { font: 14px var(--font-data); }
 /* Progress rail */
 .rail { position: fixed; right: 18px; top: 50%; transform: translateY(-50%); display: grid; gap: 10px; z-index: 5; }
 .rail a { width: 10px; height: 10px; border-radius: 50%; background: var(--rule); display: block; }
-.rail a.on { background: var(--ume); }
-.rail a:focus-visible, a:focus-visible { outline: 2px solid var(--ume); outline-offset: 3px; }
+.rail a.on { background: var(--fors); }
+.rail a:focus-visible, a:focus-visible { outline: 2px solid var(--fors); outline-offset: 3px; }
 
 /* Entrance animation: elements are fully visible at rest; .anim is only added while a slide animates in. */
 @media (prefers-reduced-motion: no-preference) {
@@ -176,10 +176,10 @@ code { font: 14px var(--font-data); }
 <section class="slide cover" id="cover">
   <div class="inner">
     <div class="eyebrow fade">Umeå kommun · AI platform · November 2026</div>
-    <h1 class="fade">Ume LLM Gateway compared with eneo</h1>
+    <h1 class="fade">Fors compared with eneo</h1>
     <p class="lead fade">Both platforms ran on the same hardware against the same simulated AI model, which answers instantly, and were called the way an external application calls them: each with its own API key. Everything measured is the platforms' own work.</p>
     <p class="cover-verdict fade">On the same hardware the gateway handles about <strong>420 times as many messages</strong>, adds <strong>55 times less delay</strong> to each one and keeps working when overloaded. It also <strong>checks every message for personal data</strong> and <strong>switches to another AI provider</strong> when one fails; eneo does neither.</p>
-    <div class="legend-key fade"><span><i class="dot" style="background:var(--ume)"></i>Ume LLM Gateway</span><span><i class="dot" style="background:var(--eneo)"></i>eneo v2.2.3</span><span class="hint">Use ↓ / space to step through · ↑ to go back</span></div>
+    <div class="legend-key fade"><span><i class="dot" style="background:var(--fors)"></i>Fors</span><span><i class="dot" style="background:var(--eneo)"></i>eneo v2.2.3</span><span class="hint">Use ↓ / space to step through · ↑ to go back</span></div>
   </div>
 </section>
 
@@ -203,7 +203,7 @@ code { font: 14px var(--font-data); }
     <p class="fade">Measured with a single user. Both are small next to the AI model's own answer time, which is usually one to ten seconds. The difference shows up as soon as many people use the service at once and in how much hardware it needs.</p>
     <div class="bars fade">
       <div class="bar-group">
-        <div class="bar-row"><span class="bar-name">Ume gateway</span><div class="track"><div class="fill u" style="width:calc(1.2 / 66.9 * 78%)"></div><span class="val">1.2 ms</span></div></div>
+        <div class="bar-row"><span class="bar-name">Fors</span><div class="track"><div class="fill u" style="width:calc(1.2 / 66.9 * 78%)"></div><span class="val">1.2 ms</span></div></div>
         <div class="bar-row"><span class="bar-name">eneo</span><div class="track"><div class="fill e" style="width:78%"></div><span class="val">66.9 ms</span></div></div>
       </div>
     </div>
@@ -249,12 +249,12 @@ code { font: 14px var(--font-data); }
     <div class="bars fade">
       <div class="bar-group">
         <div class="bar-title">CPU time per message</div>
-        <div class="bar-row"><span class="bar-name">Ume gateway</span><div class="track"><div class="fill u" style="width:calc(0.18 / 78.7 * 78%)"></div><span class="val">0.18 ms</span><span class="ratio">440× less</span></div></div>
+        <div class="bar-row"><span class="bar-name">Fors</span><div class="track"><div class="fill u" style="width:calc(0.18 / 78.7 * 78%)"></div><span class="val">0.18 ms</span><span class="ratio">440× less</span></div></div>
         <div class="bar-row"><span class="bar-name">eneo</span><div class="track"><div class="fill e" style="width:78%"></div><span class="val">78.7 ms</span></div></div>
       </div>
       <div class="bar-group">
         <div class="bar-title">Database statements per message</div>
-        <div class="bar-row"><span class="bar-name">Ume gateway</span><div class="track"><div class="fill u" style="width:calc(0.1 / 78 * 78%)"></div><span class="val">0.1</span><span class="ratio">780× fewer</span></div></div>
+        <div class="bar-row"><span class="bar-name">Fors</span><div class="track"><div class="fill u" style="width:calc(0.1 / 78 * 78%)"></div><span class="val">0.1</span><span class="ratio">780× fewer</span></div></div>
         <div class="bar-row"><span class="bar-name">eneo</span><div class="track"><div class="fill e" style="width:78%"></div><span class="val">78</span></div></div>
       </div>
     </div>
@@ -267,7 +267,7 @@ code { font: 14px var(--font-data); }
     <h2 class="fade">The gateway slows down gracefully; eneo starts failing</h2>
     <div class="duel">
       <div class="side u fade">
-        <h3>Ume gateway, 256 users</h3>
+        <h3>Fors, 256 users</h3>
         <dl><dt>Typical wait</dt><dd>11 ms</dd><dt>Failed requests</dt><dd>0 %</dd></dl>
         <span class="state ok"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="currentColor"/><path d="M5.5 10.5l3 3 6-7" stroke="var(--panel)" stroke-width="2.2" fill="none"/></svg>Every request answered</span>
         <p>When it is busy, requests wait a little longer in line. Nothing is lost.</p>
@@ -289,7 +289,7 @@ code { font: 14px var(--font-data); }
     <p class="fade">We sent the same message to both, with a personal identity number (Skatteverket's public test number), an e-mail address and a phone number. This is exactly what the AI model received.</p>
     <div class="received">
       <div class="msg e fade"><div class="who">eneo v2.2.1 <small>sent unchanged, and saved in its chat history</small></div><div class="text">Kan du hjälpa mig med ett ärende för <mark class="leak">19121212-1212</mark>, epost <mark class="leak">anna.andersson@example.com</mark>, tel <mark class="leak">070-123 45 67</mark>?</div></div>
-      <div class="msg u fade"><div class="who">Ume gateway <small>policy “redact”: the values are replaced before sending; nothing of the message is stored</small></div><div class="text">Kan du hjälpa mig med ett ärende för <mark class="safe">[PERSONNUMMER]</mark>, epost <mark class="safe">[E-POST]</mark>, tel <mark class="safe">[TELEFON]</mark>?</div></div>
+      <div class="msg u fade"><div class="who">Fors <small>policy “redact”: the values are replaced before sending; nothing of the message is stored</small></div><div class="text">Kan du hjälpa mig med ett ärende för <mark class="safe">[PERSONNUMMER]</mark>, epost <mark class="safe">[E-POST]</mark>, tel <mark class="safe">[TELEFON]</mark>?</div></div>
     </div>
     <div class="policies fade">
       <div class="policy"><b>Redact</b><span>Replace the values, as above, and send the rest.</span></div>
@@ -307,7 +307,7 @@ code { font: 14px var(--font-data); }
     <h2 class="fade">What protects users who send data to the wrong place</h2>
     <div class="matrix-wrap fade">
       <table class="matrix">
-        <thead><tr><th>Safeguard</th><th class="u">Ume gateway</th><th class="e">eneo v2.2.1</th></tr></thead>
+        <thead><tr><th>Safeguard</th><th class="u">Fors</th><th class="e">eneo v2.2.1</th></tr></thead>
         <tbody>
           <tr><td>Checks each message for personal data</td><td><span class="yes">Yes</span>identity and co-ordination numbers, e-mail, phone, IBAN</td><td><span class="no">No</span>the content is not inspected <span class="tested">tested</span></td></tr>
           <tr><td>Acts on what it finds</td><td><span class="yes">Yes</span>block, redact or keep on-premises, per key</td><td><span class="no">No</span></td></tr>
@@ -359,10 +359,10 @@ code { font: 14px var(--font-data); }
 const LOAD = {
   clients: [1, 2, 4, 8, 16, 32, 64, 128, 256],
   // benchmarks/compare/results/2026-11-02/scale (streaming, 4 vCPUs, eneo v2.2.3 through a service API key)
-  ume:  { rps: [754.4, 1513.4, 2688.6, 4671.5, 7558.3, 11335.0, 15039.0, 18072.4, 20867.6], median: [1.22, 1.22, 1.37, 1.59, 2.0, 2.7, 4.07, 6.68, 11.44] },
+  fors:  { rps: [754.4, 1513.4, 2688.6, 4671.5, 7558.3, 11335.0, 15039.0, 18072.4, 20867.6], median: [1.22, 1.22, 1.37, 1.59, 2.0, 2.7, 4.07, 6.68, 11.44] },
   eneo: { rps: [13.8, 27.2, 47.7, 49.3, 47.5, 41.3, 37.1, 18.3, 7.7], median: [66.92, 67.51, 71.97, 132.16, 272.61, 436.9, 714.59, 1915.38, 32172.56], errors: [0, 0, 0, 0, 0, 0, 0, 0.034, 0.57] },
 };
-const HW = { vcpus: [1, 2, 4, 6], ume: [5539, 11627, 21097, 24114], eneo: [13.8, 26.6, 50.0, 61.7] };
+const HW = { vcpus: [1, 2, 4, 6], fors: [5539, 11627, 21097, 24114], eneo: [13.8, 26.6, 50.0, 61.7] };
 
 const NS = 'http://www.w3.org/2000/svg';
 const mk = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
@@ -425,52 +425,52 @@ chart(document.getElementById('chart-users'), {
   label: 'Messages per second against simultaneous users', x: [1, 256], y: [1, 100000], xTicks: C,
   yTicks: [1, 10, 100, 1000, 10000, 100000], yFmt: pow10, xTitle: 'Users sending at the same time', yTitle: 'Messages per second',
   series: [
-    { name: 'Ume gateway', label: 'Ume  20 868/s', color: '--ume', points: pair(LOAD.ume.rps) },
+    { name: 'Fors', label: 'Fors  20 868/s', color: '--fors', points: pair(LOAD.fors.rps) },
     { name: 'eneo', label: 'eneo  8/s', color: '--eneo', points: pair(LOAD.eneo.rps) },
   ],
   after: [(svg, sx, sy) => {
     mk('text', { x: sx(8), y: sy(48.5) - 16, 'text-anchor': 'middle', class: 'callout' }, svg).textContent = 'eneo peak: 49/s';
     mk('text', { x: sx(256) - 6, y: sy(LOAD.eneo.rps[8]) + 26, 'text-anchor': 'end', class: 'callout-sub' }, svg).textContent = `${Math.round(LOAD.eneo.errors[8] * 100)} % of requests failed`;
   }],
-  tip: { xs: C, html: (i) => `<b>${C[i]} user${C[i] > 1 ? 's' : ''}</b><br><span class="u">●</span> Ume ${num(LOAD.ume.rps[i])}/s<br><span class="e">●</span> eneo ${num(LOAD.eneo.rps[i])}/s${LOAD.eneo.errors[i] ? ` (${Math.round(LOAD.eneo.errors[i] * 1000) / 10} % errors)` : ''}` },
+  tip: { xs: C, html: (i) => `<b>${C[i]} user${C[i] > 1 ? 's' : ''}</b><br><span class="u">●</span> Fors ${num(LOAD.fors.rps[i])}/s<br><span class="e">●</span> eneo ${num(LOAD.eneo.rps[i])}/s${LOAD.eneo.errors[i] ? ` (${Math.round(LOAD.eneo.errors[i] * 1000) / 10} % errors)` : ''}` },
 });
 
 chart(document.getElementById('chart-wait'), {
   label: 'Median time per answer against simultaneous users', x: [1, 256], y: [1, 100000], xTicks: C,
   yTicks: [1, 10, 100, 1000, 10000, 100000], yFmt: (v) => v >= 1000 ? (v / 1000) + ' s' : v + ' ms', xTitle: 'Users sending at the same time', yTitle: 'Typical time per answer',
   series: [
-    { name: 'Ume gateway', label: 'Ume  11 ms', color: '--ume', points: pair(LOAD.ume.median) },
+    { name: 'Fors', label: 'Fors  11 ms', color: '--fors', points: pair(LOAD.fors.median) },
     { name: 'eneo', label: 'eneo  32 s', color: '--eneo', points: pair(LOAD.eneo.median) },
   ],
   before: [(svg, sx, sy, m, pw) => {
     mk('line', { x1: m.l, x2: m.l + pw, y1: sy(1000), y2: sy(1000), stroke: 'var(--ink-3)', 'stroke-dasharray': '1 4', 'stroke-width': 1.5 }, svg);
     mk('text', { x: m.l + 8, y: sy(1000) - 8, class: 'callout-sub' }, svg).textContent = 'one second';
   }],
-  tip: { xs: C, html: (i) => `<b>${C[i]} user${C[i] > 1 ? 's' : ''}</b><br><span class="u">●</span> Ume ${ms(LOAD.ume.median[i])}<br><span class="e">●</span> eneo ${ms(LOAD.eneo.median[i])}` },
+  tip: { xs: C, html: (i) => `<b>${C[i]} user${C[i] > 1 ? 's' : ''}</b><br><span class="u">●</span> Fors ${ms(LOAD.fors.median[i])}<br><span class="e">●</span> eneo ${ms(LOAD.eneo.median[i])}` },
 });
 
 // Hardware: absolute throughput, both measured, plus eneo's best-case linear projection (10 msg/s per vCPU, its 6-vCPU rate).
-const perVcpu = HW.eneo[3] / 6, meet = HW.ume[2] / perVcpu, V = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
+const perVcpu = HW.eneo[3] / 6, meet = HW.fors[2] / perVcpu, V = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
 chart(document.getElementById('chart-hw'), {
   label: 'Messages per second against vCPUs, with eneo projected', x: [1, 2048], y: [10, 100000], xTicks: V, right: 40, height: 400,
   yTicks: [10, 100, 1000, 10000, 100000], yFmt: pow10, xTitle: 'vCPUs (processor threads)', yTitle: 'Messages per second',
   series: [
-    { name: 'Ume gateway, measured', color: '--ume', points: HW.vcpus.map((v, i) => [v, HW.ume[i]]) },
+    { name: 'Fors, measured', color: '--fors', points: HW.vcpus.map((v, i) => [v, HW.fors[i]]) },
     { name: 'eneo, measured', color: '--eneo', points: HW.vcpus.map((v, i) => [v, HW.eneo[i]]) },
     { name: 'eneo with perfect scaling (projection)', color: '--eneo', dash: true, width: 2, points: [[6, HW.eneo[3]], [2048, perVcpu * 2048]] },
   ],
   before: [(svg, sx, sy, m, pw) => {
-    mk('line', { x1: sx(4), x2: m.l + pw, y1: sy(HW.ume[2]), y2: sy(HW.ume[2]), stroke: 'var(--ume)', 'stroke-dasharray': '2 5', 'stroke-width': 1.5, opacity: .8 }, svg);
-    mk('text', { x: sx(16), y: sy(HW.ume[2]) - 10, class: 'callout-sub' }, svg).textContent = `Ume gateway on 4 vCPUs: ${num(HW.ume[2])}/s`;
+    mk('line', { x1: sx(4), x2: m.l + pw, y1: sy(HW.fors[2]), y2: sy(HW.fors[2]), stroke: 'var(--fors)', 'stroke-dasharray': '2 5', 'stroke-width': 1.5, opacity: .8 }, svg);
+    mk('text', { x: sx(16), y: sy(HW.fors[2]) - 10, class: 'callout-sub' }, svg).textContent = `Fors on 4 vCPUs: ${num(HW.fors[2])}/s`;
   }],
   after: [(svg, sx, sy) => {
-    const x = sx(meet), y = sy(HW.ume[2]);
+    const x = sx(meet), y = sy(HW.fors[2]);
     mk('circle', { cx: x, cy: y, r: 7, fill: 'var(--panel)', stroke: 'var(--eneo)', 'stroke-width': 3 }, svg);
     mk('line', { x1: x, x2: x, y1: y - 10, y2: y - 46, stroke: 'var(--ink-3)', 'stroke-width': 1 }, svg);
     mk('text', { x: x - 6, y: y - 70, 'text-anchor': 'end', class: 'callout' }, svg).textContent = `eneo would catch up at ≈ ${Math.round(meet / 100) * 100} vCPUs`;
     mk('text', { x: x - 6, y: y - 52, 'text-anchor': 'end', class: 'callout-sub' }, svg).textContent = 'and only if it scaled perfectly';
   }],
-  tip: { xs: HW.vcpus, html: (i) => `<b>${HW.vcpus[i]} vCPU${HW.vcpus[i] > 1 ? 's' : ''}</b><br><span class="u">●</span> Ume ${num(HW.ume[i])}/s<br><span class="e">●</span> eneo ${num(HW.eneo[i])}/s` },
+  tip: { xs: HW.vcpus, html: (i) => `<b>${HW.vcpus[i]} vCPU${HW.vcpus[i] > 1 ? 's' : ''}</b><br><span class="u">●</span> Fors ${num(HW.fors[i])}/s<br><span class="e">●</span> eneo ${num(HW.eneo[i])}/s` },
 });
 
 // Printing (or a PDF export) must show final values and fully drawn lines, whatever was animating.

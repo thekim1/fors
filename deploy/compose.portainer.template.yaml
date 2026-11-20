@@ -9,56 +9,58 @@
 # environment variables. Requires Docker 28+ / a recent Compose (configs content, volume subpath).
 #
 # Required variables
-#   UME_DOMAIN                your domain (for example example.se): the host names default to llm.<domain> (the
-#                             gateway API) and llm-admin.<domain> (the admin UI). Or set UME_GATEWAY_HOST instead.
+#   FORS_DOMAIN                your domain (for example example.se): the host names default to llm.<domain> (the
+#                             gateway API) and llm-admin.<domain> (the admin UI). Or set FORS_GATEWAY_HOST instead.
 #   GATEWAY_IMAGE, ADMINAPI_IMAGE, MIGRATIONS_IMAGE   images pushed to a registry the host can pull. The
 #                             compose.portainer.yaml attached to a GitHub release already pins that release's images by
-#                             digest, so with it only UME_DOMAIN is required.
+#                             digest, so with it only FORS_DOMAIN is required.
 # Sign-in to the admin console, one of two ways (docs/runbook.md, "Portainer and other hosts without shell access"):
 #   - the setup wizard: set nothing. At its first start the admin API prints a setup code in the adminapi container's
-#     log; open https://<admin host>[:UME_ADMIN_PORT]/setup, enter it, and the wizard takes the provider, client and
+#     log; open https://<admin host>[:FORS_ADMIN_PORT]/setup, enter it, and the wizard takes the provider, client and
 #     secret and tests a sign-in before saving. The end of the bootstrap container's log names the address;
-#   - declared: UME_OIDC_AUTHORITY, the https URL of your OIDC provider (Keycloak realm, AD FS, Entra ID), with
-#     UME_OIDC_CLIENT_ID and UME_OIDC_CLIENT_SECRET as needed. A set authority keeps the wizard closed for good; every
-#     UME_OIDC_* that is set is the deployment's value and locks its field in the wizard. UME_OIDC_CLIENT_SECRET is used
-#     only together with UME_OIDC_AUTHORITY.
+#   - declared: FORS_OIDC_AUTHORITY, the https URL of your OIDC provider (Keycloak realm, AD FS, Entra ID), with
+#     FORS_OIDC_CLIENT_ID and FORS_OIDC_CLIENT_SECRET as needed. A set authority keeps the wizard closed for good; every
+#     FORS_OIDC_* that is set is the deployment's value and locks its field in the wizard. FORS_OIDC_CLIENT_SECRET is used
+#     only together with FORS_OIDC_AUTHORITY.
 # Optional variables
-#   UME_GATEWAY_HOST          public hostname of the gateway API, to override llm.<domain> (required without
-#                             UME_DOMAIN)
-#   UME_GATEWAY_PUBLIC_URL    its public URL when it is not https://<gateway host> (add :port if not 443)
-#   UME_ADMIN_HOST            public hostname of the admin UI, to override llm-admin.<domain> (without UME_DOMAIN it
-#                             defaults to UME_GATEWAY_HOST)
-#   UME_SETUP_REOPEN          empty. Any new value (for example today's date), then Update the stack, opens the setup
+#   FORS_GATEWAY_HOST          public hostname of the gateway API, to override llm.<domain> (required without
+#                             FORS_DOMAIN)
+#   FORS_GATEWAY_PUBLIC_URL    its public URL when it is not https://<gateway host> (add :port if not 443)
+#   FORS_ADMIN_HOST            public hostname of the admin UI, to override llm-admin.<domain> (without FORS_DOMAIN it
+#                             defaults to FORS_GATEWAY_HOST)
+#   FORS_SETUP_REOPEN          empty. Any new value (for example today's date), then Update the stack, opens the setup
 #                             wizard once more, for an hour, with a new code in the adminapi log; empty it before
 #                             restoring a database
-#   UME_OIDC_AUTHORITY, UME_OIDC_CLIENT_ID (code default ume-admin), UME_OIDC_CLIENT_SECRET (confidential clients)
-#   UME_GATEWAY_BIND / UME_ADMIN_BIND (0.0.0.0), UME_GATEWAY_PORT (8443), UME_ADMIN_PORT (9443)
-#   UME_OIDC_ROLE_CLAIM, UME_OIDC_DEPARTMENT_CLAIM, UME_OIDC_TEAM_CLAIM, UME_OIDC_GROUP_CLAIM, UME_OIDC_EXTRA_SCOPE
+#   FORS_OIDC_AUTHORITY, FORS_OIDC_CLIENT_ID (code default fors-admin), FORS_OIDC_CLIENT_SECRET (confidential clients)
+#   FORS_GATEWAY_BIND / FORS_ADMIN_BIND (0.0.0.0), FORS_GATEWAY_PORT (8443), FORS_ADMIN_PORT (9443)
+#   FORS_OIDC_ROLE_CLAIM, FORS_OIDC_DEPARTMENT_CLAIM, FORS_OIDC_TEAM_CLAIM, FORS_OIDC_GROUP_CLAIM, FORS_OIDC_EXTRA_SCOPE
 #                             (unset: the wizard's value, else the code's default: roles, departmentCodes, teamCodes,
 #                             groups and no extra scope; openid, profile and email are always requested)
-#   UME_OIDC_GROUPS_GATEWAY_ADMIN / _DEPARTMENT_ADMIN / _VIEWER / _TEAM_ADMIN  (see docs/runbook.md, "Identity provider")
-#   UME_OTEL_ENDPOINT         OTLP collector for logs, traces and security events (off when empty)
-#   UME_SOURCE_ADDRESS        client address kept for refused keys: Truncated (default), Full or None
-#   (behind a reverse proxy, list it under Settings > Trusted proxies in the admin UI; UME_FORWARDED_HEADERS is gone)
-#   COMPOSE_PROFILES=data     also start the read-only Data API (DATAAPI_IMAGE, UME_DATA_PORT 10443, UME_DATA_HOST,
-#                             UME_DATA_AUTHORITY defaults to UME_OIDC_AUTHORITY; see docs/data-access.md). It does not
-#                             follow the wizard: with sign-in set there, set UME_DATA_AUTHORITY for access tokens, or the
+#   FORS_OIDC_GROUPS_GATEWAY_ADMIN / _DEPARTMENT_ADMIN / _VIEWER / _TEAM_ADMIN  (see docs/runbook.md, "Identity provider")
+#   FORS_OTEL_ENDPOINT         OTLP collector for logs, traces and security events (off when empty)
+#   FORS_SOURCE_ADDRESS        client address kept for refused keys: Truncated (default), Full or None
+#   (behind a reverse proxy, list it under Settings > Trusted proxies in the admin UI; FORS_FORWARDED_HEADERS is gone)
+#   COMPOSE_PROFILES=data     also start the read-only Data API (DATAAPI_IMAGE, FORS_DATA_PORT 10443, FORS_DATA_HOST,
+#                             FORS_DATA_AUTHORITY defaults to FORS_OIDC_AUTHORITY; see docs/data-access.md). It does not
+#                             follow the wizard: with sign-in set there, set FORS_DATA_AUTHORITY for access tokens, or the
 #                             Data API accepts only Data API keys
-#   UME_DATA_PUBLIC_URL       the Data API's public URL, shown with new Data API keys in the admin UI
-#   UME_ADMIN_PUBLIC_URL      the admin console's address, handed to integrations (docs/integrations.md)
-#   UME_INTEGRATION_API_URL   the Integration API's address as integrations reach it (for example
+#   FORS_DATA_PUBLIC_URL       the Data API's public URL, shown with new Data API keys in the admin UI
+#   FORS_ADMIN_PUBLIC_URL      the admin console's address, handed to integrations (docs/integrations.md)
+#   FORS_INTEGRATION_API_URL   the Integration API's address as integrations reach it (for example
 #                             https://adminapi:8443/integration/v1 when they share a network with adminapi)
-#   UME_INTEGRATION_MANIFEST  an integration manifest (JSON) to provision on every deploy; each new credential key's
+#   FORS_INTEGRATION_MANIFEST  an integration manifest (JSON) to provision on every deploy; each new credential key's
 #                             secret is written to the <stack>_integration-secrets volume (docs/integrations.md)
 #
-# The data lives in the volumes <stack>_postgres-data, <stack>_ume-certs and <stack>_ume-secrets
-# (<stack>_ume-config holds static configuration and is rewritten on every start).
+# The data lives in the volumes <stack>_postgres-data, <stack>_fors-certs and <stack>_fors-secrets
+# (<stack>_fors-config holds static configuration and is rewritten on every start). A stack from before the rename to
+# Fors (0.11 or earlier) had <stack>_ume-certs and <stack>_ume-secrets: the bootstrap copies them once into the new
+# volumes (docs/upgrade-guide.md, "0.12.0"); remove them when the stack runs. In a new stack they stay empty.
 # Do not delete them: a restored database is unusable without the key pepper and the Data
-# Protection certificate (back up ume-secrets/.pepper and ume-certs/data-protection.pfx). A client secret saved in the
+# Protection certificate (back up fors-secrets/.pepper and fors-certs/data-protection.pfx). A client secret saved in the
 # setup wizard is encrypted with that certificate too.
 # Ports: inside the containers the apps listen on 8443 and the health probe checks that; only
 # the host side of the mapping is configurable (see compose.prod.yaml for details).
-name: ume-gateway
+name: fors-gateway
 
 x-hardened: &hardened
   read_only: true
@@ -68,19 +70,19 @@ x-hardened: &hardened
 
 x-certs: &certs-mount
   type: volume
-  source: ume-certs
+  source: fors-certs
   target: /run/certs
   read_only: true
 
 x-conf: &conf-mount
   type: volume
-  source: ume-config
+  source: fors-config
   target: /run/config
   read_only: true
 
 x-secrets: &secrets-mount
   type: volume
-  source: ume-secrets
+  source: fors-secrets
   read_only: true
 
 services:
@@ -89,21 +91,21 @@ services:
     restart: "no"
     entrypoint: [/bin/sh, /config/bootstrap.sh]
     environment:
-      # Each host name, else its default under UME_DOMAIN (llm., llm-admin.). Without the domain the admin's name stays
-      # empty, which the script reads as "the gateway's name" (as before UME_DOMAIN); with neither the domain nor the
-      # gateway's name, that name is empty too and the script stops with "Set UME_DOMAIN or UME_GATEWAY_HOST". Never a
+      # Each host name, else its default under FORS_DOMAIN (llm., llm-admin.). Without the domain the admin's name stays
+      # empty, which the script reads as "the gateway's name" (as before FORS_DOMAIN); with neither the domain nor the
+      # gateway's name, that name is empty too and the script stops with "Set FORS_DOMAIN or FORS_GATEWAY_HOST". Never a
       # ":?" inside a default here: some Compose versions evaluate it even when the outer variable is set.
-      UME_GATEWAY_HOST: ${UME_GATEWAY_HOST:-${UME_DOMAIN:+llm.}${UME_DOMAIN:-}}
-      UME_ADMIN_HOST: ${UME_ADMIN_HOST:-${UME_DOMAIN:+llm-admin.}${UME_DOMAIN:-}}
-      UME_ADMIN_PORT: ${UME_ADMIN_PORT:-9443}
-      UME_DATA_HOST: ${UME_DATA_HOST:-}
+      FORS_GATEWAY_HOST: ${FORS_GATEWAY_HOST:-${FORS_DOMAIN:+llm.}${FORS_DOMAIN:-}}
+      FORS_ADMIN_HOST: ${FORS_ADMIN_HOST:-${FORS_DOMAIN:+llm-admin.}${FORS_DOMAIN:-}}
+      FORS_ADMIN_PORT: ${FORS_ADMIN_PORT:-9443}
+      FORS_DATA_HOST: ${FORS_DATA_HOST:-}
       # Sign-in: the client secret file follows the variable, and only with the authority; the rest only shapes the
       # closing lines of the log (the wizard's address, the Data API's authority).
-      UME_OIDC_AUTHORITY: ${UME_OIDC_AUTHORITY:-}
-      UME_OIDC_CLIENT_SECRET: ${UME_OIDC_CLIENT_SECRET:-}
-      UME_DATA_AUTHORITY: ${UME_DATA_AUTHORITY:-}
+      FORS_OIDC_AUTHORITY: ${FORS_OIDC_AUTHORITY:-}
+      FORS_OIDC_CLIENT_SECRET: ${FORS_OIDC_CLIENT_SECRET:-}
+      FORS_DATA_AUTHORITY: ${FORS_DATA_AUTHORITY:-}
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
-      UME_INTEGRATION_MANIFEST: ${UME_INTEGRATION_MANIFEST:-}
+      FORS_INTEGRATION_MANIFEST: ${FORS_INTEGRATION_MANIFEST:-}
     configs:
       - {source: bootstrap-script, target: /config/bootstrap.sh}
       - {source: redis-acl-template, target: /config/users.acl.example}
@@ -112,10 +114,13 @@ services:
       - {source: postgres-hba, target: /config/pg_hba.conf}
       - {source: app-roles, target: /config/app-roles.sql}
     volumes:
-      - ume-certs:/certs
-      - ume-secrets:/secrets
-      - ume-config:/conf
+      - fors-certs:/certs
+      - fors-secrets:/secrets
+      - fors-config:/conf
       - integration-secrets:/integration-secrets
+      # The volumes from before the rename to Fors, read once by the bootstrap (until 0.13).
+      - ume-certs:/legacy-certs:ro
+      - ume-secrets:/legacy-secrets:ro
     networks: [data]
 
   postgres:
@@ -174,7 +179,7 @@ services:
       DataProtection__CertificatePath: /run/certs/data-protection.pfx
       Migration__RolesSqlPath: /run/config/app-roles.sql
       Seed__Enabled: "false"
-      # UME_INTEGRATION_MANIFEST, written by the bootstrap (docs/integrations.md, "Provisioning from a manifest").
+      # FORS_INTEGRATION_MANIFEST, written by the bootstrap (docs/integrations.md, "Provisioning from a manifest").
       Provisioning__Manifests: /run/config/integration-manifests
       Provisioning__SecretsPath: /run/integration-secrets
     volumes:
@@ -192,7 +197,7 @@ services:
     user: "1654:1654"
     restart: unless-stopped
     stop_grace_period: 60s
-    ports: ["${UME_GATEWAY_BIND:-0.0.0.0}:${UME_GATEWAY_PORT:-8443}:8443"]
+    ports: ["${FORS_GATEWAY_BIND:-0.0.0.0}:${FORS_GATEWAY_PORT:-8443}:8443"]
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Security__SecretsDirectory: /run/app-secrets
@@ -200,14 +205,14 @@ services:
       Kestrel__Endpoints__Https__Url: https://+:8443
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/gateway.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/gateway.key
-      Gateway__Security__SourceAddress: ${UME_SOURCE_ADDRESS:-Truncated}
-      # Integrations (docs/integrations.md): the admin console's address, for links in /v1/ume/context. Empty = none.
-      Gateway__AdminUrl: ${UME_ADMIN_PUBLIC_URL:-}
-      Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL:-}
-      # The admin console's sign-in provider, handed to integrations on /v1/ume/context (docs/integrations.md). Empty
+      Gateway__Security__SourceAddress: ${FORS_SOURCE_ADDRESS:-Truncated}
+      # Integrations (docs/integrations.md): the admin console's address, for links in /v1/fors/context. Empty = none.
+      Gateway__AdminUrl: ${FORS_ADMIN_PUBLIC_URL:-}
+      Gateway__IntegrationApiUrl: ${FORS_INTEGRATION_API_URL:-}
+      # The admin console's sign-in provider, handed to integrations on /v1/fors/context (docs/integrations.md). Empty
       # hands out the authority saved in the setup wizard.
-      Gateway__OidcAuthority: ${UME_OIDC_AUTHORITY:-}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      Gateway__OidcAuthority: ${FORS_OIDC_AUTHORITY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${FORS_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: gateway
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
@@ -220,7 +225,7 @@ services:
       migrations: {condition: service_completed_successfully}
     networks: [edge, data, llm]
     healthcheck:
-      test: [CMD, dotnet, Ume.LlmGateway.Gateway.dll, --health-check]
+      test: [CMD, dotnet, Fors.Gateway.dll, --health-check]
       interval: 15s
       timeout: 10s
       start_period: 30s
@@ -231,7 +236,7 @@ services:
     image: ${ADMINAPI_IMAGE:?Set ADMINAPI_IMAGE}
     user: "1654:1654"
     restart: unless-stopped
-    ports: ["${UME_ADMIN_BIND:-0.0.0.0}:${UME_ADMIN_PORT:-9443}:8443"]
+    ports: ["${FORS_ADMIN_BIND:-0.0.0.0}:${FORS_ADMIN_PORT:-9443}:8443"]
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Security__SecretsDirectory: /run/app-secrets
@@ -239,29 +244,29 @@ services:
       Kestrel__Endpoints__Https__Url: https://+:8443
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/adminapi.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/adminapi.key
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${FORS_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: adminapi
       # Sign-in (docs/identity-and-roles.md, "Setup mode"): an empty value is unset, so the setup wizard's value applies,
-      # else the code's default (client ume-admin, claims roles, departmentCodes, teamCodes, groups, no extra scope). A
+      # else the code's default (client fors-admin, claims roles, departmentCodes, teamCodes, groups, no extra scope). A
       # set authority declares the sign-in and keeps the wizard closed.
-      Oidc__Authority: ${UME_OIDC_AUTHORITY:-}
-      Oidc__ClientId: ${UME_OIDC_CLIENT_ID:-}
-      Oidc__RoleClaim: ${UME_OIDC_ROLE_CLAIM:-}
-      Oidc__DepartmentClaim: ${UME_OIDC_DEPARTMENT_CLAIM:-}
-      Oidc__TeamClaim: ${UME_OIDC_TEAM_CLAIM:-}
-      Oidc__GroupClaim: ${UME_OIDC_GROUP_CLAIM:-}
-      Oidc__ExtraScopes__0: ${UME_OIDC_EXTRA_SCOPE:-}
-      Oidc__RoleGroups__gateway-admin: ${UME_OIDC_GROUPS_GATEWAY_ADMIN:-}
-      Oidc__RoleGroups__department-admin: ${UME_OIDC_GROUPS_DEPARTMENT_ADMIN:-}
-      Oidc__RoleGroups__viewer: ${UME_OIDC_GROUPS_VIEWER:-}
-      Oidc__RoleGroups__team-admin: ${UME_OIDC_GROUPS_TEAM_ADMIN:-}
+      Oidc__Authority: ${FORS_OIDC_AUTHORITY:-}
+      Oidc__ClientId: ${FORS_OIDC_CLIENT_ID:-}
+      Oidc__RoleClaim: ${FORS_OIDC_ROLE_CLAIM:-}
+      Oidc__DepartmentClaim: ${FORS_OIDC_DEPARTMENT_CLAIM:-}
+      Oidc__TeamClaim: ${FORS_OIDC_TEAM_CLAIM:-}
+      Oidc__GroupClaim: ${FORS_OIDC_GROUP_CLAIM:-}
+      Oidc__ExtraScopes__0: ${FORS_OIDC_EXTRA_SCOPE:-}
+      Oidc__RoleGroups__gateway-admin: ${FORS_OIDC_GROUPS_GATEWAY_ADMIN:-}
+      Oidc__RoleGroups__department-admin: ${FORS_OIDC_GROUPS_DEPARTMENT_ADMIN:-}
+      Oidc__RoleGroups__viewer: ${FORS_OIDC_GROUPS_VIEWER:-}
+      Oidc__RoleGroups__team-admin: ${FORS_OIDC_GROUPS_TEAM_ADMIN:-}
       # A new value opens the setup wizard once more (the setup code's key is the file Setup__Secret the bootstrap writes).
-      Setup__Reopen: ${UME_SETUP_REOPEN:-}
-      Gateway__BaseUrl: ${UME_GATEWAY_PUBLIC_URL:-https://${UME_GATEWAY_HOST:-${UME_DOMAIN:+llm.}${UME_DOMAIN:-}}}
-      DataApi__PublicUrl: ${UME_DATA_PUBLIC_URL:-}
+      Setup__Reopen: ${FORS_SETUP_REOPEN:-}
+      Gateway__BaseUrl: ${FORS_GATEWAY_PUBLIC_URL:-https://${FORS_GATEWAY_HOST:-${FORS_DOMAIN:+llm.}${FORS_DOMAIN:-}}}
+      DataApi__PublicUrl: ${FORS_DATA_PUBLIC_URL:-}
       Gateway__OperationsUrl: https://gateway:8443
       # Integration API (/integration/v1): requests per minute per credential key.
-      Admin__IntegrationRequestsPerMinute: ${UME_INTEGRATION_REQUESTS_PER_MINUTE:-60}
+      Admin__IntegrationRequestsPerMinute: ${FORS_INTEGRATION_REQUESTS_PER_MINUTE:-60}
       SSL_CERT_FILE: /run/certs/ca.pem
     volumes:
       - {<<: *certs-mount, volume: {subpath: adminapi}}
@@ -272,7 +277,7 @@ services:
       migrations: {condition: service_completed_successfully}
     networks: [edge, data]
     healthcheck:
-      test: [CMD, dotnet, Ume.LlmGateway.AdminApi.dll, --health-check]
+      test: [CMD, dotnet, Fors.AdminApi.dll, --health-check]
       interval: 15s
       timeout: 10s
       start_period: 30s
@@ -283,10 +288,10 @@ services:
   dataapi:
     <<: *hardened
     profiles: [data]
-    image: ${DATAAPI_IMAGE:-ume-llm-gateway/dataapi:latest}
+    image: ${DATAAPI_IMAGE:-fors/dataapi:latest}
     user: "1654:1654"
     restart: unless-stopped
-    ports: ["${UME_DATA_BIND:-0.0.0.0}:${UME_DATA_PORT:-10443}:8443"]
+    ports: ["${FORS_DATA_BIND:-0.0.0.0}:${FORS_DATA_PORT:-10443}:8443"]
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       Security__SecretsDirectory: /run/app-secrets
@@ -294,11 +299,11 @@ services:
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/dataapi.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/dataapi.key
       # Not the setup wizard's authority: without either variable the Data API accepts only Data API keys.
-      DataApi__Authority: ${UME_DATA_AUTHORITY:-${UME_OIDC_AUTHORITY:-}}
-      DataApi__Audience: ${UME_DATA_AUDIENCE:-ume-data-api}
-      DataApi__MinimumGroupSize: ${UME_DATA_MINIMUM_GROUP_SIZE:-5}
-      DataApi__TimeZone: ${UME_DATA_TIME_ZONE:-Europe/Stockholm}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      DataApi__Authority: ${FORS_DATA_AUTHORITY:-${FORS_OIDC_AUTHORITY:-}}
+      DataApi__Audience: ${FORS_DATA_AUDIENCE:-fors-data-api}
+      DataApi__MinimumGroupSize: ${FORS_DATA_MINIMUM_GROUP_SIZE:-5}
+      DataApi__TimeZone: ${FORS_DATA_TIME_ZONE:-Europe/Stockholm}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${FORS_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: dataapi
       SSL_CERT_FILE: /run/certs/ca.pem
     volumes:
@@ -309,7 +314,7 @@ services:
       migrations: {condition: service_completed_successfully}
     networks: [edge, data]
     healthcheck:
-      test: [CMD, dotnet, Ume.LlmGateway.DataApi.dll, --health-check]
+      test: [CMD, dotnet, Fors.DataApi.dll, --health-check]
       interval: 15s
       timeout: 10s
       start_period: 30s
@@ -342,8 +347,11 @@ networks:
 
 volumes:
   postgres-data:
+  fors-certs:
+  fors-secrets:
+  fors-config:
+  # Before the rename to Fors (0.11 and earlier); copied once into fors-certs and fors-secrets, then unused (until 0.13).
   ume-certs:
   ume-secrets:
-  ume-config:
-  # Credential key secrets from UME_INTEGRATION_MANIFEST, for a platform's bootstrap in the same stack only.
+  # Credential key secrets from FORS_INTEGRATION_MANIFEST, for a platform's bootstrap in the same stack only.
   integration-secrets:

@@ -3,7 +3,7 @@ import type { SignInSecretStatus } from '@/api/types'
 import { setupTest, signInSettings } from '@/test/fixtures'
 import { canSave, completeRequestOf, isStale, newForm, secretChoices, secretOf, testRequestOf, valuesOf } from './setupValues'
 
-const AUTHORITY = 'https://idp.example.org/realms/ume'
+const AUTHORITY = 'https://idp.example.org/realms/fors'
 const stored: SignInSecretStatus = { set: true, source: 'wizard', setAt: '2026-11-01T08:00:00Z', expiresOn: '2027-11-01', unreadable: false, locked: false }
 const deployed: SignInSecretStatus = { set: true, source: 'deployment', setAt: null, expiresOn: null, unreadable: false, locked: true }
 
@@ -31,7 +31,7 @@ describe('the setup form', () => {
   })
 
   it('sends null for a locked value and for an empty one, and splits the scopes', () => {
-    const signIn = signInSettings({ clientId: { value: 'ume-admin', source: 'deployment', locked: true } })
+    const signIn = signInSettings({ clientId: { value: 'fors-admin', source: 'deployment', locked: true } })
     const form = { ...newForm(signIn), authority: `  ${AUTHORITY} `, clientId: 'typed-over', groupClaim: ' ', extraScopes: 'groups, offline_access groups' }
     expect(valuesOf(form, signIn)).toEqual({
       authority: AUTHORITY,

@@ -8,7 +8,7 @@ const FALLBACK = 'Advanced model with fallback'
 const PII = 'Personal data stays on-prem'
 
 async function setLightTheme(page: Page): Promise<void> {
-  await page.evaluate(() => { try { localStorage.setItem('ume-theme', 'light') } catch { /* ignore */ } })
+  await page.evaluate(() => { try { localStorage.setItem('fors-theme', 'light') } catch { /* ignore */ } })
   await page.reload()
 }
 
@@ -34,11 +34,11 @@ test('routing example screenshots', async ({ page }) => {
   await page.getByRole('button', { name: 'New rule', exact: true }).click()
   let drawer = page.getByRole('dialog', { name: 'New rule', exact: true })
   await drawer.getByLabel('Title', { exact: true }).fill(FALLBACK)
-  await drawer.getByLabel('Description').fill('If ume/chat-advanced does not answer, use ume/chat-standard.')
-  await drawer.locator('#rule-condition').fill('model == "ume/chat-advanced"')
-  await drawer.locator('#rule-target-0').fill('ume/chat-advanced')
+  await drawer.getByLabel('Description').fill('If fors/chat-advanced does not answer, use fors/chat-standard.')
+  await drawer.locator('#rule-condition').fill('model == "fors/chat-advanced"')
+  await drawer.locator('#rule-target-0').fill('fors/chat-advanced')
   await drawer.getByRole('button', { name: 'Add fallback' }).click()
-  await drawer.locator('#rule-fallback-0').fill('ume/chat-standard')
+  await drawer.locator('#rule-fallback-0').fill('fors/chat-standard')
   await expect(drawer.getByRole('status').filter({ hasText: 'Valid' })).toBeVisible()
   await drawer.evaluate(el => { const s = el.querySelector('[class*="overflow-y"]') ?? el; s.scrollTop = 0 })
   await page.screenshot({ path: `${images}/routing-fallback-form.png` })
@@ -56,7 +56,7 @@ test('routing example screenshots', async ({ page }) => {
   await drawer.getByLabel('Title', { exact: true }).fill(PII)
   await drawer.getByLabel('Description').fill('Chats that contain personal data only go to our own servers. No fallbacks, so they never leave.')
   await drawer.locator('#rule-condition').fill('pii_detected && endpoint == "chat_completions"')
-  await drawer.locator('#rule-target-0').fill('ume/chat-onprem')
+  await drawer.locator('#rule-target-0').fill('fors/chat-onprem')
   await expect(drawer.getByRole('status').filter({ hasText: 'Valid' })).toBeVisible()
   await drawer.evaluate(el => { const s = el.querySelector('[class*="overflow-y"]') ?? el; s.scrollTop = 0 })
   await page.screenshot({ path: `${images}/routing-pii-form.png` })
@@ -78,7 +78,7 @@ test('routing example screenshots', async ({ page }) => {
   // 3. Test a request that contains personal data.
   await page.getByRole('button', { name: 'Test a request' }).click()
   const test = page.getByRole('dialog', { name: 'Test a request' })
-  await test.getByLabel('Model the client asks for').fill('ume/chat-standard')
+  await test.getByLabel('Model the client asks for').fill('fors/chat-standard')
   await test.getByText('Usage values').click()
   await test.getByLabel('Personal data').selectOption({ label: 'Personal data found' })
   await page.screenshot({ path: `${images}/routing-pii-test-input.png`, clip: { x: 0, y: 0, width: 1280, height: 1180 } })
@@ -98,14 +98,14 @@ test('routing example screenshots', async ({ page }) => {
     const catalogue = await (await page.request.get('/api/catalog')).json()
     const send = async (content: string) => page.request.post(`${catalogue.gatewayBaseUrl}/v1/chat/completions`, {
       headers: { Authorization: `Bearer ${key.secret}` },
-      data: { model: 'ume/chat-standard', messages: [{ role: 'user', content }], max_tokens: 16 },
+      data: { model: 'fors/chat-standard', messages: [{ role: 'user', content }], max_tokens: 16 },
     })
-    await expect.poll(async () => (await send('Personnummer 19121212-1212')).headers()['x-ume-rule'] ?? '').not.toBe('')
+    await expect.poll(async () => (await send('Personnummer 19121212-1212')).headers()['x-fors-rule'] ?? '').not.toBe('')
     const withPii = await send('Personnummer 19121212-1212')
     const without = await send('Hej, vad är klockan?')
-    console.log('WITH PII    ', withPii.status(), withPii.headers()['x-ume-provider'], withPii.headers()['x-ume-residency'], withPii.headers()['x-ume-rule'])
-    console.log('WITHOUT PII ', without.status(), without.headers()['x-ume-provider'], without.headers()['x-ume-residency'], without.headers()['x-ume-rule'])
-    expect(withPii.headers()['x-ume-residency']).toBe('OnPrem')
+    console.log('WITH PII    ', withPii.status(), withPii.headers()['x-fors-provider'], withPii.headers()['x-fors-residency'], withPii.headers()['x-fors-rule'])
+    console.log('WITHOUT PII ', without.status(), without.headers()['x-fors-provider'], without.headers()['x-fors-residency'], without.headers()['x-fors-rule'])
+    expect(withPii.headers()['x-fors-residency']).toBe('OnPrem')
   } finally {
     await mutate(page, `/api/keys/${key.key.id}/revoke`)
   }

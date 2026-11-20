@@ -13,7 +13,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 pull=0; force=()
-settle="${UME_ROLLING_SETTLE_SECONDS:-15}"
+settle="${FORS_ROLLING_SETTLE_SECONDS:-15}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --pull) pull=1; shift;;

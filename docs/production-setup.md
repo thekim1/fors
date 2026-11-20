@@ -1,12 +1,12 @@
 # Production setup
 
 On a Linux Docker host (Docker 28+, Compose v2.24+), download a
-[GitHub release](https://github.com/thekim1/llmgateway/releases) bundle; its Compose files point at
+[GitHub release](https://github.com/thekim1/fors/releases) bundle; its Compose files point at
 that release's images on GHCR, pinned by digest:
 
 ```bash
-curl -fsSLO https://github.com/thekim1/llmgateway/releases/download/vX.Y.Z/ume-llm-gateway-X.Y.Z.tar.gz
-tar -xzf ume-llm-gateway-X.Y.Z.tar.gz && cd ume-llm-gateway-X.Y.Z
+curl -fsSLO https://github.com/thekim1/fors/releases/download/vX.Y.Z/fors-X.Y.Z.tar.gz
+tar -xzf fors-X.Y.Z.tar.gz && cd fors-X.Y.Z
 ./deploy/init-deployment.sh        # asks for the public hostnames, and once for an OIDC authority (empty: the wizard)
 docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait
 ```
@@ -22,7 +22,7 @@ docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait
   `https://<admin host>:9443/setup` (or without the port behind a proxy) within the hour. The wizard shows the redirect
   URIs to register, takes the provider, client and secret, and saves them after a test sign-in by a person who comes out
   as `gateway-admin` ([runbook](runbook.md#first-start-without-an-authority-the-setup-wizard)). The optional Data API
-  then takes tokens only from `UME_DATA_AUTHORITY`.
+  then takes tokens only from `FORS_DATA_AUTHORITY`.
 
 Releases are made by pushing a tag `vX.Y.Z` that matches `<Version>` in `Directory.Build.props`; the
 release workflow tests, pushes the images, smoke-tests the bundle and publishes it (runbook, *Releases*).
@@ -73,8 +73,8 @@ add one gateway row.
 
 No shell access (**Portainer**)? Use `compose.portainer.yaml` (attached to each release, image references
 already pinned): the same stack configured only through environment variables, with certificates and secrets generated automatically in Docker volumes on
-first start. A new stack needs only `UME_DOMAIN`; sign-in is then set in the setup wizard, or declared with
-`UME_OIDC_AUTHORITY`. See the runbook, *Portainer and other hosts without shell access*.
+first start. A new stack needs only `FORS_DOMAIN`; sign-in is then set in the setup wizard, or declared with
+`FORS_OIDC_AUTHORITY`. See the runbook, *Portainer and other hosts without shell access*.
 
 Behind **Nginx Proxy Manager, nginx or an F5** that terminates TLS: add `--proxy` (two hostnames,
 an nginx config is generated). With certificates from your **PKI**: pass `--gateway-cert`,
@@ -84,7 +84,7 @@ Manager settings are in the runbook, *Reverse proxy and PKI*.
 To update without downtime, run two instances of the gateway and admin API behind your proxy; see
 [Updates without downtime](zero-downtime-updates.md). For Kubernetes instead of Compose, see [Kubernetes](kubernetes.md).
 
-Production never uses the development Keycloak realm in `dev/keycloak`: point the sign-in (`UME_OIDC_AUTHORITY`, or the
+Production never uses the development Keycloak realm in `dev/keycloak`: point the sign-in (`FORS_OIDC_AUTHORITY`, or the
 setup wizard) at your existing Keycloak, AD FS or Entra ID, or run the optional production [Keycloak project](keycloak.md)
 (`deploy/keycloak`).
 Roles, department codes and AD groups are mapped by claims; see [Identity provider and roles](identity-and-roles.md).
@@ -101,7 +101,7 @@ operator-mounted secrets/certificates in [the runbook](runbook.md).
 `.\deploy\Test-Deployment.ps1` builds and verifies an isolated production-shaped stack
 with RAM-only test secrets and cleans up only its own resources.
 
-Open `UmeLlmGateway.slnx` in Visual Studio and select `Ume.LlmGateway.AppHost` as
+Open `Fors.slnx` in Visual Studio and select `Fors.AppHost` as
 the startup project. Its `Properties\launchSettings.json` contains the HTTPS/HTTP
 dashboard profiles; root `aspire.config.json` selects the same project for CLI commands.
 The original development secret-store ID is preserved. When migrating an existing

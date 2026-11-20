@@ -165,7 +165,7 @@ const OUTCOME = {
           <fieldset class="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
             <legend class="mb-1 p-0 font-medium">Headers</legend>
             <div v-for="(h, i) in headers" :key="h.uid" class="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
-              <TextField v-model="h.name" :label="`Header ${i + 1} name`" mono placeholder="x-ume-tier" />
+              <TextField v-model="h.name" :label="`Header ${i + 1} name`" mono placeholder="x-fors-tier" />
               <TextField v-model="h.value" :label="`Header ${i + 1} value`" mono />
               <UiButton size="sm" variant="danger" icon="delete" icon-only :aria-label="`Remove header ${i + 1}`" @click="headers.splice(i, 1)" />
             </div>

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compares the Ume LLM gateway with Bifrost (and eneo, PLATFORMS=eneo) against the same fake LLM. See README.md in this folder.
+# Compares Fors with Bifrost (and eneo, PLATFORMS=eneo) against the same fake LLM. See README.md in this folder.
 #
 #   ./run.sh                      all platforms, default scenarios
 #   VUS="1 32" DURATION=60s ./run.sh
@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PLATFORMS="${PLATFORMS:-fake ume bifrost}" # eneo still works: PLATFORMS=eneo
+PLATFORMS="${PLATFORMS:-fake fors bifrost}" # eneo still works: PLATFORMS=eneo
 VUS="${VUS:-1 16 64}"
 DURATION="${DURATION:-30s}"
 WARMUP="${WARMUP:-10s}"

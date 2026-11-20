@@ -1,0 +1,387 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Net.Sockets;
+using System.Net.WebSockets;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Fors.Domain.Entities;
+using Fors.Infrastructure.Persistence;
+using Fors.Infrastructure.Stores;
+using Fors.TestKit;
+
+namespace Fors.IntegrationTests;
+
+public sealed class IntegrationTests(IntegrationFixture fixture)
+{
+    private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task Admin_key_gateway_accounting_budget_and_rotation_share_real_state()
+    {
+        using var admin = await fixture.AdminAsync();
+        var key = await fixture.KeyAsync(admin);
+        using var gateway = fixture.GatewayClient(key.Secret);
+        using var response = await CallAsync(gateway);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var requestId = response.Headers.GetValues("x-request-id").Single();
+        await fixture.FlushAsync();
+        using var usage = await admin.GetAsync("/api/usage/requests/" + requestId, Cancellation);
+        var record = await IntegrationFixture.ReadAsync(usage);
+        record["outcome"]!.GetValue<string>().ShouldBe("Success");
+        record["costUsd"]!.GetValue<decimal>().ShouldBeGreaterThan(0);
+        using var budget = await admin.PostAsJsonAsync("/api/budgets", new
+        {
+            scope = "VirtualKey", scopeId = key.Id, limitUsd = 0, period = "Monthly",
+            alertThresholds = new[] { 80, 100 }, isActive = true,
+        }, Cancellation);
+        budget.EnsureSuccessStatusCode();
+        await WaitForStatusAsync(gateway, HttpStatusCode.PaymentRequired);
+        using var rotate = await admin.PostAsJsonAsync($"/api/keys/{key.Id}/rotate", new { mode = "Grace24Hours" }, Cancellation);
+        var rotated = await IntegrationFixture.ReadAsync(rotate);
+        using var replacement = fixture.GatewayClient(rotated["secret"]!.GetValue<string>());
+        // The gateway learns of the rotation over Redis, like the budget above: the replacement is blocked once it has.
+        await WaitForStatusAsync(replacement, HttpStatusCode.PaymentRequired);
+    }
+
+    [Fact]
+    public async Task Revocation_invalidates_a_warm_gateway_cache_across_redis()
+    {
+        using var admin = await fixture.AdminAsync();
+        var key = await fixture.KeyAsync(admin);
+        using var gateway = fixture.GatewayClient(key.Secret);
+        using var warm = await CallAsync(gateway);
+        warm.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var revoke = await admin.PostAsync($"/api/keys/{key.Id}/revoke", null, Cancellation);
+        revoke.EnsureSuccessStatusCode();
+        await WaitForStatusAsync(gateway, HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Redis_enforces_cross_request_rate_limits()
+    {
+        using var admin = await fixture.AdminAsync();
+        var key = await fixture.KeyAsync(admin, requestsPerMinute: 1);
+        await TestClock.InOneRateLimitMinuteAsync();
+        using var firstClient = fixture.GatewayClient(key.Secret);
+        using var secondClient = fixture.GatewayClient(key.Secret);
+        using var first = await CallAsync(firstClient);
+        first.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var second = await CallAsync(secondClient);
+        second.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
+        second.Headers.RetryAfter.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task Seeded_transcription_alias_reaches_the_fake_whisper_and_is_billed_per_minute()
+    {
+        using var admin = await fixture.AdminAsync();
+        var key = await fixture.KeyAsync(admin);
+        using var gateway = fixture.GatewayClient(key.Secret);
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent("fors/transcribe"), "model" },
+            { new StringContent("verbose_json"), "response_format" },
+            { new ByteArrayContent(new byte[160_000]), "file", "möte.mp3" }, // FakeLlm treats it as 10 s at 128 kbps
+        };
+        using var response = await gateway.PostAsync("/v1/audio/transcriptions", form, Cancellation);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Headers.GetValues("x-fors-model").Single().ShouldBe("fake-eu/whisper-eu");
+        var body = await IntegrationFixture.ReadAsync(response);
+        body["text"]!.GetValue<string>().ShouldContain("möte.mp3");
+        body["duration"]!.GetValue<double>().ShouldBe(10);
+        await fixture.FlushAsync();
+        using var scope = fixture.GatewayServices.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+        var usage = await db.UsageRecords.SingleAsync(r => r.VirtualKeyId == key.Id, Cancellation);
+        usage.Endpoint.ShouldBe(Domain.GatewayEndpoint.AudioTranscriptions);
+        usage.AudioSeconds.ShouldBe(10m); // verbose_json duration
+        usage.CostUsd.ShouldBe(0.001m); // 10 s at 0.006 USD per minute
+    }
+
+    [Fact]
+    public async Task Seeded_live_transcription_session_reaches_the_fake_provider_with_redis_session_slots()
+    {
+        using var admin = await fixture.AdminAsync();
+        var key = await fixture.KeyAsync(admin);
+        using var socket = await fixture.GatewayRealtimeAsync(key.Secret, "fors/live-transcribe");
+
+        (await ReceiveAsync(socket))["type"]!.GetValue<string>().ShouldBe("session.created");
+        var chunk = Convert.ToBase64String(new byte[4800]); // 100 ms of PCM16 at 24 kHz
+        for (var i = 0; i < 20; i++)
+        {
+            await SendAsync(socket, new JsonObject { ["type"] = "input_audio_buffer.append", ["audio"] = chunk });
+        }
+
+        await SendAsync(socket, new JsonObject { ["type"] = "input_audio_buffer.commit" });
+        JsonObject completed;
+        do
+        {
+            completed = await ReceiveAsync(socket);
+        }
+        while (completed["type"]!.GetValue<string>() != "conversation.item.input_audio_transcription.completed");
+
+        completed["transcript"]!.GetValue<string>().ShouldContain("fake-whisper");
+        await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, Cancellation);
+        while ((await socket.ReceiveAsync(new byte[16 * 1024], Cancellation)).MessageType != WebSocketMessageType.Close)
+        {
+        }
+
+        UsageRecord? usage = null;
+        for (var attempt = 0; usage is null && attempt < 50; attempt++)
+        {
+            await fixture.FlushAsync();
+            using var scope = fixture.GatewayServices.CreateScope();
+            usage = await scope.ServiceProvider.GetRequiredService<GatewayDbContext>().UsageRecords.SingleOrDefaultAsync(r => r.VirtualKeyId == key.Id, Cancellation);
+            if (usage is null)
+            {
+                await Task.Delay(100, Cancellation);
+            }
+        }
+
+        usage.ShouldNotBeNull();
+        usage.Endpoint.ShouldBe(Domain.GatewayEndpoint.Realtime);
+        usage.UpstreamModel.ShouldBe("fake-whisper");
+        usage.AudioSeconds.ShouldBe(2m);
+        usage.CostUsd.ShouldBe(0.0002m); // 2 s at 0.006 USD per minute
+    }
+
+    private static Task SendAsync(WebSocket socket, JsonObject evt) =>
+        socket.SendAsync(JsonSerializer.SerializeToUtf8Bytes(evt), WebSocketMessageType.Text, true, Cancellation);
+
+    private static async Task<JsonObject> ReceiveAsync(WebSocket socket)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Cancellation);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        var buffer = new byte[64 * 1024];
+        var length = 0;
+        WebSocketReceiveResult result;
+        do
+        {
+            result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer, length, buffer.Length - length), timeout.Token);
+            length += result.Count;
+        }
+        while (!result.EndOfMessage);
+
+        return (JsonObject)JsonNode.Parse(Encoding.UTF8.GetString(buffer, 0, length))!;
+    }
+
+    [Fact]
+    public async Task Fake_provider_fallback_and_pii_rerouting_run_through_the_real_pipeline()
+    {
+        using var admin = await fixture.AdminAsync();
+        var key = await fixture.KeyAsync(admin);
+        using var gateway = fixture.GatewayClient(key.Secret);
+        using var fallback = await CallAsync(gateway, "fors/demo-fallback");
+        fallback.StatusCode.ShouldBe(HttpStatusCode.OK);
+        fallback.Headers.GetValues("x-fors-fallbacks").Single().ShouldBe("1");
+        using var pii = await CallAsync(gateway, content: "Synthetic identifier 19121212-1212");
+        pii.StatusCode.ShouldBe(HttpStatusCode.OK);
+        pii.Headers.GetValues("x-fors-provider").Single().ShouldBe("fake-onprem");
+        pii.Headers.GetValues("x-fors-pii").Single().ShouldBe("rerouted-onprem");
+        await fixture.FlushAsync();
+        using var scope = fixture.GatewayServices.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+        (await db.UsageRecords.CountAsync(r => r.VirtualKeyId == key.Id, Cancellation)).ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Redis_requires_authentication()
+    {
+        using var client = new TcpClient();
+        await client.ConnectAsync(fixture.RedisHost, fixture.RedisPort, Cancellation);
+        await using var stream = client.GetStream();
+        await stream.WriteAsync(Encoding.ASCII.GetBytes("*1\r\n$4\r\nPING\r\n"), Cancellation);
+        var buffer = new byte[256];
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Cancellation);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        var count = await stream.ReadAsync(buffer, timeout.Token);
+        Encoding.ASCII.GetString(buffer, 0, count).ShouldStartWith("-NOAUTH");
+    }
+
+    [Fact]
+    public async Task Redis_budget_reservations_are_atomic_under_contention()
+    {
+        var ledger = fixture.GatewayServices.GetRequiredService<ISpendLedger>();
+        ledger.ShouldBeOfType<RedisSpendLedger>();
+        var counter = new SpendCounter("fors:integration:" + Guid.NewGuid().ToString("N"), 1000, TimeSpan.FromMinutes(1));
+        var results = await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => ledger.ReserveAsync([counter], 100, missingAsZero: true, Cancellation)));
+        results.Count(r => r.Reserved).ShouldBe(10);
+        (await ledger.GetAsync([counter.Key], Cancellation))[0].ShouldBe(1000);
+    }
+
+    [Fact]
+    public async Task Redis_limits_requests_in_flight_and_frees_released_slots()
+    {
+        var limiter = fixture.GatewayServices.GetRequiredService<IRateLimiter>();
+        limiter.ShouldBeOfType<RedisRateLimiter>();
+        var key = Guid.NewGuid();
+        (await limiter.AcquireAsync(key, 100, null, 1, "first", Cancellation)).Allowed.ShouldBeTrue();
+        var refused = await limiter.AcquireAsync(key, 100, null, 1, "second", Cancellation);
+        refused.Allowed.ShouldBeFalse();
+        refused.Reason.ShouldBe("concurrency");
+
+        limiter.Release(key, "first");
+        for (var attempt = 0; attempt < 20; attempt++) // the release is fire-and-forget
+        {
+            if ((await limiter.AcquireAsync(key, 100, null, 1, "second", Cancellation)).Allowed)
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(50), Cancellation);
+        }
+
+        Assert.Fail("The released slot was not freed.");
+    }
+
+    [Fact]
+    public async Task Redis_admission_reserves_only_what_the_rate_limit_admits_in_one_script()
+    {
+        var admission = fixture.GatewayServices.GetRequiredService<IAdmissionStore>();
+        admission.ShouldBeOfType<RedisAdmissionStore>();
+        var ledger = fixture.GatewayServices.GetRequiredService<ISpendLedger>();
+        var key = Guid.NewGuid();
+        var budget = new SpendCounter("fors:integration:" + Guid.NewGuid().ToString("N"), 250, TimeSpan.FromMinutes(1));
+        var tokens = new SpendCounter("fors:integration:" + Guid.NewGuid().ToString("N"), 1000, TimeSpan.FromMinutes(1));
+        await ledger.InitializeAsync(budget.Key, 0, budget.TimeToLive, Cancellation);
+        await ledger.InitializeAsync(tokens.Key, 0, tokens.TimeToLive, Cancellation);
+        var rate = new RateLimitRequest(key, 3, null, 2, "first");
+
+        var admitted = await admission.AdmitAsync(rate, [budget, tokens], [100, 10], Cancellation);
+        admitted.Rate.Allowed.ShouldBeTrue();
+        admitted.Rate.RequestsRemaining.ShouldBe(2);
+        admitted.Spend!.Reserved.ShouldBeTrue();
+        admitted.Spend.ValuesBefore.ShouldBe([0L, 0L]);
+
+        // Admitted, but the budget is too small: the request counts against the rate limit, nothing is reserved.
+        var exhausted = await admission.AdmitAsync(rate with { LeaseId = "second" }, [budget, tokens], [200, 10], Cancellation);
+        exhausted.Rate.Allowed.ShouldBeTrue();
+        exhausted.Spend!.ExhaustedIndex.ShouldBe(0);
+        (await ledger.GetAsync([budget.Key, tokens.Key], Cancellation)).ShouldBe([100L, 10L]);
+
+        // Both in-flight slots are taken: refused by the rate limit, so the budget is not touched.
+        var refused = await admission.AdmitAsync(rate with { LeaseId = "third" }, [budget, tokens], [100, 10], Cancellation);
+        refused.Rate.Allowed.ShouldBeFalse();
+        refused.Rate.Reason.ShouldBe("concurrency");
+        refused.Spend.ShouldBeNull();
+        (await ledger.GetAsync([budget.Key, tokens.Key], Cancellation)).ShouldBe([100L, 10L]);
+
+        // A missing counter is reported for seeding, after the rate limit counted the request.
+        var missing = new SpendCounter("fors:integration:" + Guid.NewGuid().ToString("N"), 1000, TimeSpan.FromMinutes(1));
+        var cold = await admission.AdmitAsync(new RateLimitRequest(Guid.NewGuid(), 10, null, null, null), [budget, missing], [1, 1], Cancellation);
+        cold.Rate.Allowed.ShouldBeTrue();
+        cold.Spend!.Missing.ShouldBe([1]);
+        (await ledger.GetAsync([budget.Key], Cancellation)).ShouldBe([100L]);
+    }
+
+    [Fact]
+    public async Task Redis_usage_journal_holds_batches_up_to_its_cap_and_hands_over_abandoned_ones()
+    {
+        var redis = fixture.GatewayServices.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>();
+        var mine = new RedisUsageJournal(redis, TimeProvider.System);
+        var batch = UsageJournalBatches.Name(Guid.NewGuid().ToString("N"), 3);
+        byte[] payload = [1, 2, 3, 4];
+        var before = await mine.CountRecordsAsync(Cancellation);
+
+        (await mine.AddAsync(batch, payload, 3, maxRecords: before + 2, Cancellation)).ShouldBeFalse(); // over the cap
+        (await mine.AddAsync(batch, payload, 3, maxRecords: before + 3, Cancellation)).ShouldBeTrue();
+        (await mine.GetAsync(batch, Cancellation)).ShouldBe(payload);
+        (await mine.CountRecordsAsync(Cancellation)).ShouldBe(before + 3);
+
+        // Touched batches belong to a living instance; one untouched for longer than the idle time is taken over once.
+        var later = new ShiftedTime(TimeSpan.FromMinutes(5));
+        var other = new RedisUsageJournal(redis, later);
+        await mine.TouchAsync([batch], Cancellation);
+        (await other.ClaimAbandonedAsync(TimeSpan.FromMinutes(10), 100, Cancellation)).ShouldNotContain(batch);
+        var claimed = await other.ClaimAbandonedAsync(TimeSpan.FromMinutes(2), 1000, Cancellation);
+        claimed.ShouldContain(batch);
+        (await new RedisUsageJournal(redis, later).ClaimAbandonedAsync(TimeSpan.FromMinutes(2), 1000, Cancellation)).ShouldNotContain(batch);
+
+        await other.RemoveAsync(batch, Cancellation);
+        await other.RemoveAsync(batch, Cancellation); // removing twice counts down once
+        (await mine.GetAsync(batch, Cancellation)).ShouldBeNull();
+        (await mine.CountRecordsAsync(Cancellation)).ShouldBe(before);
+    }
+
+    private sealed class ShiftedTime(TimeSpan shift) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => base.GetUtcNow() + shift;
+    }
+
+    [Fact]
+    public async Task Redis_cooldowns_are_shared_and_never_shortened()
+    {
+        var circuits = fixture.GatewayServices.GetRequiredService<ICircuitBreakerStore>();
+        circuits.ShouldBeOfType<RedisCircuitBreakerStore>();
+        var (cooling, other, provider) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        await circuits.CoolDownAsync(cooling, TimeSpan.FromMinutes(1), Cancellation);
+        await circuits.CoolDownAsync(cooling, TimeSpan.FromMilliseconds(1), Cancellation); // a shorter Retry-After keeps the longer cooldown
+        await Task.Delay(TimeSpan.FromMilliseconds(50), Cancellation);
+
+        var status = await circuits.GetStatusAsync([provider], [cooling, other], Cancellation);
+        status.CoolingDeployments.ShouldBe([cooling]);
+        status.OpenProviders.ShouldBeEmpty();
+        (await circuits.GetOpenAsync([provider], Cancellation)).ShouldBeEmpty(); // a cooldown is not an open circuit
+
+        await circuits.SetStateAsync(provider, CircuitState.Open, TimeSpan.FromMinutes(1), Cancellation);
+        (await circuits.GetStatusAsync([provider], [other], Cancellation)).IsUnavailable(provider, other).ShouldBeTrue();
+        await circuits.RecordSuccessAsync(provider, Cancellation);
+        await circuits.SetStateAsync(provider, CircuitState.Closed, null, Cancellation); // deletes with DEL, which the ACL allows
+        (await circuits.GetOpenAsync([provider], Cancellation)).ShouldBeEmpty();
+        (await circuits.GetStatusAsync([], [], Cancellation)).ShouldBeSameAs(CircuitStatus.None);
+    }
+
+    [Fact]
+    public async Task Redis_admin_sessions_round_trip_expire_and_are_removed()
+    {
+        var sessions = fixture.GatewayServices.GetRequiredService<IAdminSessionStore>();
+        sessions.ShouldBeOfType<RedisAdminSessionStore>();
+        var id = Guid.NewGuid().ToString("N");
+        byte[] value = [1, 2, 3, 250];
+
+        await sessions.SetAsync(id, value, TimeSpan.FromMinutes(5), Cancellation);
+        (await sessions.GetAsync(id, Cancellation)).ShouldBe(value);
+        await sessions.RemoveAsync(id, Cancellation);
+        (await sessions.GetAsync(id, Cancellation)).ShouldBeNull();
+
+        await sessions.SetAsync(id, value, TimeSpan.FromMilliseconds(300), Cancellation);
+        await Task.Delay(TimeSpan.FromSeconds(1), Cancellation);
+        (await sessions.GetAsync(id, Cancellation)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Redis_reports_token_usage_without_consuming_request_quota()
+    {
+        var limiter = fixture.GatewayServices.GetRequiredService<IRateLimiter>();
+        limiter.ShouldBeOfType<RedisRateLimiter>();
+        var key = Guid.NewGuid();
+        (await limiter.PeekTokensUsedPercentAsync(key, null, Cancellation)).ShouldBeNull();
+        (await limiter.PeekTokensUsedPercentAsync(key, 1000, Cancellation)).ShouldBe(0);
+        await limiter.RecordTokensAsync(key, 300, Cancellation);
+        (await limiter.PeekTokensUsedPercentAsync(key, 1000, Cancellation)).ShouldBe(30);
+        await limiter.RecordTokensAsync(key, 5000, Cancellation);
+        (await limiter.PeekTokensUsedPercentAsync(key, 1000, Cancellation)).ShouldBe(100);
+
+        var other = Guid.NewGuid();
+        await limiter.PeekTokensUsedPercentAsync(other, 1000, Cancellation);
+        (await limiter.AcquireAsync(other, 1, null, Cancellation)).Allowed.ShouldBeTrue();
+    }
+
+    private static Task<HttpResponseMessage> CallAsync(HttpClient client, string model = "fors/chat-standard", string content = "Synthetic test request") =>
+        client.PostAsJsonAsync("/v1/chat/completions", new { model, messages = new[] { new { role = "user", content } }, max_tokens = 32 }, Cancellation);
+
+    private static async Task WaitForStatusAsync(HttpClient client, HttpStatusCode expected)
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            using var response = await CallAsync(client);
+            if (response.StatusCode == expected) { return; }
+            await Task.Delay(TimeSpan.FromMilliseconds(100), Cancellation);
+        }
+        Assert.Fail($"Expected status {(int)expected} after cross-service invalidation.");
+    }
+}

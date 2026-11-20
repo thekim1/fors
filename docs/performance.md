@@ -49,7 +49,7 @@ cancelled ones at Information), because one formatted line per request cost a no
 same facts are in the usage record and the metrics. *Settings > Request logging* turns the line on for every request
 for a while; the switch is read from the cached catalogue snapshot. Provider time and time to first token are two or
 three timestamp reads per request. The OpenTelemetry GenAI metrics are off by default (`Gateway:GenAiMetrics`): they
-add four histogram recordings per request, and `ume.gateway.*` already covers tokens, cost and latency.
+add four histogram recordings per request, and `fors.gateway.*` already covers tokens, cost and latency.
 
 Streaming: each upstream SSE event is parsed only as far as needed (a forward-only scan for the text length; the usage
 chunk is parsed fully, and the `"usage":null` that OpenAI and Azure put in every chunk does not count as one) and written straight into the response pipe with one flush per event, so tokens reach the client
@@ -69,22 +69,22 @@ Off the request path:
 
 ## Measuring
 
-`benchmarks/Ume.LlmGateway.Benchmarks` contains [BenchmarkDotNet](https://benchmarkdotnet.org/) benchmarks and an
+`benchmarks/Fors.Benchmarks` contains [BenchmarkDotNet](https://benchmarkdotnet.org/) benchmarks and an
 interaction audit. Both need Docker (Postgres and Redis run in Testcontainers) and must run in Release:
 
 ```powershell
 # All benchmarks (about 10 minutes); results in BenchmarkDotNet.Artifacts\results
-dotnet run -c Release --project benchmarks\Ume.LlmGateway.Benchmarks -- --filter *
+dotnet run -c Release --project benchmarks\Fors.Benchmarks -- --filter *
 
 # One group, e.g. the end-to-end pipeline or the provider/streaming leg
-dotnet run -c Release --project benchmarks\Ume.LlmGateway.Benchmarks -- --filter *Pipeline*
-dotnet run -c Release --project benchmarks\Ume.LlmGateway.Benchmarks -- --filter *Provider*
+dotnet run -c Release --project benchmarks\Fors.Benchmarks -- --filter *Pipeline*
+dotnet run -c Release --project benchmarks\Fors.Benchmarks -- --filter *Provider*
 
 # Postgres/Redis calls per request, plus a 15 s concurrent load test
-dotnet run -c Release --project benchmarks\Ume.LlmGateway.Benchmarks -- audit
+dotnet run -c Release --project benchmarks\Fors.Benchmarks -- audit
 
 # Regression guard (about 1 minute): fails when a request allocates more or calls Postgres or Redis more than the baseline
-dotnet run -c Release --project benchmarks\Ume.LlmGateway.Benchmarks -- check
+dotnet run -c Release --project benchmarks\Fors.Benchmarks -- check
 ```
 
 | Benchmark | What it measures |
@@ -119,16 +119,16 @@ Docker on WSL2, so a Redis round trip costs roughly 0.3–0.5 ms; in production 
 below 0.2 ms, and the remaining gateway overhead is correspondingly smaller.
 
 Throughput, scaling and streaming latency against a fake LLM in containers with pinned cores are measured with
-`benchmarks/compare` (`PLATFORMS="fake ume"` leaves out eneo); see its [README](../benchmarks/compare/README.md). For a
+`benchmarks/compare` (`PLATFORMS="fake fors"` leaves out eneo); see its [README](../benchmarks/compare/README.md). For a
 new baseline, run everything in one session on an otherwise idle machine:
 
 ```bash
-dotnet run -c Release --project benchmarks/Ume.LlmGateway.Benchmarks -- --filter '*'   # ~10 min
-dotnet run -c Release --project benchmarks/Ume.LlmGateway.Benchmarks -- audit         # ~1 min
+dotnet run -c Release --project benchmarks/Fors.Benchmarks -- --filter '*'   # ~10 min
+dotnet run -c Release --project benchmarks/Fors.Benchmarks -- audit         # ~1 min
 cd benchmarks/compare
-PLATFORMS="fake ume" ./run.sh       # ~8 min
-PLATFORMS="fake ume" ./scale.sh     # ~16 min
-PLATFORMS="fake ume" ./latency.sh   # ~6 min
+PLATFORMS="fake fors" ./run.sh       # ~8 min
+PLATFORMS="fake fors" ./scale.sh     # ~16 min
+PLATFORMS="fake fors" ./latency.sh   # ~6 min
 ./sizing/run.sh                     # ~10 min
 ```
 
@@ -541,7 +541,7 @@ k6 4. `ENEO_AUTH=apikey PLATFORMS=eneo` with `run.sh`, `scale.sh` and `latency.s
 fake LLM's answer. Raw results: `benchmarks/compare/results/2026-11-02/`. eneo's own figures agree with its
 previous run (2026-10-27) within run-to-run noise.
 
-| Chat message, 4 vCPUs | Ume gateway | eneo v2.2.3 |
+| Chat message, 4 vCPUs | Fors | eneo v2.2.3 |
 |---|---:|---:|
 | Added latency, 1 client, non-streaming (median) | **0.61 ms** | 53.1 ms |
 | Added latency, 1 client, streaming, whole stream (median) | **0.90 ms** | 66.4 ms |
@@ -630,7 +630,7 @@ Postgres. Set-up, what Bifrost does differently (each point checked in its code 
 reaches 68–83 % of its 2026-11-02 baseline throughput. Both gateways ran in the same session on the same CPU layout, so
 the ratios hold; the absolute figures below are this machine's, not the baseline's.
 
-| Chat message, 4 vCPUs each | Ume gateway | Bifrost v2.5.1 |
+| Chat message, 4 vCPUs each | Fors | Bifrost v2.5.1 |
 |---|---:|---:|
 | Added latency, 1 client, non-streaming / streaming (median) | **0.46 / 0.68 ms** | 0.62 / 1.06 ms |
 | Added latency, 64 clients, streaming (median) / p99 | **3.7 / 9.9 ms** | 27.9 / 85.4 ms |
@@ -663,7 +663,7 @@ the ratios hold; the absolute figures below are this machine's, not the baseline
 Checked in the eneo v2.2.1 source and tested live with the compare stack. The three backports in v2.2.3 (CORS allowlist
 for secret-key calls, website loading, JIT e-mail verification) do not change any of it.
 
-| Safeguard | Ume gateway | eneo |
+| Safeguard | Fors | eneo |
 |---|---|---|
 | Scans message content for personal data | Yes: personnummer and samordningsnummer (date checked; Luhn for bare 10 digits), e-mail, phone, IBAN | No. Its "redaction" only masks secrets, tokens and e-mail addresses in its own logs (`observability/redaction.py`). Tested: a message with Skatteverket's test personnummer 19121212-1212, an e-mail and a phone number reached the model unchanged |
 | Acts on it | Per key: block, redact, keep on-premises, or log only | No |
@@ -672,7 +672,7 @@ for secret-key calls, website loading, JIT e-mail verification) do not change an
 | Stores message content | Never (usage metadata only) | Every question and answer, as chat history; the test personnummer was in `questions` afterwards |
 
 **eneo behind the gateway.** eneo reaches models through OpenAI-compatible provider endpoints, so it can use the gateway
-as its provider. Tested with `ENEO_LLM_ENDPOINT=http://ume-gateway:8080/v1`, `ENEO_LLM_MODEL=ume/chat` and a virtual key
+as its provider. Tested with `ENEO_LLM_ENDPOINT=http://fors-gateway:8080/v1`, `ENEO_LLM_MODEL=fors/chat` and a virtual key
 with the `Redact` policy: the model received `[PERSONNUMMER]`, `[E-POST]`, `[TELEFON]`, and with the primary provider
 unreachable eneo's request succeeded through the fallback provider (`FallbackCount = 1`). eneo still stores the original
 text in its own chat history; the gateway only protects what is sent to the model.

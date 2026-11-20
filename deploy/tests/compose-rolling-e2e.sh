@@ -4,12 +4,12 @@
 # init-deployment.sh --rolling writes, and replaces every slot with rolling-update.sh --force while clients send GET and
 # POST requests to the gateway and load the admin UI. Fails if a single request is lost.
 #
-#   deploy/tests/compose-rolling-e2e.sh      # uses the local images (ume-llm-gateway/*:<version>) or *_IMAGE
+#   deploy/tests/compose-rolling-e2e.sh      # uses the local images (fors/*:<version>) or *_IMAGE
 #
 # Needs Docker (Linux host), python3, openssl and sudo for the file ownership init-deployment.sh sets.
 set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-work="$(mktemp -d)"; project=ume-rolling-e2e; edge=ume-rolling-e2e-edge; port=18443
+work="$(mktemp -d)"; project=fors-rolling-e2e; edge=fors-rolling-e2e-edge; port=18443
 # The proxy reaches the slots at the host's own address, as a proxy on another machine would (not through loopback).
 upstream="$(hostname -I | awk '{print $1}')"
 cp -R "$repo/deploy" "$work/"

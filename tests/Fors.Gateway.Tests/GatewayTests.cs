@@ -1,0 +1,748 @@
+using System.Globalization;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Fors.Domain;
+using Fors.Domain.Requests;
+using Fors.Infrastructure.Persistence;
+using Fors.Infrastructure.Stores;
+using Fors.TestKit;
+
+namespace Fors.Gateway.Tests;
+
+public sealed class GatewayTests(GatewayFixture fixture)
+{
+    [Theory]
+    [InlineData("missing", 401, "invalid_api_key")]
+    [InlineData("revoked", 401, "key_revoked")]
+    [InlineData("expired", 401, "key_expired")]
+    [InlineData("disabled", 403, "key_disabled")]
+    [InlineData("past-grace", 401, "key_revoked")]
+    public async Task Rejects_unusable_keys(string state, int status, string code)
+    {
+        var key = state == "missing" ? null : await fixture.CreateKeyAsync(k =>
+        {
+            k.RevokedAt = state == "revoked" ? DateTimeOffset.UtcNow.AddMinutes(-1) : null;
+            k.ExpiresAt = state == "expired" ? DateTimeOffset.UtcNow.AddMinutes(-1) : null;
+            k.IsEnabled = state != "disabled";
+            k.GraceUntil = state == "past-grace" ? DateTimeOffset.UtcNow.AddMinutes(-1) : null;
+        });
+        using var response = await fixture.SendAsync(key);
+        await AssertErrorAsync(response, status, code);
+    }
+
+    [Fact]
+    public async Task Every_endpoint_in_the_table_has_a_documented_route()
+    {
+        using var response = await fixture.Client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+        var paths = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!["paths"]!.AsObject();
+        foreach (var info in GatewayEndpoints.All)
+        {
+            var operations = paths[info.ClientPath].ShouldNotBeNull(info.ClientPath).AsObject();
+            operations.ContainsKey(info.IsRealtime || info.UpstreamPath is null ? "get" : "post").ShouldBeTrue(info.ClientPath);
+        }
+    }
+
+    [Fact]
+    public async Task Grace_key_still_works()
+    {
+        var key = await fixture.CreateKeyAsync(k => k.GraceUntil = DateTimeOffset.UtcNow.AddHours(24));
+        using var response = await fixture.SendAsync(key);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Success_has_routing_cost_security_headers_and_persisted_metadata()
+    {
+        var key = await fixture.CreateKeyAsync(k => k.RequestsPerMinute = 10);
+        await fixture.AddBudgetAsync(BudgetScope.VirtualKey, key.Id, 10);
+        using var response = await fixture.SendAsync(key);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Headers.GetValues("x-fors-provider").Single().ShouldBe("eu");
+        response.Headers.GetValues("x-fors-model").Single().ShouldBe("eu/ok");
+        response.Headers.GetValues("x-fors-residency").Single().ShouldBe("Eu");
+        response.Headers.GetValues("x-fors-fallbacks").Single().ShouldBe("0");
+        decimal.Parse(response.Headers.GetValues("x-fors-cost-usd").Single(), CultureInfo.InvariantCulture).ShouldBe(0.000135m);
+        response.Headers.GetValues("x-fors-budget-remaining-usd").Single().ShouldBe("10.00");
+        response.Headers.Contains("x-fors-cost-sek").ShouldBeFalse();
+        response.Headers.GetValues("x-ratelimit-remaining-requests").Single().ShouldBe("9");
+        response.Headers.GetValues("X-Content-Type-Options").Single().ShouldBe("nosniff");
+        response.Headers.GetValues("X-Frame-Options").Single().ShouldBe("DENY");
+        response.Headers.GetValues("Referrer-Policy").Single().ShouldBe("no-referrer");
+        response.Headers.GetValues("Content-Security-Policy").Single().ShouldContain("frame-ancestors 'none'");
+        response.Headers.CacheControl!.NoStore.ShouldBeTrue();
+        response.Headers.Contains("Server").ShouldBeFalse();
+        var usage = await fixture.UsageAsync(response);
+        usage.VirtualKeyId.ShouldBe(key.Id);
+        usage.TeamId.ShouldBe(key.TeamId);
+        usage.InputTokens.ShouldBe(100);
+        usage.CachedInputTokens.ShouldBe(10);
+        usage.OutputTokens.ShouldBe(20);
+        usage.CostUsd.ShouldBe(0.000135m);
+        usage.Outcome.ShouldBe(RequestOutcome.Success);
+        usage.UpstreamMs.ShouldNotBeNull().ShouldBeInRange(0, usage.LatencyMs);
+        usage.TimeToFirstTokenMs.ShouldBeNull(); // not streamed
+        usage.ProviderFirstTokenMs.ShouldBeNull();
+        using var scope = fixture.Services.CreateScope();
+        (await scope.ServiceProvider.GetRequiredService<GatewayDbContext>().VirtualKeys.SingleAsync(k => k.Id == key.Id, TestContext.Current.CancellationToken)).LastUsedAt.ShouldNotBeNull();
+    }
+
+    [Theory]
+    [InlineData("eu/fail503")]
+    [InlineData("eu/fail429")]
+    [InlineData("slow/slow")]
+    public async Task Retryable_failure_falls_back(string failingModel)
+    {
+        var route = await fixture.CreateRouteAsync(failingModel, "onprem/ok");
+        var key = await fixture.CreateKeyAsync();
+        using var response = await fixture.SendAsync(key, route);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Headers.GetValues("x-fors-provider").Single().ShouldBe("onprem");
+        response.Headers.GetValues("x-fors-fallbacks").Single().ShouldBe("1");
+        var usage = await fixture.UsageAsync(response);
+        usage.FallbackCount.ShouldBe(1);
+        // The failed attempt is provider time too; the slow provider is given up on after its 1 s timeout.
+        usage.UpstreamMs.ShouldNotBeNull().ShouldBeInRange(failingModel == "slow/slow" ? 900 : 0, usage.LatencyMs);
+    }
+
+    [Fact]
+    public async Task Provider_time_to_first_token_leaves_out_the_failed_attempt()
+    {
+        // The slow provider is given up on after its 1 s timeout; that second is the client's wait, not onprem's.
+        var route = await fixture.CreateRouteAsync("slow/slow", "onprem/ok");
+        using var response = await fixture.SendAsync(await fixture.CreateKeyAsync(), route, stream: true);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var usage = await fixture.UsageAsync(response);
+        usage.ProviderName.ShouldBe("onprem");
+        usage.TimeToFirstTokenMs.ShouldNotBeNull().ShouldBeGreaterThanOrEqualTo(900);
+        usage.ProviderFirstTokenMs.ShouldNotBeNull().ShouldBeLessThan(900);
+    }
+
+    [Fact]
+    public async Task Retry_after_puts_the_deployment_on_cooldown()
+    {
+        var route = await fixture.CreateRouteAsync("eu/quota429", "onprem/ok");
+        var key = await fixture.CreateKeyAsync();
+        using (var first = await fixture.SendAsync(key, route))
+        {
+            first.StatusCode.ShouldBe(HttpStatusCode.OK);
+            first.Headers.GetValues("x-fors-provider").Single().ShouldBe("onprem");
+        }
+
+        var deployment = fixture.DeploymentId("eu/quota429");
+        var status = await fixture.Services.GetRequiredService<ICircuitBreakerStore>()
+            .GetStatusAsync([], [deployment], TestContext.Current.CancellationToken);
+        status.CoolingDeployments.ShouldContain(deployment);
+
+        // Until the cooldown ends the quota-limited deployment goes last: no wasted round trip.
+        using var second = await fixture.SendAsync(key, route);
+        second.StatusCode.ShouldBe(HttpStatusCode.OK);
+        second.Headers.GetValues("x-fors-provider").Single().ShouldBe("onprem");
+        second.Headers.GetValues("x-fors-fallbacks").Single().ShouldBe("0");
+    }
+
+    [Fact]
+    public async Task Last_candidate_is_retried_after_a_passing_failure()
+    {
+        // A single target that fails once with 503 and then answers: the retry saves the request.
+        var route = await fixture.CreateRouteAsync("eu/flaky503");
+        using var response = await fixture.SendAsync(await fixture.CreateKeyAsync(), route);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Headers.GetValues("x-fors-fallbacks").Single().ShouldBe("1");
+        var usage = await fixture.UsageAsync(response);
+        usage.Outcome.ShouldBe(RequestOutcome.Success);
+        usage.FallbackCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_lasting_failure_is_retried_once_then_refused()
+    {
+        var route = await fixture.CreateRouteAsync("external/fail503");
+        using var response = await fixture.SendAsync(await fixture.CreateKeyAsync(), route);
+        await AssertErrorAsync(response, 502, "all_providers_failed");
+        response.Headers.GetValues("x-fors-fallbacks").Single().ShouldBe("1"); // one retry (Gateway:Retry:MaxRetries = 1)
+        (await fixture.UsageAsync(response)).FallbackCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Quota_and_client_errors_are_not_retried()
+    {
+        var key = await fixture.CreateKeyAsync();
+        using var quota = await fixture.SendAsync(key, await fixture.CreateRouteAsync("external/fail429"));
+        await AssertErrorAsync(quota, 502, "all_providers_failed");
+        quota.Headers.GetValues("x-fors-fallbacks").Single().ShouldBe("0");
+
+        using var bad = await fixture.SendAsync(key, await fixture.CreateRouteAsync("external/bad400"));
+        bad.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        bad.Headers.GetValues("x-fors-fallbacks").Single().ShouldBe("0");
+    }
+
+    [Fact]
+    public async Task Count_tokens_is_passed_through_and_costs_nothing()
+    {
+        var key = await fixture.CreateKeyAsync();
+        using var response = await fixture.SendAsync(key, "anthropic/ok", "/v1/messages/count_tokens");
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<JsonObject>(TestContext.Current.CancellationToken))!["input_tokens"]!.GetValue<int>().ShouldBe(1234);
+        var usage = await fixture.UsageAsync(response);
+        usage.Endpoint.ShouldBe(GatewayEndpoint.AnthropicCountTokens);
+        usage.Outcome.ShouldBe(RequestOutcome.Success);
+        usage.InputTokens.ShouldBe(0); // a count, not consumption
+        usage.CostUsd.ShouldBe(0);
+
+        // Only Anthropic providers count tokens; errors have the Anthropic shape.
+        using var openai = await fixture.SendAsync(key, "eu/ok", "/v1/messages/count_tokens");
+        ((int)openai.StatusCode).ShouldBeGreaterThanOrEqualTo(400);
+        (await openai.Content.ReadFromJsonAsync<JsonObject>(TestContext.Current.CancellationToken))!["type"]!.GetValue<string>().ShouldBe("error");
+    }
+
+    [Fact]
+    public async Task A_prompt_too_large_for_a_model_skips_it_or_is_refused()
+    {
+        var small = await fixture.AddDeploymentAsync("onprem", "ok", contextWindow: 100);
+        var large = await fixture.AddDeploymentAsync("onprem", "ok", contextWindow: null);
+        var key = await fixture.CreateKeyAsync();
+        var longPrompt = string.Concat(Enumerable.Repeat("lorem ipsum ", 200)); // ≈ 600 tokens by the estimate
+
+        // A route with a larger fallback: the small model is skipped, nothing is sent to it.
+        using (var routed = await fixture.SendAsync(key, await fixture.CreateRouteAsync(small, large), prompt: longPrompt))
+        {
+            routed.StatusCode.ShouldBe(HttpStatusCode.OK);
+            routed.Headers.GetValues("x-fors-model").Single().ShouldBe(large);
+            routed.Headers.GetValues("x-fors-fallbacks").Single().ShouldBe("0");
+        }
+
+        // Short prompts still use the small model.
+        using (var shortPrompt = await fixture.SendAsync(key, small))
+        {
+            shortPrompt.StatusCode.ShouldBe(HttpStatusCode.OK);
+        }
+
+        using var refused = await fixture.SendAsync(key, small, prompt: longPrompt);
+        await AssertErrorAsync(refused, 400, "context_length_exceeded");
+        (await fixture.UsageAsync(refused)).Outcome.ShouldBe(RequestOutcome.Rejected);
+    }
+
+    [Fact]
+    public async Task An_embeddings_batch_is_checked_per_input_against_the_context_window()
+    {
+        var model = await fixture.AddDeploymentAsync("eu", "embedding", contextWindow: 100);
+        var key = await fixture.CreateKeyAsync();
+        var input = string.Concat(Enumerable.Repeat("lorem ipsum ", 30)); // ≈ 90 tokens each, ≈ 720 for the batch
+
+        // The whole batch is far above the window, every input is within it.
+        var batch = new JsonObject { ["model"] = model, ["input"] = new JsonArray([.. Enumerable.Repeat(input, 8).Select(i => JsonValue.Create(i))]) };
+        using (var served = await fixture.SendRawAsync(key, "/v1/embeddings", batch.ToJsonString()))
+        {
+            served.StatusCode.ShouldBe(HttpStatusCode.OK);
+        }
+
+        // One input above the window is still refused before the provider is called.
+        var tooLong = new JsonObject { ["model"] = model, ["input"] = new JsonArray("short", input + input) };
+        using var refused = await fixture.SendRawAsync(key, "/v1/embeddings", tooLong.ToJsonString());
+        await AssertErrorAsync(refused, 400, "context_length_exceeded");
+    }
+
+    [Fact]
+    [Trait(TestCategory.Name, TestCategory.Flaky)] // timing: needs the first request still in flight 300 ms later on a busy runner
+    public async Task Requests_in_flight_are_limited_per_key()
+    {
+        var key = await fixture.CreateKeyAsync(k => k.MaxConcurrentRequests = 1);
+        var slow = fixture.SendAsync(key, "slow/slow"); // holds the key's only slot for about a second (provider timeout)
+        await Task.Delay(TimeSpan.FromMilliseconds(300), TestContext.Current.CancellationToken);
+
+        using (var second = await fixture.SendAsync(key))
+        {
+            await AssertErrorAsync(second, 429, "rate_limited");
+            (await fixture.UsageAsync(second)).Outcome.ShouldBe(RequestOutcome.RateLimited);
+        }
+
+        using (await slow)
+        {
+        }
+
+        // The slot is freed when the first response has completed.
+        for (var attempt = 0; ; attempt++)
+        {
+            using var third = await fixture.SendAsync(key);
+            if (third.StatusCode == HttpStatusCode.OK)
+            {
+                break;
+            }
+
+            attempt.ShouldBeLessThan(20);
+            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task Team_and_key_request_policy_reach_the_provider()
+    {
+        var marker = "policy-" + Guid.NewGuid().ToString("N");
+        var key = await fixture.CreateKeyAsync(k =>
+        {
+            k.Team!.RequestPolicy = new RequestPolicy { SystemPrompt = "Svara på svenska.", MaxOutputTokens = 1000 };
+            k.RequestPolicy = new RequestPolicy
+            {
+                MaxOutputTokens = 7,
+                Overrides = new Dictionary<string, JsonElement> { ["temperature"] = JsonDocument.Parse("0").RootElement.Clone() },
+            };
+        });
+        using var response = await fixture.SendAsync(key, prompt: marker); // asks for max_tokens 20
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var sent = JsonNode.Parse((await fixture.UpstreamRequestsAsync(e => e.RequestMessage?.Body?.Contains(marker, StringComparison.Ordinal) == true)).Single().RequestMessage!.Body!)!;
+        sent["messages"]![0]!["role"]!.GetValue<string>().ShouldBe("system");
+        sent["messages"]![0]!["content"]!.GetValue<string>().ShouldBe("Svara på svenska."); // from the team
+        sent["messages"]![1]!["content"]!.GetValue<string>().ShouldBe(marker);
+        sent["max_tokens"]!.GetValue<int>().ShouldBe(7); // the key's cap wins
+        sent["temperature"]!.GetValue<int>().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Client_error_does_not_fall_back()
+    {
+        var route = await fixture.CreateRouteAsync("eu/bad400", "onprem/ok");
+        var key = await fixture.CreateKeyAsync();
+        using var response = await fixture.SendAsync(key, route);
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        response.Headers.GetValues("x-fors-provider").Single().ShouldBe("eu");
+        response.Headers.GetValues("x-fors-fallbacks").Single().ShouldBe("0");
+        (await fixture.UsageAsync(response)).Outcome.ShouldBe(RequestOutcome.ProviderError);
+
+        // The provider's message is passed on; the rest of its error body is not.
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var error = JsonNode.Parse(body)!["error"]!;
+        error["message"]!.GetValue<string>().ShouldBe("Upstream rejected request");
+        error["type"]!.GetValue<string>().ShouldBe("invalid_request_error");
+        body.ShouldNotContain("internal-deployment-7");
+        body.ShouldNotContain("org-internal-42");
+    }
+
+    [Fact]
+    public async Task All_fail_returns_gateway_error()
+    {
+        var route = await fixture.CreateRouteAsync("eu/fail503", "external/fail429");
+        using var response = await fixture.SendAsync(await fixture.CreateKeyAsync(), route);
+        await AssertErrorAsync(response, 502, "all_providers_failed");
+        // Recorded on the last provider tried (nothing charged), so provider statistics see the failure.
+        var usage = await fixture.UsageAsync(response);
+        usage.Outcome.ShouldBe(RequestOutcome.ProviderError);
+        usage.StatusCode.ShouldBe(502);
+        usage.ProviderName.ShouldBeOneOf("eu", "external"); // the last candidate tried; an open circuit moves a provider last
+        usage.FallbackCount.ShouldBe(1);
+        usage.CostUsd.ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Streaming_accounts_usage_and_hides_unrequested_usage(bool includeUsage)
+    {
+        using var response = await fixture.SendAsync(await fixture.CreateKeyAsync(), stream: true, includeUsage: includeUsage);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("text/event-stream");
+        var text = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        text.ShouldContain("Test answer");
+        text.ShouldContain("[DONE]");
+        text.Contains("prompt_tokens", StringComparison.Ordinal).ShouldBe(includeUsage);
+        var usage = await fixture.UsageAsync(response);
+        usage.Streamed.ShouldBeTrue();
+        usage.UpstreamMs.ShouldNotBeNull().ShouldBeInRange(0, usage.LatencyMs);
+        usage.TimeToFirstTokenMs.ShouldNotBeNull().ShouldBeInRange(0, usage.LatencyMs);
+        usage.ProviderFirstTokenMs.ShouldNotBeNull().ShouldBeInRange(0, usage.TimeToFirstTokenMs!.Value);
+        usage.InputTokens.ShouldBe(100);
+        usage.OutputTokens.ShouldBe(20);
+        usage.CostUsd.ShouldBe(0.000135m);
+    }
+
+    [Theory]
+    [InlineData(BudgetScope.VirtualKey)]
+    [InlineData(BudgetScope.Team)]
+    public async Task Hierarchical_budget_blocks(BudgetScope budgetScope)
+    {
+        var key = await fixture.CreateKeyAsync();
+        await fixture.AddBudgetAsync(budgetScope, budgetScope == BudgetScope.Team ? key.TeamId : key.Id, 0);
+        using var response = await fixture.SendAsync(key);
+        await AssertErrorAsync(response, 402, "budget_exceeded");
+        (await fixture.UsageAsync(response)).Outcome.ShouldBe(RequestOutcome.BudgetExceeded);
+    }
+
+    [Fact]
+    public async Task Reservation_cannot_exceed_remaining_budget()
+    {
+        var key = await fixture.CreateKeyAsync();
+        await fixture.AddBudgetAsync(BudgetScope.VirtualKey, key.Id, 0.01m);
+        using var response = await fixture.SendRawAsync(key, "/v1/chat/completions",
+            """{"model":"eu/ok","messages":[{"role":"user","content":"Test"}],"max_tokens":100000}""");
+        await AssertErrorAsync(response, 402, "budget_exceeded");
+    }
+
+    [Fact]
+    public async Task Rotated_key_inherits_spend_and_budget_of_its_predecessor()
+    {
+        var old = await fixture.CreateKeyAsync();
+        await fixture.AddBudgetAsync(BudgetScope.VirtualKey, old.Id, 0);
+        var replacement = await fixture.CreateKeyAsync();
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+            var previous = await db.VirtualKeys.SingleAsync(k => k.Id == old.Id, TestContext.Current.CancellationToken);
+            previous.RotatedToKeyId = replacement.Id;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+        using var response = await fixture.SendAsync(replacement);
+        await AssertErrorAsync(response, 402, "budget_exceeded");
+    }
+
+    [Fact]
+    public async Task Request_rate_limit_blocks_second_request()
+    {
+        var key = await fixture.CreateKeyAsync(k => k.RequestsPerMinute = 1);
+        await TestClock.InOneRateLimitMinuteAsync();
+        using var first = await fixture.SendAsync(key);
+        first.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var response = await fixture.SendAsync(key);
+        await AssertErrorAsync(response, 429, "rate_limited");
+        response.Headers.RetryAfter.ShouldNotBeNull();
+        response.Headers.GetValues("x-ratelimit-remaining-requests").Single().ShouldBe("0");
+        var usage = await fixture.UsageAsync(response);
+        usage.UpstreamMs.ShouldBeNull(); // refused before any provider was called
+        usage.TimeToFirstTokenMs.ShouldBeNull();
+        usage.ProviderFirstTokenMs.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(PiiPolicy.Block, 400, "blocked", "eu")]
+    [InlineData(PiiPolicy.Redact, 200, "redacted", "eu")]
+    [InlineData(PiiPolicy.RerouteToOnPrem, 200, "rerouted-onprem", "onprem")]
+    public async Task Pii_policy_is_enforced(PiiPolicy policy, int status, string header, string provider)
+    {
+        var route = await fixture.CreateRouteAsync("eu/ok", "onprem/ok");
+        var key = await fixture.CreateKeyAsync(k => k.PiiPolicy = policy);
+        using var response = await fixture.SendAsync(key, route, prompt: "Personnummer 19121212-1212");
+        ((int)response.StatusCode).ShouldBe(status);
+        response.Headers.GetValues("x-fors-pii").Single().ShouldBe(header);
+        var usage = await fixture.UsageAsync(response);
+        usage.PiiActionApplied.ShouldBe(policy);
+        usage.PiiCategories.ShouldNotBeNull().ShouldContain("Personnummer");
+        if (status == 200)
+        {
+            response.Headers.GetValues("x-fors-provider").Single().ShouldBe(provider);
+        }
+        if (policy == PiiPolicy.Redact)
+        {
+            var requests = await fixture.UpstreamRequestsAsync(e => e.RequestMessage?.Body?.Contains("[PERSONNUMMER]", StringComparison.Ordinal) == true);
+            requests.ShouldAllBe(e => !e.RequestMessage!.Body!.Contains("19121212-1212", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public async Task Pii_cannot_use_external_only_route()
+    {
+        var route = await fixture.CreateRouteAsync("external/ok");
+        using var response = await fixture.SendAsync(await fixture.CreateKeyAsync(k => k.PiiPolicy = PiiPolicy.RerouteToOnPrem), route, prompt: "19121212-1212");
+        await AssertErrorAsync(response, 503, "no_eligible_provider");
+    }
+
+    private const string ImagePart = """{"type":"image_url","image_url":{"url":"data:image/png;base64,YWJj"}}""";
+    private const string VideoPart = """{"type":"video_url","video_url":{"url":"data:video/mp4;base64,AAAAIGZ0eXA="}}""";
+    private const string PdfPart = """{"type":"file","file":{"filename":"beslut.pdf","file_data":"data:application/pdf;base64,JVBERi0="}}""";
+
+    private static string ChatWith(string model, string part) =>
+        $$"""{"model":"{{model}}","messages":[{"role":"user","content":[{"type":"text","text":"Sammanfatta"},{{part}}]}]}""";
+
+    [Theory]
+    [InlineData(AttachmentPolicy.Allowed, PdfPart, 200)]
+    [InlineData(AttachmentPolicy.ImagesOnly, ImagePart, 200)]
+    [InlineData(AttachmentPolicy.ImagesOnly, PdfPart, 400)]
+    [InlineData(AttachmentPolicy.None, ImagePart, 400)]
+    [InlineData(AttachmentPolicy.Allowed, VideoPart, 200)]
+    [InlineData(AttachmentPolicy.ImagesOnly, VideoPart, 400)]
+    [InlineData(AttachmentPolicy.None, """{"type":"text","text":"bara text"}""", 200)]
+    public async Task Attachment_policy_is_enforced(AttachmentPolicy policy, string part, int status)
+    {
+        var key = await fixture.CreateKeyAsync(k => k.AttachmentPolicy = policy);
+        using var response = await fixture.SendRawAsync(key, "/v1/chat/completions", ChatWith("eu/ok", part));
+        if (status == 200)
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.OK);
+            return;
+        }
+
+        await AssertErrorAsync(response, 400, "attachment_not_allowed");
+        var usage = await fixture.UsageAsync(response);
+        usage.Outcome.ShouldBe(RequestOutcome.Rejected);
+        usage.ErrorCode.ShouldBe("attachment_not_allowed");
+    }
+
+    [Fact]
+    public async Task Attachment_policy_finds_documents_nested_in_anthropic_tool_results()
+    {
+        var key = await fixture.CreateKeyAsync(k => k.AttachmentPolicy = AttachmentPolicy.ImagesOnly);
+        using var response = await fixture.SendRawAsync(key, "/v1/messages", """
+            {"model":"anthropic/ok","max_tokens":10,"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[
+              {"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"JVBERi0="}}]}]}]}
+            """);
+        ((int)response.StatusCode).ShouldBe(400);
+        var error = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!["error"]!;
+        error["code"]!.GetValue<string>().ShouldBe("attachment_not_allowed");
+        error["message"]!.GetValue<string>().ShouldContain("documents");
+    }
+
+    [Fact]
+    public async Task Chat_files_reach_anthropic_as_documents_and_unsupported_parts_are_rejected()
+    {
+        var key = await fixture.CreateKeyAsync();
+        using var pdf = await fixture.SendRawAsync(key, "/v1/chat/completions", ChatWith("anthropic/ok", PdfPart));
+        pdf.StatusCode.ShouldBe(HttpStatusCode.OK);
+        await fixture.UpstreamRequestsAsync(e => e.RequestMessage!.Body != null && e.RequestMessage.Body.Contains("\"type\":\"document\"", StringComparison.Ordinal)
+            && e.RequestMessage.Body.Contains("beslut.pdf", StringComparison.Ordinal));
+
+        using var audio = await fixture.SendRawAsync(key, "/v1/chat/completions", ChatWith("anthropic/ok", """{"type":"input_audio","input_audio":{"data":"YWJj","format":"wav"}}"""));
+        ((int)audio.StatusCode).ShouldBe(400);
+        var error = JsonNode.Parse(await audio.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!["error"]!;
+        error["code"]!.GetValue<string>().ShouldBe("unsupported_content");
+        (await fixture.UsageAsync(audio)).ErrorCode.ShouldBe("provider_rejected");
+    }
+
+    [Theory]
+    [InlineData("""{"model":"missing"}""", "application/json", 404, "model_not_found")]
+    [InlineData("""{"model":"eu/ok"}""", "text/plain", 415, "unsupported_media_type")]
+    [InlineData("{", "application/json", 400, "invalid_request")]
+    [InlineData("[]", "application/json", 400, "invalid_request")]
+    [InlineData("""{"model":123}""", "application/json", 400, "invalid_request")]
+    public async Task Invalid_request_is_rejected(string body, string contentType, int status, string code)
+    {
+        using var response = await fixture.SendRawAsync(await fixture.CreateKeyAsync(), "/v1/chat/completions", body, contentType);
+        await AssertErrorAsync(response, status, code);
+    }
+
+    [Fact]
+    public async Task Oversized_body_is_rejected_before_upstream_call()
+    {
+        using var response = await fixture.SendAsync(await fixture.CreateKeyAsync(), prompt: new string('x', 5000));
+        await AssertErrorAsync(response, 413, "request_too_large");
+    }
+
+    [Theory]
+    [InlineData("/v1/embeddings", "eu/embedding")]
+    [InlineData("/v1/responses", "eu/ok")]
+    public async Task Additional_endpoints_share_auth_and_accounting(string endpoint, string model)
+    {
+        using var response = await fixture.SendAsync(await fixture.CreateKeyAsync(), model, endpoint);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await fixture.UsageAsync(response)).CostUsd.ShouldBe(0.000135m);
+    }
+
+    [Fact]
+    public async Task Model_allowlist_and_endpoint_kind_are_enforced()
+    {
+        using var forbidden = await fixture.SendAsync(await fixture.CreateKeyAsync(k => k.AllowedModels = ["onprem/ok"]));
+        await AssertErrorAsync(forbidden, 403, "model_not_allowed");
+        var alias = await fixture.CreateRouteAsync("eu/embedding");
+        using var mismatch = await fixture.SendAsync(await fixture.CreateKeyAsync(), alias);
+        await AssertErrorAsync(mismatch, 400, "invalid_request");
+    }
+
+    [Fact]
+    public async Task Provider_allowlist_rejects_routes_without_an_allowed_provider()
+    {
+        var key = await fixture.CreateKeyAsync(k => k.AllowedProviders = ["eu"]);
+        using var forbidden = await fixture.SendAsync(key, "onprem/ok");
+        await AssertErrorAsync(forbidden, 403, "model_not_allowed");
+        using var allowed = await fixture.SendAsync(key, "eu/ok");
+        allowed.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await fixture.UsageAsync(allowed)).ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task Provider_allowlist_skips_disallowed_providers_in_fallback_chain()
+    {
+        // The route prefers a failing "onprem" target and falls back to "eu"; the key may only use "external".
+        var alias = await fixture.CreateRouteAsync("onprem/ok", "eu/ok", "external/ok");
+        var key = await fixture.CreateKeyAsync(k => k.AllowedProviders = ["external"]);
+        using var response = await fixture.SendAsync(key, alias);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await fixture.UsageAsync(response)).ProviderName.ShouldBe("external");
+    }
+
+    [Fact]
+    public async Task Provider_allowlist_is_case_insensitive_and_empty_means_all()
+    {
+        using var upper = await fixture.SendAsync(await fixture.CreateKeyAsync(k => k.AllowedProviders = ["EU"]), "eu/ok");
+        upper.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var all = await fixture.SendAsync(await fixture.CreateKeyAsync(), "onprem/ok");
+        all.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Models_list_filters_by_provider_allowlist()
+    {
+        var key = await fixture.CreateKeyAsync(k => k.AllowedProviders = ["onprem"]);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/v1/models");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key.Secret);
+        using var response = await fixture.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var ids = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!["data"]!.AsArray()
+            .Select(n => n!["id"]!.GetValue<string>()).ToList();
+        // Other tests add route aliases ("test/...") that may point at this provider, so only the models of the other
+        // providers are checked, not the whole list.
+        ids.ShouldContain("onprem/ok");
+        string[] otherProviders = ["eu/", "external/", "anthropic/", "slow/"];
+        ids.ShouldNotContain(id => otherProviders.Any(prefix => id.StartsWith(prefix, StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task Token_rate_limit_blocks_once_the_minute_budget_is_used()
+    {
+        // Each mocked call reports 120 tokens (100 in + 20 out); the limit of 100 is crossed by the first one.
+        var key = await fixture.CreateKeyAsync(k => k.TokensPerMinute = 100);
+        await TestClock.InOneRateLimitMinuteAsync();
+        using var first = await fixture.SendAsync(key);
+        first.StatusCode.ShouldBe(HttpStatusCode.OK);
+        await fixture.UsageAsync(first);
+        using var second = await fixture.SendAsync(key);
+        await AssertErrorAsync(second, 429, "rate_limited");
+        (await fixture.UsageAsync(second)).Outcome.ShouldBe(RequestOutcome.RateLimited);
+    }
+
+    [Fact]
+    public async Task Key_with_several_budget_periods_is_blocked_by_the_tightest_one()
+    {
+        var key = await fixture.CreateKeyAsync();
+        await fixture.AddBudgetAsync(BudgetScope.VirtualKey, key.Id, 1000, BudgetPeriod.Monthly);
+        await fixture.AddBudgetAsync(BudgetScope.VirtualKey, key.Id, 1000, BudgetPeriod.Daily);
+        await fixture.AddBudgetAsync(BudgetScope.VirtualKey, key.Id, 0, BudgetPeriod.Hourly);
+        using var response = await fixture.SendAsync(key);
+        await AssertErrorAsync(response, 402, "budget_exceeded");
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldContain("per hour");
+    }
+
+    [Fact]
+    public async Task Key_with_generous_budgets_in_every_period_is_allowed_and_charged_to_all()
+    {
+        var key = await fixture.CreateKeyAsync();
+        foreach (var period in new[] { BudgetPeriod.Hourly, BudgetPeriod.Daily, BudgetPeriod.Weekly, BudgetPeriod.Monthly })
+        {
+            await fixture.AddBudgetAsync(BudgetScope.VirtualKey, key.Id, 1000, period);
+        }
+        using var response = await fixture.SendAsync(key);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await fixture.UsageAsync(response)).CostUsd.ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task Anthropic_chat_is_translated_and_messages_pass_through()
+    {
+        var key = await fixture.CreateKeyAsync();
+        using var chat = await fixture.SendAsync(key, "anthropic/ok");
+        chat.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var json = JsonNode.Parse(await chat.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!;
+        json["object"]!.GetValue<string>().ShouldBe("chat.completion");
+        json["choices"]![0]!["message"]!["content"]!.GetValue<string>().ShouldBe("Test answer");
+        (await fixture.UsageAsync(chat)).InputTokens.ShouldBe(100);
+        using var messages = await fixture.SendAsync(key, "anthropic/ok", "/v1/messages");
+        messages.StatusCode.ShouldBe(HttpStatusCode.OK);
+        JsonNode.Parse(await messages.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!["type"]!.GetValue<string>().ShouldBe("message");
+        using var error = await fixture.SendAsync(null, endpoint: "/v1/messages");
+        var failure = JsonNode.Parse(await error.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!;
+        failure["type"]!.GetValue<string>().ShouldBe("error");
+        failure["error"]!["type"]!.GetValue<string>().ShouldBe("authentication_error");
+    }
+
+    [Fact]
+    public async Task Models_list_filters_allowlist_and_residency()
+    {
+        var key = await fixture.CreateKeyAsync(k => { k.AllowedModels = ["onprem/ok", "external/ok"]; k.AllowedResidencies = [DataResidency.OnPrem]; });
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/v1/models");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key.Secret);
+        using var response = await fixture.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var data = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!["data"]!.AsArray();
+        data.Count.ShouldBe(1);
+        data[0]!["id"]!.GetValue<string>().ShouldBe("onprem/ok");
+    }
+
+    [Fact]
+    public async Task Logs_and_database_never_contain_content_or_secrets()
+    {
+        var key = await fixture.CreateKeyAsync();
+        var prompt = "Private-prompt-" + Guid.NewGuid();
+        using var response = await fixture.SendAsync(key, prompt: prompt);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var usage = await fixture.UsageAsync(response);
+        var persisted = JsonSerializer.Serialize(usage);
+        foreach (var sensitive in new[] { prompt, "Test answer", key.Secret, fixture.ProviderSecret })
+        {
+            fixture.Logs.Text.ShouldNotContain(sensitive);
+            persisted.ShouldNotContain(sensitive);
+        }
+        fixture.Logs.Text.ShouldContain("Request");
+    }
+
+    [Fact]
+    public async Task Repeated_properties_are_refused_and_recorded()
+    {
+        // A provider would read the last "model" (or text) while the gateway checked another; before .NET 10's option this was a 500.
+        var key = await fixture.CreateKeyAsync();
+        using var response = await fixture.SendRawAsync(key, "/v1/chat/completions",
+            """{"model":"eu/ok","model":"external/ok","messages":[{"role":"user","content":"Hej"}]}""");
+
+        await AssertErrorAsync(response, 400, "invalid_request");
+        var usage = await fixture.UsageAsync(response);
+        usage.Outcome.ShouldBe(RequestOutcome.Rejected);
+        usage.StatusCode.ShouldBe(400);
+    }
+
+    [Fact]
+    public async Task Model_names_are_logged_without_control_characters()
+    {
+        var key = await fixture.CreateKeyAsync();
+        using var response = await fixture.SendAsync(key, model: "no-such-model\nwarn: Fors.Security[1001]\u001b[2J");
+
+        ((int)response.StatusCode).ShouldBe(404);
+        (await fixture.UsageAsync(response)).RequestedModel.ShouldBe("no-such-model?warn: Fors.Security[1001]?[2J");
+    }
+
+    [Fact]
+    public async Task Provider_tools_and_storage_need_the_keys_permission()
+    {
+        var strict = await fixture.CreateKeyAsync();
+        using var tool = await fixture.SendRawAsync(strict, "/v1/chat/completions",
+            """{"model":"eu/ok","messages":[{"role":"user","content":"Hej"}],"tools":[{"type":"web_search"}]}""");
+        await AssertErrorAsync(tool, 400, "tool_not_allowed");
+        var usage = await fixture.UsageAsync(tool);
+        usage.Outcome.ShouldBe(RequestOutcome.Rejected);
+        usage.ErrorCode.ShouldBe("tool_not_allowed");
+        fixture.Logs.Text.ShouldContain("refused by policy: tool_not_allowed");
+
+        using var store = await fixture.SendRawAsync(strict, "/v1/chat/completions",
+            """{"model":"eu/ok","messages":[{"role":"user","content":"Hej"}],"store":true}""");
+        await AssertErrorAsync(store, 400, "storage_not_allowed");
+
+        // The Responses API stores by default: the gateway says not to.
+        var marker = "responses-" + Guid.NewGuid().ToString("N");
+        using var responses = await fixture.SendRawAsync(strict, "/v1/responses", $$"""{"model":"eu/ok","input":"{{marker}}"}""");
+        responses.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var sent = (await fixture.UpstreamRequestsAsync(e => e.RequestMessage!.Body?.Contains(marker, StringComparison.Ordinal) == true)).ShouldHaveSingleItem();
+        JsonNode.Parse(sent.RequestMessage!.Body!)!["store"]!.GetValue<bool>().ShouldBeFalse();
+
+        var allowed = await fixture.CreateKeyAsync(k => { k.AllowProviderTools = true; k.AllowProviderStorage = true; });
+        using var both = await fixture.SendRawAsync(allowed, "/v1/chat/completions",
+            """{"model":"eu/ok","messages":[{"role":"user","content":"Hej"}],"tools":[{"type":"web_search"}],"store":true}""");
+        both.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    private static async Task AssertErrorAsync(HttpResponseMessage response, int status, string code)
+    {
+        ((int)response.StatusCode).ShouldBe(status);
+        var error = JsonNode.Parse(await response.Content.ReadAsStringAsync())!["error"]!;
+        error["code"]!.GetValue<string>().ShouldBe(code);
+        error["request_id"]!.GetValue<string>().ShouldBe(response.Headers.GetValues("x-request-id").Single());
+    }
+}

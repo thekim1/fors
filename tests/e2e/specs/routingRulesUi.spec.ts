@@ -7,7 +7,7 @@ const suffix = () => crypto.randomUUID().slice(0, 8)
 const marker = (s: string) => `headers["x-e2e"] == "${s}"`
 
 async function createRule(page: Page, body: Record<string, unknown>): Promise<string> {
-  const response = await mutate(page, '/api/routing-rules', { targets: [{ model: 'ume/chat-onprem', weight: 1 }], scope: 'Global', ...body })
+  const response = await mutate(page, '/api/routing-rules', { targets: [{ model: 'fors/chat-onprem', weight: 1 }], scope: 'Global', ...body })
   expect(response.status(), await response.text()).toBe(201)
   return (await response.json()).id
 }
@@ -42,7 +42,7 @@ test('condition helpers, an unreachable checker, and weight shares', async ({ pa
 
   // The checker is down: the form says so and does not claim the condition is valid.
   await page.route('**/api/routing-rules/validate', route => route.abort())
-  await condition.fill('model == "ume/chat-standard"')
+  await condition.fill('model == "fors/chat-standard"')
   await expect(drawer.getByRole('status').filter({ hasText: /Couldn.t check the condition/ })).toBeVisible()
   await page.unroute('**/api/routing-rules/validate')
 
@@ -66,7 +66,7 @@ test('the test dialog shows what could not be evaluated, chain steps and missing
     const run = dialog.getByRole('button', { name: 'Run test', exact: true })
 
     // No header sent: the header comparison cannot be evaluated.
-    await model.fill('ume/chat-standard')
+    await model.fill('fors/chat-standard')
     await run.click()
     await expect(dialog.getByText('could not be evaluated (a value is missing)').first()).toBeVisible()
 
@@ -74,14 +74,14 @@ test('the test dialog shows what could not be evaluated, chain steps and missing
     await model.fill('gpt-4')
     await dialog.getByText('Headers and request parameters').click()
     await dialog.getByRole('button', { name: 'Add header' }).click()
-    await dialog.getByLabel('Header 1 name').fill('x-ume-tier')
+    await dialog.getByLabel('Header 1 name').fill('x-fors-tier')
     await dialog.getByLabel('Header 1 value').fill('premium')
     await run.click()
     await expect(dialog.getByRole('heading', { name: /Premium via header applies/ })).toBeVisible()
     await expect(dialog.getByText(/step 2 for/).first()).toBeVisible()
 
     // A chained rule may point at a name that does not exist; the result warns about it.
-    await model.fill('ume/chat-standard')
+    await model.fill('fors/chat-standard')
     await dialog.getByLabel('Header 1 name').fill('x-e2e')
     await dialog.getByLabel('Header 1 value').fill(s)
     await run.click()

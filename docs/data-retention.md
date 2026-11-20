@@ -16,7 +16,7 @@ live: removed rows cannot be restored except from a backup. Details: *Data reten
 
 Every request made with a valid key is recorded as a usage record (time, key, team, department, model, provider, tokens,
 cost, latency, status, outcome, PII categories and routing rule), whatever the log level: request counts, outcomes and
-latency are on **Monitor > Usage**, in the Data API and in the `ume.gateway.requests` metric. Requests refused before a key is
+latency are on **Monitor > Usage**, in the Data API and in the `fors.gateway.requests` metric. Requests refused before a key is
 recognised are counted as refused credentials. Message content is never logged or stored.
 
 The gateway log only has a line for refused, failed and cancelled requests: writing one for every request costs a noticeable

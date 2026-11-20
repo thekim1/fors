@@ -1,7 +1,7 @@
 param([switch]$SkipBuild)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
-$project = 'ume-proof-' + [Guid]::NewGuid().ToString('N').Substring(0, 10)
+$project = 'fors-proof-' + [Guid]::NewGuid().ToString('N').Substring(0, 10)
 $volume = $project + '-memory'
 $provisionImage = 'mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317'
 function Check-Exit { if ($LASTEXITCODE -ne 0) { throw "Command failed with exit code $LASTEXITCODE." } }
@@ -10,14 +10,14 @@ $composeConfigured = $false
 $volumeCreated = $false
 $holder = $null
 $archive = Join-Path ([IO.Path]::GetTempPath()) ($project + '.dump')
-$imageTag = dotnet msbuild "$repo\src\Ume.LlmGateway.Gateway\Ume.LlmGateway.Gateway.csproj" -getProperty:ContainerImageTag -nologo
+$imageTag = dotnet msbuild "$repo\src\Fors.Gateway\Fors.Gateway.csproj" -getProperty:ContainerImageTag -nologo
 Check-Exit
 try {
     if (-not $SkipBuild) {
         Push-Location "$repo\src\admin-ui"
         try { npm run build; Check-Exit } finally { Pop-Location }
         foreach ($service in @('Gateway', 'AdminApi', 'MigrationService')) {
-            dotnet publish "$repo\src\Ume.LlmGateway.$service\Ume.LlmGateway.$service.csproj" -c Release /t:PublishContainer /p:PublishAdminUi=true -v q -nologo
+            dotnet publish "$repo\src\Fors.$service\Fors.$service.csproj" -c Release /t:PublishContainer /p:PublishAdminUi=true -v q -nologo
             Check-Exit
         }
     }
@@ -30,19 +30,19 @@ try {
     Check-Exit
     Get-Content "$PSScriptRoot\tests\provision.sh" -Raw | docker exec -i $holder sh -c "tr -d '\r' | sh"
     Check-Exit
-    $env:UME_CERTS_DIR = "$mount/certs"
-    $env:UME_SECRETS_DIR = "$mount/secrets"
-    $env:UME_OIDC_AUTHORITY = 'https://idp.example.invalid/realms/ume'
-    $env:UME_GATEWAY_PUBLIC_URL = 'https://localhost:18443'
-    $env:UME_GATEWAY_PORT = '18443'
-    $env:UME_ADMIN_PORT = '19443'
+    $env:FORS_CERTS_DIR = "$mount/certs"
+    $env:FORS_SECRETS_DIR = "$mount/secrets"
+    $env:FORS_OIDC_AUTHORITY = 'https://idp.example.invalid/realms/fors'
+    $env:FORS_GATEWAY_PUBLIC_URL = 'https://localhost:18443'
+    $env:FORS_GATEWAY_PORT = '18443'
+    $env:FORS_ADMIN_PORT = '19443'
     $env:GATEWAY_PORT = '8443'
     $env:ADMINAPI_PORT = '8443'
-    $env:GATEWAY_IMAGE = docker image inspect "ume-llm-gateway/gateway:$imageTag" --format '{{.Id}}'
+    $env:GATEWAY_IMAGE = docker image inspect "fors/gateway:$imageTag" --format '{{.Id}}'
     Check-Exit
-    $env:ADMINAPI_IMAGE = docker image inspect "ume-llm-gateway/adminapi:$imageTag" --format '{{.Id}}'
+    $env:ADMINAPI_IMAGE = docker image inspect "fors/adminapi:$imageTag" --format '{{.Id}}'
     Check-Exit
-    $env:MIGRATIONS_IMAGE = docker image inspect "ume-llm-gateway/migrations:$imageTag" --format '{{.Id}}'
+    $env:MIGRATIONS_IMAGE = docker image inspect "fors/migrations:$imageTag" --format '{{.Id}}'
     Check-Exit
     $composeConfigured = $true
     $model = docker @compose config --format json | ConvertFrom-Json

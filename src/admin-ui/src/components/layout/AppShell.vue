@@ -102,7 +102,7 @@ async function signOut(): Promise<void> {
       <div class="flex items-center gap-3 px-1">
         <BrandMark />
         <span class="hidden min-w-0 lg:block">
-          <span class="block truncate text-body font-semibold text-fg">AI Gateway</span>
+          <span class="block truncate text-body font-semibold text-fg">Fors</span>
           <span v-if="branding.organisationName" class="block truncate text-caption text-fg-3">{{ branding.organisationName }}</span>
         </span>
       </div>
@@ -178,7 +178,7 @@ async function signOut(): Promise<void> {
       <header class="bg-canvas-fixed sticky top-0 z-topbar flex h-topbar items-center gap-3 border-b border-border px-4 md:px-10">
         <div class="flex items-center gap-2 md:hidden">
           <BrandMark size="sm" />
-          <span class="text-body font-semibold">AI Gateway</span>
+          <span class="text-body font-semibold">Fors</span>
         </div>
         <button
           type="button"

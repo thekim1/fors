@@ -26,10 +26,10 @@ try {
   assert.equal(unsigned.status(), 401)
   const pepper = execFileSync('docker', ['exec', process.argv[2], 'cat', '/workspace/secrets/gateway/Security__KeyPepper'])
   const timestamp = Math.floor(Date.now() / 1000).toString()
-  const signature = createHmac('sha256', pepper).update(`Ume.LlmGateway.Operations.v1\nGET\n/health/operations\n${timestamp}`).digest('hex').toUpperCase()
+  const signature = createHmac('sha256', pepper).update(`Fors.Operations.v1\nGET\n/health/operations\n${timestamp}`).digest('hex').toUpperCase()
   pepper.fill(0)
   const response = await page.request.get('https://localhost:18443/health/operations', {
-    headers: { 'x-ume-ops-timestamp': timestamp, 'x-ume-ops-signature': signature },
+    headers: { 'x-fors-ops-timestamp': timestamp, 'x-fors-ops-signature': signature },
   })
   assert.equal(response.status(), 200)
   const status = await response.json()

@@ -280,7 +280,7 @@ function stepDone(index: number): boolean {
 const END_TEXT: Record<Exclude<Phase, 'loading' | 'wizard' | 'done'>, { title: string; body: string }> = {
   closed: {
     title: 'Setup is closed',
-    body: 'Sign-in is set up already, or setup mode’s hour has ended. To open it again, give Setup:Reopen (UME_SETUP_REOPEN) a new value, for example today’s date, and restart the admin API.',
+    body: 'Sign-in is set up already, or setup mode’s hour has ended. To open it again, give Setup:Reopen (FORS_SETUP_REOPEN) a new value, for example today’s date, and restart the admin API.',
   },
   closedMeanwhile: {
     title: 'Setup has closed',
@@ -288,7 +288,7 @@ const END_TEXT: Record<Exclude<Phase, 'loading' | 'wizard' | 'done'>, { title: s
   },
   ended: {
     title: 'Setup mode’s hour has ended',
-    body: 'Nothing was saved from this page. To open setup again, give Setup:Reopen (UME_SETUP_REOPEN) a new value, for example today’s date, and restart the admin API. It prints a new setup code.',
+    body: 'Nothing was saved from this page. To open setup again, give Setup:Reopen (FORS_SETUP_REOPEN) a new value, for example today’s date, and restart the admin API. It prints a new setup code.',
   },
 }
 </script>

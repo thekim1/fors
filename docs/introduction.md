@@ -1,11 +1,11 @@
 # Introduction
 
-The Ume AI Gateway sits between an organisation's applications and the language models they use. Applications keep
+Fors sits between an organisation's applications and the language models they use. Applications keep
 the OpenAI or Anthropic SDK they already have, point it at the gateway and use a **virtual key** instead of a provider
 key. The gateway decides which provider serves the request, checks the key's limits and budget, and records what the
 request cost.
 
-It is a demonstrator by Umeå kommun, **not a production approval, legal compliance attestation or WCAG certification**.
+Fors is built by two private developers for Swedish municipalities; the examples use Umeå kommun. It is **not a production approval, legal compliance attestation or WCAG certification**.
 
 ## What it does
 
@@ -17,12 +17,12 @@ It is a demonstrator by Umeå kommun, **not a production approval, legal complia
 - **Budgets** per department, team and key, with alerts at your thresholds. Requests stop when a budget runs out.
   Budgets count USD, or tokens: a token quota shares on-prem capacity (whose models cost nothing) between teams.
   Prices are configured in USD per model.
-- **Routing**: applications ask for an alias such as `ume/chat-standard`; routes and [routing rules](routing-rules.md)
+- **Routing**: applications ask for an alias such as `fors/chat-standard`; routes and [routing rules](routing-rules.md)
   (conditions on headers, team, budget use and personal data, with weights, fallbacks and chaining) decide where it goes.
-  The `x-ume-rule` response header shows which rule applied.
+  The `x-fors-rule` response header shows which rule applied.
 - **Fallback, retries and circuit breaking** between providers, only within the residencies a key allows (on-prem, EU,
   external). A provider's `Retry-After` puts that deployment on cooldown; prompts too large for a model skip it.
-- **Prompt caching**: Anthropic cache markers are added to translated requests, and `x-ume-session` keeps a conversation
+- **Prompt caching**: Anthropic cache markers are added to translated requests, and `x-fors-session` keeps a conversation
   on one server so its prompt cache is reused.
 - **Personal data**: an optional per-key [PII policy](personal-data.md) that detects Swedish personnummer, samordningsnummer,
   email addresses, phone numbers and IBANs, then records, redacts, blocks or keeps the request on-prem.

@@ -57,8 +57,8 @@ Existing installation: add the two ports to `deploy/.env` (or re-run `init-deplo
 secrets and certificates, and saves the old `.env` as `.env.bak`):
 
 ```bash
-UME_GATEWAY_B_PORT=8444
-UME_ADMIN_B_PORT=9444
+FORS_GATEWAY_B_PORT=8444
+FORS_ADMIN_B_PORT=9444
 ```
 
 Then start with both files as above, and add the second slots to the proxy.
@@ -66,12 +66,12 @@ Then start with both files as above, and add the second slots to the proxy.
 **nginx** (`deploy/proxy/nginx.conf.example`, filled in by `init-deployment.sh --proxy --rolling`):
 
 ```nginx
-upstream ume_gateway {
+upstream fors_gateway {
     server docker-host:8443;
     server docker-host:8444;
     keepalive 32;
 }
-upstream ume_admin {
+upstream fors_admin {
     server docker-host:9443;
     server docker-host:9444;
 }
@@ -94,12 +94,12 @@ model call could run twice is a gateway that crashes within 10 seconds of receiv
 provider; that client would otherwise get an error.
 
 **Nginx Proxy Manager:** a proxy host has one upstream. Put the `upstream` blocks above in a custom configuration
-(`/data/nginx/custom/http_top.conf`) and point the proxy host's *Advanced* tab at them (`proxy_pass https://ume_gateway;`).
+(`/data/nginx/custom/http_top.conf`) and point the proxy host's *Advanced* tab at them (`proxy_pass https://fors_gateway;`).
 
 **F5, HAProxy or another load balancer with health monitors:** add both ports to the pool and monitor
 `GET /health/ready` over HTTPS (expect 200). Let it resend a request when the connection fails before a response (F5:
 *Reselect Tries*; HAProxy: `retry-on conn-failure empty-response` with `option redispatch`). Set the drain time to more than the monitor interval times the number of
-failures before a member is marked down, for example `UME_DRAIN_SECONDS=15` with a 5-second interval and 2 failures.
+failures before a member is marked down, for example `FORS_DRAIN_SECONDS=15` with a 5-second interval and 2 failures.
 
 ### Update
 
@@ -110,7 +110,7 @@ Change the image references in `deploy/.env` (or unpack the new release bundle o
 ```
 
 It checks that all four slots are healthy, runs the migration, then replaces `gateway`, `gateway-b`, `adminapi` and
-`adminapi-b` one after the other. It waits until each new slot is healthy, plus `UME_ROLLING_SETTLE_SECONDS` (15) so the
+`adminapi-b` one after the other. It waits until each new slot is healthy, plus `FORS_ROLLING_SETTLE_SECONDS` (15) so the
 proxy takes it back into rotation, before stopping the next. It refuses to stop a slot while its partner is unhealthy. A
 slot whose image did not change is left alone; `--force` recreates it anyway, for example after `--renew-certs`. The
 optional Data API has a single slot and is briefly unavailable while it restarts.
@@ -121,10 +121,10 @@ In `deploy/.env`, read by `compose.rolling.yaml`:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `UME_GATEWAY_B_PORT`, `UME_ADMIN_B_PORT` | 8444, 9444 | Host ports of the second slots (bound to `UME_GATEWAY_BIND` / `UME_ADMIN_BIND`) |
-| `UME_DRAIN_SECONDS` | 5 | Seconds a stopping slot keeps answering with `Connection: close` (`Shutdown__DrainSeconds`) |
-| `UME_SHUTDOWN_TIMEOUT_SECONDS` | 300 | Longest time a stopping gateway finishes its requests, drain included |
-| `UME_ROLLING_SETTLE_SECONDS` | 15 | Pause after each slot is healthy (environment variable for `rolling-update.sh`) |
+| `FORS_GATEWAY_B_PORT`, `FORS_ADMIN_B_PORT` | 8444, 9444 | Host ports of the second slots (bound to `FORS_GATEWAY_BIND` / `FORS_ADMIN_BIND`) |
+| `FORS_DRAIN_SECONDS` | 5 | Seconds a stopping slot keeps answering with `Connection: close` (`Shutdown__DrainSeconds`) |
+| `FORS_SHUTDOWN_TIMEOUT_SECONDS` | 300 | Longest time a stopping gateway finishes its requests, drain included |
+| `FORS_ROLLING_SETTLE_SECONDS` | 15 | Pause after each slot is healthy (environment variable for `rolling-update.sh`) |
 
 `Shutdown__DrainSeconds` (0–300, default 0) is a setting of every service, so it also works outside these files.
 
@@ -133,7 +133,7 @@ In `deploy/.env`, read by `compose.rolling.yaml`:
 - **Live audio sessions** (`/v1/realtime`, WebSocket) on a stopping instance end when the stop signal arrives; clients
   reconnect and land on another instance. Ordinary and streamed requests finish.
 - **Requests longer than the shutdown timeout** (300 s for the gateway) are cut off. Raise
-  `UME_SHUTDOWN_TIMEOUT_SECONDS` (and the Compose `stop_grace_period`) if you have longer ones.
+  `FORS_SHUTDOWN_TIMEOUT_SECONDS` (and the Compose `stop_grace_period`) if you have longer ones.
 - **Postgres and Redis** run as single instances in the Compose stack. Updating their images is a short outage; plan it
   separately (they change rarely). A highly available database means a managed service or an operator, see
   [Kubernetes](kubernetes.md).
@@ -150,5 +150,5 @@ the gateway and load the admin UI, and fail on a single lost request. A local ru
 | Run | Requests during the update | Lost |
 |---|---|---|
 | Compose, nginx in front, all four slots replaced | 128 780 POST, 327 140 GET, 350 417 admin UI | 0 |
-| Same, with `UME_DRAIN_SECONDS=0` | 96 635 POST, 289 596 admin UI | 1 POST (502) |
+| Same, with `FORS_DRAIN_SECONDS=0` | 96 635 POST, 289 596 admin UI | 1 POST (502) |
 | Kubernetes (kind), rolling restart of gateway and admin API | 40 195 POST, 115 072 GET, 123 282 admin UI | 0 |

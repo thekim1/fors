@@ -29,14 +29,14 @@ if ($localSdk -ne $ciSdk) {
     Write-Warning "Local .NET SDK $localSdk, CI uses $ciSdk. Install $ciSdk, or CI may flag usings this build accepts."
 }
 
-Invoke-Step 'Build (Release, like CI)' { dotnet build UmeLlmGateway.slnx -c Release --no-incremental --nologo -v:q }
+Invoke-Step 'Build (Release, like CI)' { dotnet build Fors.slnx -c Release --no-incremental --nologo -v:q }
 if (-not $Quick) {
     Invoke-Step 'Backend tests (without Flaky)' {
-        dotnet test --solution UmeLlmGateway.slnx -c Release --no-build --filter-not-trait 'Category=Flaky'
+        dotnet test --solution Fors.slnx -c Release --no-build --filter-not-trait 'Category=Flaky'
     }
 }
 Invoke-Step '.NET vulnerability audit' {
-    $audit = dotnet list UmeLlmGateway.slnx package --vulnerable --include-transitive --format json | ConvertFrom-Json
+    $audit = dotnet list Fors.slnx package --vulnerable --include-transitive --format json | ConvertFrom-Json
     $vulnerable = @($audit.projects | ForEach-Object { $_.frameworks } | ForEach-Object { @($_.topLevelPackages) + @($_.transitivePackages) } |
         Where-Object { $_ -and $_.vulnerabilities })
     if ($vulnerable.Count -gt 0) { $vulnerable | ForEach-Object { Write-Output "  $($_.id) $($_.resolvedVersion)" }; $global:LASTEXITCODE = 1 }

@@ -25,11 +25,11 @@ jobs:
         with:
           dotnet-version: 10.0.403
       - name: Build
-        run: dotnet build UmeLlmGateway.slnx -c Release --nologo
+        run: dotnet build Fors.slnx -c Release --nologo
       - name: Scan the service base image
         # Pull requests scan it only when they change it (verify.yml); this catches CVEs published since it was pinned.
         run: |
-          image="$(dotnet msbuild src/Ume.LlmGateway.Gateway -getProperty:ContainerBaseImage)"
+          image="$(dotnet msbuild src/Fors.Gateway -getProperty:ContainerBaseImage)"
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.67.2 image --quiet --scanners vuln \
             --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
       - name: Run the tests repeatedly
@@ -38,8 +38,8 @@ jobs:
         run: |
           : > failures.txt
           for i in $(seq "$RUNS"); do
-            dotnet test --solution UmeLlmGateway.slnx -c Release --no-build 2>&1 \
-              | sed -E 's/\x1b\[[0-9;]*m//g' | tee "run-$i.log" | grep -E '^failed Ume\.' | sed "s/^/run $i: /" >> failures.txt || true
+            dotnet test --solution Fors.slnx -c Release --no-build 2>&1 \
+              | sed -E 's/\x1b\[[0-9;]*m//g' | tee "run-$i.log" | grep -E '^failed Fors\.' | sed "s/^/run $i: /" >> failures.txt || true
           done
           {
             echo "## Flake hunt: $RUNS runs"

@@ -14,7 +14,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 REPO="$(cd ../../.. && pwd)"
 PEPPER="compare-only-pepper-0123456789abcdef0123456789abcdef"
-RATES="${RATES:-10 50 100}" DURATION="${DURATION:-2m}" PLATFORMS="${PLATFORMS:-ume bifrost}"
+RATES="${RATES:-10 50 100}" DURATION="${DURATION:-2m}" PLATFORMS="${PLATFORMS:-fors bifrost}"
 BIFROST_KEY="sk-bf-compare-0123456789abcdef" # ../bifrost/config.json
 OUT=../results/sizing
 COMPOSE=(docker compose)
@@ -48,17 +48,17 @@ if [[ $platform == bifrost ]]; then
   KEY="$BIFROST_KEY"
 else
 APP=gateway DB=db DBNAME=gatewaydb DATA=(compare-sizing-gateway-1 compare-sizing-db-1 compare-sizing-redis-1)
-URL=http://gateway:8080/v1/chat/completions MODEL=ume/chat REPORT="$OUT/report.txt" STATS="$OUT/stats.txt"
+URL=http://gateway:8080/v1/chat/completions MODEL=fors/chat REPORT="$OUT/report.txt" STATS="$OUT/stats.txt"
 "${COMPOSE[@]}" up -d --wait db redis fake-llm >/dev/null
 KEY=""
 for _ in 1 2 3 4 5; do # the host port forwards a moment after Postgres is healthy
-  KEY=$(dotnet run -c Release --project "$REPO/benchmarks/Ume.LlmGateway.Benchmarks" -- compare-seed \
+  KEY=$(dotnet run -c Release --project "$REPO/benchmarks/Fors.Benchmarks" -- compare-seed \
     "Host=127.0.0.1;Port=25432;Database=gatewaydb;Username=postgres;Password=postgres" "$PEPPER" http://fake-llm:8080/v1 \
     2>"$OUT/seed-error.log" | tail -1) || true
-  [[ "$KEY" == ume-sk-* ]] && break
+  [[ "$KEY" == fors-sk-* ]] && break
   sleep 3
 done
-[[ "$KEY" == ume-sk-* ]] || { echo "Seeding failed:" >&2; tail -20 "$OUT/seed-error.log" >&2; exit 1; }
+[[ "$KEY" == fors-sk-* ]] || { echo "Seeding failed:" >&2; tail -20 "$OUT/seed-error.log" >&2; exit 1; }
 psqlc "UPDATE \"VirtualKeys\" SET \"PiiPolicy\" = 'Allow', \"ContentGuardPolicy\" = 'Record'" >/dev/null
 "${COMPOSE[@]}" up -d gateway >/dev/null
 for _ in $(seq 60); do [[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:28080/v1/models) == 401 ]] && break; sleep 1; done

@@ -4,12 +4,12 @@
 SET log_statement = 'none';
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'ume_data') THEN
-    EXECUTE format('CREATE ROLE ume_data LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L',
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fors_data') THEN
+    EXECUTE format('CREATE ROLE fors_data LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD %L',
       btrim(pg_read_file('/run/postgres-secrets/data_password'), E'\r\n '));
   END IF;
 END $$;
-GRANT CONNECT ON DATABASE gatewaydb TO ume_data;
-GRANT USAGE ON SCHEMA public TO ume_data;
--- pg_hba.conf now lists ume_data; reload so the new line applies without a restart.
+GRANT CONNECT ON DATABASE gatewaydb TO fors_data;
+GRANT USAGE ON SCHEMA public TO fors_data;
+-- pg_hba.conf now lists fors_data; reload so the new line applies without a restart.
 SELECT pg_reload_conf();

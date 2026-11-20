@@ -43,10 +43,10 @@ test('OIDC login, team and show-once key, rotation, usage, budget and audit', as
   const catalogue = await (await page.request.get('/api/catalog')).json()
   const completion = await page.request.post(`${catalogue.gatewayBaseUrl}/v1/chat/completions`, {
     headers: { Authorization: `Bearer ${secret}` },
-    data: { model: 'ume/demo-fallback', messages: [{ role: 'user', content: 'Synthetic browser demonstration' }], max_tokens: 32 },
+    data: { model: 'fors/demo-fallback', messages: [{ role: 'user', content: 'Synthetic browser demonstration' }], max_tokens: 32 },
   })
   expect(completion.status()).toBe(200)
-  expect(completion.headers()['x-ume-fallbacks']).toBe('1')
+  expect(completion.headers()['x-fors-fallbacks']).toBe('1')
   const requestId = completion.headers()['x-request-id']
   await expect.poll(async () => (await page.request.get(`/api/usage/requests/${requestId}`)).status()).toBe(200)
   const budget = await mutate(page, '/api/budgets', { scope: 'VirtualKey', scopeId: createdKey.key.id, limitUsd: 0, period: 'Monthly', alertThresholds: [80, 100], isActive: true })
@@ -68,7 +68,7 @@ test('OIDC login, team and show-once key, rotation, usage, budget and audit', as
   expect(denied.status()).toBe(401)
   const blocked = await page.request.post(`${catalogue.gatewayBaseUrl}/v1/chat/completions`, {
     headers: { Authorization: `Bearer ${rotated.secret}` },
-    data: { model: 'ume/chat-standard', messages: [{ role: 'user', content: 'Synthetic budget check' }], max_tokens: 32 },
+    data: { model: 'fors/chat-standard', messages: [{ role: 'user', content: 'Synthetic budget check' }], max_tokens: 32 },
   })
   expect(blocked.status()).toBe(402)
   expect((await blocked.json()).error.code).toBe('budget_exceeded')

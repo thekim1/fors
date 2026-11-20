@@ -16,7 +16,7 @@ Caveats:
 - The proxy must append the client address (`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`; Nginx Proxy
   Manager does it by default). With several proxies in a row, list them all.
 - The Settings page shows the address your own request to the admin API came from, which is usually the proxy.
-- `ASPNETCORE_FORWARDEDHEADERS_ENABLED` / `UME_FORWARDED_HEADERS` no longer affect the gateway: they would believe the
+- `ASPNETCORE_FORWARDEDHEADERS_ENABLED` / `FORS_FORWARDED_HEADERS` no longer affect the gateway: they would believe the
   header from anyone.
 - An address restriction narrows where a key works; it does not replace the key or the firewall.
 

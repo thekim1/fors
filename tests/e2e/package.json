@@ -1,5 +1,5 @@
 {
-  "name": "ume-llm-gateway-e2e",
+  "name": "fors-e2e",
   "private": true,
   "type": "module",
   "scripts": {

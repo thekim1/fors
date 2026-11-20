@@ -3,15 +3,15 @@
 # generated, so Kubernetes and Compose installations are set up the same way (docs/kubernetes.md).
 #
 #   ./deploy/init-deployment.sh --no-chown --yes --gateway-host llm.example.se --admin-host llm-admin.example.se
-#   ./deploy/kubernetes/create-secrets.sh --namespace ume-gateway [--datastores]
+#   ./deploy/kubernetes/create-secrets.sh --namespace fors-gateway [--datastores]
 #
 #   --namespace NS     namespace of the overlay (created if missing)
 #   --datastores       also create the secrets for components/datastores (in-cluster Postgres and Redis)
 #   --certs-dir DIR / --secrets-dir DIR   if init-deployment.sh wrote them elsewhere
 #
-# Secrets: ume-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__gatewaydb, the admin API's
+# Secrets: fors-<service>-secrets (files the app reads as settings, e.g. ConnectionStrings__gatewaydb, the admin API's
 # setup secret Setup__Secret and, for a declared confidential client, Oidc__ClientSecret) and
-# ume-<service>-certs (TLS certificate, internal CA, Data Protection certificate) for gateway, adminapi, migrations
+# fors-<service>-certs (TLS certificate, internal CA, Data Protection certificate) for gateway, adminapi, migrations
 # and dataapi. The connection strings point at the hosts "postgres" and "redis"; with your own databases, edit
 # deploy/secrets/<service>/ConnectionStrings__* first. Sign-in is declared by the overlay's Oidc__Authority, or set in
 # the setup wizard after deploy.sh (docs/kubernetes.md, "Sign-in").
@@ -40,13 +40,13 @@ secret() { # secret NAME DIR — every regular file in DIR becomes a key
   echo "secret/$1"
 }
 for svc in gateway adminapi migrations dataapi; do
-  secret "ume-$svc-secrets" "$secrets/$svc"
-  secret "ume-$svc-certs" "$certs/$svc"
+  secret "fors-$svc-secrets" "$secrets/$svc"
+  secret "fors-$svc-certs" "$certs/$svc"
 done
 if [ "$datastores" = 1 ]; then
   for svc in postgres redis; do
-    secret "ume-$svc-secrets" "$secrets/$svc"
-    secret "ume-$svc-certs" "$certs/$svc"
+    secret "fors-$svc-secrets" "$secrets/$svc"
+    secret "fors-$svc-certs" "$certs/$svc"
   done
 fi
 echo "Back up $secrets/.pepper and $certs/data-protection.pfx outside the cluster: without them a restored database is unusable."

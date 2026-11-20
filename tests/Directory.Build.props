@@ -3,7 +3,7 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <!-- Every project here is a test project except the shared test kit, a library the test projects reference. -->
-    <IsTestProject Condition="'$(MSBuildProjectName)' != 'Ume.LlmGateway.TestKit'">true</IsTestProject>
+    <IsTestProject Condition="'$(MSBuildProjectName)' != 'Fors.TestKit'">true</IsTestProject>
     <OutputType Condition="'$(IsTestProject)' == 'true'">Exe</OutputType>
     <!-- Test-only suppressions, one reason each (on top of the repository-wide ones). -->
     <!-- Underscores in test names (Does_this_when_that). -->

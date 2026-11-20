@@ -106,7 +106,7 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
   let firstNavigation = true
   router.afterEach((to, from, failure) => {
     if (failure) return
-    document.title = `${to.meta.title ?? 'Admin'} · AI Gateway`
+    document.title = `${to.meta.title ?? 'Admin'} · Fors`
     if (firstNavigation) {
       firstNavigation = false
       if (to.hash) focusSection(to.hash)

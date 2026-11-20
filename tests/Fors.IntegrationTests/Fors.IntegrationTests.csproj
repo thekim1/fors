@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.Redis" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fors.TestKit\Fors.TestKit.csproj" />
+    <ProjectReference Include="..\..\src\Fors.AdminApi\Fors.AdminApi.csproj" />
+    <ProjectReference Include="..\..\src\Fors.Gateway\Fors.Gateway.csproj" Aliases="Gateway" />
+    <ProjectReference Include="..\..\src\Fors.FakeLlm\Fors.FakeLlm.csproj" Aliases="Fake" />
+    <ProjectReference Include="..\..\src\Fors.MigrationService\Fors.MigrationService.csproj" Aliases="Migration" />
+  </ItemGroup>
+</Project>

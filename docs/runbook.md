@@ -36,37 +36,37 @@ and the Aspire-generated base plus `compose.hardening.yaml`.
 `deploy/compose.portainer.yaml` is the same hardened stack configured **only through environment
 variables**, for operators who cannot run `init-deployment.sh` (Portainer, managed Docker hosts).
 Paste it into a Portainer stack (Web editor) or deploy the repository's file via Git, and set the
-variables listed at the top of the file. **A new stack needs only `UME_DOMAIN`** (or `UME_GATEWAY_HOST`) and the images;
-the `compose.portainer.yaml` attached to a GitHub release pins its images, so with it `UME_DOMAIN` alone is enough. The
-rest is optional: host names, ports, claim mapping, and the sign-in variables. With `UME_DOMAIN=example.se` the gateway API is `llm.example.se`, the admin UI
-`llm-admin.example.se` and the gateway's public URL `https://llm.example.se`; `UME_GATEWAY_HOST`, `UME_ADMIN_HOST` and
-`UME_GATEWAY_PUBLIC_URL` each override their default, and a stack that sets `UME_GATEWAY_HOST` needs no `UME_DOMAIN`. The images must be in a registry the
+variables listed at the top of the file. **A new stack needs only `FORS_DOMAIN`** (or `FORS_GATEWAY_HOST`) and the images;
+the `compose.portainer.yaml` attached to a GitHub release pins its images, so with it `FORS_DOMAIN` alone is enough. The
+rest is optional: host names, ports, claim mapping, and the sign-in variables. With `FORS_DOMAIN=example.se` the gateway API is `llm.example.se`, the admin UI
+`llm-admin.example.se` and the gateway's public URL `https://llm.example.se`; `FORS_GATEWAY_HOST`, `FORS_ADMIN_HOST` and
+`FORS_GATEWAY_PUBLIC_URL` each override their default, and a stack that sets `FORS_GATEWAY_HOST` needs no `FORS_DOMAIN`. The images must be in a registry the
 host can pull from. The `compose.portainer.yaml` attached to a GitHub release already points at that
 release's images (by digest), so the image variables are optional there.
 
 A one-shot `bootstrap` container creates the internal CA, certificates, passwords, key pepper and
-Redis ACL in the `ume-certs` and `ume-secrets` volumes on first start; the services still read them
+Redis ACL in the `fors-certs` and `fors-secrets` volumes on first start; the services still read them
 as read-only files, never as environment variables. It is idempotent: secrets are never regenerated,
 service certificates are re-issued when they expire within 30 days, the hostnames change or the CA changed
 (restart the stack to renew; redeploying runs bootstrap again). An internal CA without the `keyUsage` extension
 (created before it was added) is replaced automatically and all certificates are re-issued. The CA key stays in the
-`ume-certs` volume because bootstrap needs it; restrict who can read Docker volumes on the host. `UME_OIDC_CLIENT_SECRET`, if used, is the one secret
+`fors-certs` volume because bootstrap needs it; restrict who can read Docker volumes on the host. `FORS_OIDC_CLIENT_SECRET`, if used, is the one secret
 you enter yourself; it is stored in the Portainer stack's environment, so restrict who can view it (or enter it in the
 setup wizard, where it is stored encrypted instead).
 
-- **Sign-in.** Without `UME_OIDC_AUTHORITY` the stack starts for the setup wizard: the end of the `bootstrap`
+- **Sign-in.** Without `FORS_OIDC_AUTHORITY` the stack starts for the setup wizard: the end of the `bootstrap`
   container's log names its address (`https://<admin host>:9443/setup`, or `https://<admin host>/setup` behind a proxy),
   and the setup code is in the `adminapi` container's log (*Containers › adminapi › Logs*, the line
   `adminapi: setup mode is open until … Setup code: …`). See *First start without an authority* below. To declare the
-  sign-in instead, set `UME_OIDC_AUTHORITY` (and `UME_OIDC_CLIENT_ID`, `UME_OIDC_CLIENT_SECRET` as needed) before the
-  first deploy: the wizard then never opens, and the bootstrap's log says so. `UME_OIDC_CLIENT_SECRET` is written only
-  together with `UME_OIDC_AUTHORITY`; the bootstrap names it when it is left out, and an example value left in either.
-- **Re-opening setup** (to change the provider, client or secret later): set `UME_SETUP_REOPEN` to a new value (for
+  sign-in instead, set `FORS_OIDC_AUTHORITY` (and `FORS_OIDC_CLIENT_ID`, `FORS_OIDC_CLIENT_SECRET` as needed) before the
+  first deploy: the wizard then never opens, and the bootstrap's log says so. `FORS_OIDC_CLIENT_SECRET` is written only
+  together with `FORS_OIDC_AUTHORITY`; the bootstrap names it when it is left out, and an example value left in either.
+- **Re-opening setup** (to change the provider, client or secret later): set `FORS_SETUP_REOPEN` to a new value (for
   example today's date) and *Update the stack*; a new code is in the `adminapi` log, valid for an hour. The value is
   consumed, so leaving it in place opens nothing more. Empty it before restoring a database.
 
-- **Back up** `ume-secrets/.pepper` and `ume-certs/data-protection.pfx` (for example
-  `docker run --rm -v <stack>_ume-secrets:/s alpine cat /s/.pepper`). Deleting the stack's volumes loses
+- **Back up** `fors-secrets/.pepper` and `fors-certs/data-protection.pfx` (for example
+  `docker run --rm -v <stack>_fors-secrets:/s alpine cat /s/.pepper`). Deleting the stack's volumes loses
   them, and a database restored without them is unusable.
 - Ports default to `0.0.0.0`; behind Nginx Proxy Manager or another proxy follow *Reverse proxy and PKI*
   (two hostnames, HTTPS upstreams) and firewall the ports to the proxy.
@@ -85,7 +85,7 @@ setup wizard, where it is stored encrypted instead).
 ## Identity provider (existing Keycloak, AD FS, Entra ID, Active Directory)
 
 The development Keycloak realm (`dev/keycloak`) is for local runs only; **production uses an existing OIDC
-provider or the optional [Keycloak project](keycloak.md)** (`deploy/keycloak`), either set as `UME_OIDC_AUTHORITY` in
+provider or the optional [Keycloak project](keycloak.md)** (`deploy/keycloak`), either set as `FORS_OIDC_AUTHORITY` in
 `deploy/.env` (the Portainer stack's variable, Kubernetes' `Oidc__Authority`) or entered in the setup wizard (*First
 start without an authority* below). The admin API needs a client
 (authorization code + PKCE; redirect URIs `https://<admin host>/signin-oidc` and
@@ -105,27 +105,27 @@ runs the same keys as `Oidc:<Setting>` in AppHost user secrets):
 
 | Setting | Env variable | Purpose |
 |---|---|---|
-| `Oidc:RoleClaim` / `DepartmentClaim` | `UME_OIDC_ROLE_CLAIM` / `UME_OIDC_DEPARTMENT_CLAIM` | Read roles/department codes from a differently named claim (`role`, `department`) |
-| `Oidc:TeamClaim` | `UME_OIDC_TEAM_CLAIM` | Claim holding team admins' team codes (default `teamCodes`; `groups` uses group names as team codes) |
-| `Oidc:GroupClaim` | `UME_OIDC_GROUP_CLAIM` | Claim holding group names (default `groups`) |
-| `Oidc:RoleGroups:<role>` | `UME_OIDC_GROUPS_GATEWAY_ADMIN`, `_DEPARTMENT_ADMIN`, `_VIEWER`, `_TEAM_ADMIN` | Groups (`;`-separated, case-insensitive) that grant a role, so no IdP-side roles are needed |
-| `Oidc:ExtraScopes:0` | `UME_OIDC_EXTRA_SCOPE` | Additional scope to request (`groups`) |
+| `Oidc:RoleClaim` / `DepartmentClaim` | `FORS_OIDC_ROLE_CLAIM` / `FORS_OIDC_DEPARTMENT_CLAIM` | Read roles/department codes from a differently named claim (`role`, `department`) |
+| `Oidc:TeamClaim` | `FORS_OIDC_TEAM_CLAIM` | Claim holding team admins' team codes (default `teamCodes`; `groups` uses group names as team codes) |
+| `Oidc:GroupClaim` | `FORS_OIDC_GROUP_CLAIM` | Claim holding group names (default `groups`) |
+| `Oidc:RoleGroups:<role>` | `FORS_OIDC_GROUPS_GATEWAY_ADMIN`, `_DEPARTMENT_ADMIN`, `_VIEWER`, `_TEAM_ADMIN` | Groups (`;`-separated, case-insensitive) that grant a role, so no IdP-side roles are needed |
+| `Oidc:ExtraScopes:0` | `FORS_OIDC_EXTRA_SCOPE` | Additional scope to request (`groups`) |
 | `Oidc:ClientSecret` | `--oidc-client-secret-file` (init script) | Confidential client; stored as the `Oidc__ClientSecret` secret file. Only with the deployment's authority; without one, enter the secret in the setup wizard |
 
 Users without a granted role can sign in but are refused (403) by the role policies; there is no default role.
 
 **Active Directory.** Do not talk LDAP directly; use one of:
 
-1. *An existing Keycloak federated to AD (recommended if one exists).* Create a client `ume-admin` in
+1. *An existing Keycloak federated to AD (recommended if one exists).* Create a client `fors-admin` in
    the realm. Add the AD groups to the realm via the LDAP provider's *group-ldap-mapper* (or
    *role-ldap-mapper* to get realm roles named `gateway-admin` etc. directly) and a token mapper:
    either *User Realm Role* with claim `roles`, or *Group Membership* (full path off) with claim
-   `groups` plus `UME_OIDC_GROUPS_*`. Map an AD attribute (for example `department`) to a user attribute with the
+   `groups` plus `FORS_OIDC_GROUPS_*`. Map an AD attribute (for example `department`) to a user attribute with the
    LDAP *user-attribute-mapper* and expose it with a *User Attribute* mapper, claim `departmentCodes`, multivalued.
    Add all mappers to the ID token. Authority: `https://<keycloak>/realms/<realm>`.
 2. *AD FS* (OpenID Connect application group): issue the AD group membership (`group` claim, names
    as the token shows them, e.g. `DOMAIN\\GG-Llm-Admins`) and a department attribute as claims in the ID token. Set
-   `UME_OIDC_GROUP_CLAIM=group`, `UME_OIDC_DEPARTMENT_CLAIM=<claim>` and `UME_OIDC_GROUPS_*`. Authority:
+   `FORS_OIDC_GROUP_CLAIM=group`, `FORS_OIDC_DEPARTMENT_CLAIM=<claim>` and `FORS_OIDC_GROUPS_*`. Authority:
    `https://<adfs>/adfs`.
 3. *Entra ID (hybrid AD)*: app roles named `gateway-admin` etc. arrive in `roles` with no mapping; the
    department needs an optional or custom claim. Authority: `https://login.microsoftonline.com/<tenant>/v2.0`.
@@ -136,7 +136,7 @@ mapping and should be verified against the real IdP: sign in, then check `/bff/u
 
 ### First start without an authority: the setup wizard
 
-A deployment that does not set `UME_OIDC_AUTHORITY` (Kubernetes: `Oidc__Authority`) starts with sign-in not configured
+A deployment that does not set `FORS_OIDC_AUTHORITY` (Kubernetes: `Oidc__Authority`) starts with sign-in not configured
 and opens **setup mode** for an hour at the admin API's first start. Rules, risks and the API:
 [identity and roles](identity-and-roles.md#setup-mode).
 
@@ -148,15 +148,15 @@ and opens **setup mode** for an hour at the admin API's first start. Rules, risk
    URIs to register at the provider (`/signin-oidc`, `/signout-callback-oidc`), takes the authority, client id, client
    secret and, when the token differs from the defaults, the claim names and extra scope.
 3. **Test the sign-in** in the same browser. Saving needs a passed test by a person who comes out as `gateway-admin`
-   (a role in the token, or a group in `UME_OIDC_GROUPS_GATEWAY_ADMIN`). Saving completes setup and closes it.
+   (a role in the token, or a group in `FORS_OIDC_GROUPS_GATEWAY_ADMIN`). Saving completes setup and closes it.
 
 The code is a gateway-admin credential for the hour: treat the container's output like the deployment's secrets, and
 finish soon after the start. A restart within the hour prints the same code; while setup was never finished, a start
 after the hour opens a new hour with a new code. The admin API reaches the candidate provider's discovery document, keys
 and token endpoint over HTTPS, so its egress must allow that host ([network and ports](network-and-ports.md#outbound-egress)).
-The wizard does not set the Data API's token issuer: set `UME_DATA_AUTHORITY` for it.
+The wizard does not set the Data API's token issuer: set `FORS_DATA_AUTHORITY` for it.
 
-**Re-opening.** Give `UME_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) a new value, for example today's date, and restart
+**Re-opening.** Give `FORS_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) a new value, for example today's date, and restart
 the admin API (`up -d`, *Update the stack*, `deploy.sh`): setup opens once more for an hour with a new code, and the
 existing sign-in keeps working meanwhile. Values the deployment sets stay locked. Re-opening needs the setup secret
 (`Setup__Secret`), which the Portainer bootstrap and `init-deployment.sh` generate; an installation from before setup
@@ -256,7 +256,7 @@ leaf certificate file should include intermediates). `--ca-file` appends your ro
 intermediates to the services' trust store, which also needs to cover the IdP and
 approved providers if those use a private CA (`SSL_CERT_FILE` replaces the system store).
 Because a PKI certificate seldom covers the internal name `gateway`, the admin API then reaches
-the gateway's operations endpoint through its public URL (`UME_GATEWAY_OPERATIONS_URL`
+the gateway's operations endpoint through its public URL (`FORS_GATEWAY_OPERATIONS_URL`
 in `deploy/.env`): the container must be able to resolve and reach that name. Postgres and Redis
 always keep internal certificates. PKI-supplied certificates are not touched by `--renew-certs`;
 replace the files (or re-run with the options) before they expire and restart the services.
@@ -266,7 +266,7 @@ replace the files (or re-run with the options) before they expire and restart th
 Pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`, which builds with `-p:Version=X.Y.Z` from the tag
 (`<Version>` in `Directory.Build.props` stays the local placeholder). Before tagging, move the CHANGELOG's *Unreleased*
 notes under `## X.Y.Z - date`, which become the release notes. Also run the performance regression guard
-(`dotnet run -c Release --project benchmarks/Ume.LlmGateway.Benchmarks -- check`, about a minute, needs Docker); it
+(`dotnet run -c Release --project benchmarks/Fors.Benchmarks -- check`, about a minute, needs Docker); it
 fails when a request allocates 20 % more or makes another Postgres statement or Redis call
 ([details](performance.md#regression-guard-check)). The workflow:
 
@@ -276,7 +276,7 @@ fails when a request allocates 20 % more or makes another Postgres statement or 
 3. builds the deploy bundle with `deploy/build-release-bundle.sh`, which pins the image defaults in
    `compose.prod.yaml` and `compose.portainer.yaml` to those digests (the optional `deploy/keycloak` is included as is);
 4. boots the bundle with `init-deployment.sh` and `compose.prod.yaml` (data profile included) as a smoke test;
-5. creates the GitHub release with `ume-llm-gateway-X.Y.Z.tar.gz`, `compose.portainer.yaml`, the SPDX SBOM
+5. creates the GitHub release with `fors-X.Y.Z.tar.gz`, `compose.portainer.yaml`, the SPDX SBOM
    and `SHA256SUMS`. A tag with a suffix (`v1.0.0-rc.1`) becomes a pre-release.
 
 ```bash
@@ -286,8 +286,8 @@ git tag v0.2.0 && git push origin v0.2.0
 On the Docker host:
 
 ```bash
-curl -fsSLO https://github.com/<owner>/<repo>/releases/download/v0.2.0/ume-llm-gateway-0.2.0.tar.gz
-tar -xzf ume-llm-gateway-0.2.0.tar.gz && cd ume-llm-gateway-0.2.0
+curl -fsSLO https://github.com/<owner>/<repo>/releases/download/v0.2.0/fors-0.2.0.tar.gz
+tar -xzf fors-0.2.0.tar.gz && cd fors-0.2.0
 ./deploy/init-deployment.sh
 docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait
 ```
@@ -306,16 +306,16 @@ Stop the exact local AppHost before backend builds. Generate from the AppHost, n
 hand-edit the generated YAML:
 
 ```powershell
-aspire stop --apphost src\Ume.LlmGateway.AppHost\Ume.LlmGateway.AppHost.csproj --non-interactive
+aspire stop --apphost src\Fors.AppHost\Fors.AppHost.csproj --non-interactive
 aspire publish -o deploy\generated --non-interactive
 Set-Location src\admin-ui
 npm ci
 npm run build
 Set-Location ..\..
-dotnet publish src\Ume.LlmGateway.Gateway -c Release /t:PublishContainer
-dotnet publish src\Ume.LlmGateway.AdminApi -c Release /t:PublishContainer /p:PublishAdminUi=true
-dotnet publish src\Ume.LlmGateway.MigrationService -c Release /t:PublishContainer
-dotnet publish src\Ume.LlmGateway.DataApi -c Release /t:PublishContainer   # optional Data API
+dotnet publish src\Fors.Gateway -c Release /t:PublishContainer
+dotnet publish src\Fors.AdminApi -c Release /t:PublishContainer /p:PublishAdminUi=true
+dotnet publish src\Fors.MigrationService -c Release /t:PublishContainer
+dotnet publish src\Fors.DataApi -c Release /t:PublishContainer   # optional Data API
 ```
 
 Locally built images are tagged with `<Version>` from `Directory.Build.props`. Push to the approved private registry and deploy
@@ -325,27 +325,27 @@ No production `aspire prepare/deploy` secret-resolution file is required: this p
 uses publish placeholders and operator-mounted secret files, not resolved `.env` secrets.
 
 Always compose both files:
-`docker compose -p ume-gateway -f deploy\generated\docker-compose.yaml -f deploy\compose.hardening.yaml config --quiet`.
+`docker compose -p fors-gateway -f deploy\generated\docker-compose.yaml -f deploy\compose.hardening.yaml config --quiet`.
 Then run the same command with `up -d --wait --wait-timeout 180` instead of `config --quiet`.
 Use host-native paths on Linux; the PowerShell examples are for the Windows build host.
 
 ## Nonsecret deployment inputs
 
 Set `GATEWAY_IMAGE`, `ADMINAPI_IMAGE`, `MIGRATIONS_IMAGE` (and `DATAAPI_IMAGE` with the Data API) to approved `repository@sha256:...`.
-Set `UME_CERTS_DIR`, `UME_SECRETS_DIR` to absolute operator-managed directories.
-Set `UME_GATEWAY_PUBLIC_URL` (HTTPS). Sign-in: `UME_OIDC_AUTHORITY` (HTTPS) and `UME_OIDC_CLIENT_ID` declare it (empty
-leaves it to the setup wizard, see *First start without an authority*); `UME_SETUP_REOPEN` (empty) re-opens the wizard.
-Optional `UME_GATEWAY_BIND/PORT` and `UME_ADMIN_BIND/PORT` default to loopback:8443/9443.
-For [integrations](integrations.md): `UME_ADMIN_PUBLIC_URL` (gateway `Gateway__AdminUrl`, the admin console's address
-handed to platforms on `/v1/ume/context`; `init-deployment.sh` writes it, empty leaves it out) and
-`UME_INTEGRATION_REQUESTS_PER_MINUTE` (admin API `Admin__IntegrationRequestsPerMinute`, default 60, per credential key
-on `/integration/v1`), and `UME_INTEGRATION_API_URL` (gateway `Gateway__IntegrationApiUrl`, the Integration API's address
+Set `FORS_CERTS_DIR`, `FORS_SECRETS_DIR` to absolute operator-managed directories.
+Set `FORS_GATEWAY_PUBLIC_URL` (HTTPS). Sign-in: `FORS_OIDC_AUTHORITY` (HTTPS) and `FORS_OIDC_CLIENT_ID` declare it (empty
+leaves it to the setup wizard, see *First start without an authority*); `FORS_SETUP_REOPEN` (empty) re-opens the wizard.
+Optional `FORS_GATEWAY_BIND/PORT` and `FORS_ADMIN_BIND/PORT` default to loopback:8443/9443.
+For [integrations](integrations.md): `FORS_ADMIN_PUBLIC_URL` (gateway `Gateway__AdminUrl`, the admin console's address
+handed to platforms on `/v1/fors/context`; `init-deployment.sh` writes it, empty leaves it out) and
+`FORS_INTEGRATION_REQUESTS_PER_MINUTE` (admin API `Admin__IntegrationRequestsPerMinute`, default 60, per credential key
+on `/integration/v1`), and `FORS_INTEGRATION_API_URL` (gateway `Gateway__IntegrationApiUrl`, the Integration API's address
 as platforms reach it, for example `https://adminapi:8443/integration/v1`; empty leaves it out), the gateway's
-`Gateway__OidcAuthority` (set from `UME_OIDC_AUTHORITY`: the sign-in provider's address as `oidc_authority`; empty
+`Gateway__OidcAuthority` (set from `FORS_OIDC_AUTHORITY`: the sign-in provider's address as `oidc_authority`; empty
 hands out the one saved in the setup wizard), and
-`UME_INTEGRATION_MANIFESTS_DIR` / `UME_INTEGRATION_SECRETS_DIR` (migration service; integration manifests to provision
+`FORS_INTEGRATION_MANIFESTS_DIR` / `FORS_INTEGRATION_SECRETS_DIR` (migration service; integration manifests to provision
 on every deploy and where the new credential keys' secrets are written, see
-[Provisioning from a manifest](integrations.md#provisioning-from-a-manifest); `UME_INTEGRATION_MANIFEST` in the
+[Provisioning from a manifest](integrations.md#provisioning-from-a-manifest); `FORS_INTEGRATION_MANIFEST` in the
 Portainer stack).
 Base interpolation also uses `GATEWAY_PORT`/`ADMINAPI_PORT` (set 8443). Its discarded
 `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `KEY_PEPPER` placeholders may be empty: the override
@@ -375,10 +375,10 @@ Do not mount another service's secrets into an app.
 | certs/dataapi | ca.pem, dataapi.crt/key (SAN dataapi, localhost and the Data API host); no Data Protection certificate |
 | secrets/postgres | bootstrap_password, migrator_password, gateway_password, admin_password, data_password (Data API) |
 | secrets/redis | users.acl based on users.acl.example, containing password SHA256 hash, not plaintext |
-| secrets/migrations | ConnectionStrings__gatewaydb (ume_migrator), Security__KeyPepper, optional DataProtection__CertificatePassword |
-| secrets/gateway | ConnectionStrings__gatewaydb (ume_gateway), ConnectionStrings__redis, Security__KeyPepper, optional DataProtection__CertificatePassword |
-| secrets/adminapi | ConnectionStrings__gatewaydb (ume_admin), ConnectionStrings__redis, Security__KeyPepper, Setup__Secret (setup mode; at least 32 characters, generated once, no backup needed), Oidc__ClientSecret if a confidential client is declared (only with `Oidc__Authority`), optional DataProtection__CertificatePassword |
-| secrets/dataapi | ConnectionStrings__gatewaydb (ume_data) only: no pepper, no Redis |
+| secrets/migrations | ConnectionStrings__gatewaydb (fors_migrator), Security__KeyPepper, optional DataProtection__CertificatePassword |
+| secrets/gateway | ConnectionStrings__gatewaydb (fors_gateway), ConnectionStrings__redis, Security__KeyPepper, optional DataProtection__CertificatePassword |
+| secrets/adminapi | ConnectionStrings__gatewaydb (fors_admin), ConnectionStrings__redis, Security__KeyPepper, Setup__Secret (setup mode; at least 32 characters, generated once, no backup needed), Oidc__ClientSecret if a confidential client is declared (only with `Oidc__Authority`), optional DataProtection__CertificatePassword |
+| secrets/dataapi | ConnectionStrings__gatewaydb (fors_data) only: no pepper, no Redis |
 
 Use a secret manager to deliver files on a protected memory-backed mount. Application
 files use `__` for config nesting. The HMAC pepper and Data Protection certificate must
@@ -409,12 +409,12 @@ scoping. IdP MFA and logout confirmation must be reviewed with users.
 ## Data API (optional)
 
 The read-only Data API serves BI, management and security integrations over HTTPS; design and endpoints are in
-[data-access.md](data-access.md). It runs as its own service with its own database role (`ume_data`, `SELECT` only,
+[data-access.md](data-access.md). It runs as its own service with its own database role (`fors_data`, `SELECT` only,
 and column by column on tables that hold secrets), so it can be deployed in a different network zone or left out.
 
 1. **Start it.** `init-deployment.sh` and the Portainer bootstrap already create its certificate, password and
    connection string. Set `COMPOSE_PROFILES=data` (in `deploy/.env` or the Portainer stack) and `DATAAPI_IMAGE`, then
-   `docker compose ... up -d --wait`. It listens on `UME_DATA_BIND:UME_DATA_PORT` (loopback:10443; 0.0.0.0 with
+   `docker compose ... up -d --wait`. It listens on `FORS_DATA_BIND:FORS_DATA_PORT` (loopback:10443; 0.0.0.0 with
    `--proxy` or Portainer). Its certificate comes from the internal CA; for one from your PKI, put the Data API
    behind your proxy or API gateway on a third host name: `init-deployment.sh --proxy --data-host <name>` adds it to
    `proxy/nginx.conf` (without `--data-host` the name is the gateway's, which a proxy that routes by name cannot share),
@@ -422,19 +422,19 @@ and column by column on tables that hold secrets), so it can be deployed in a di
    first, see the upgrade guide.
 2. **Register clients at your identity provider**, one per integration (an ETL job, a SIEM connector), using
    OAuth 2.0 client credentials. Each token needs:
-   - `aud` = `ume-data-api` (`UME_DATA_AUDIENCE`). Keycloak: an *Audience* mapper; Entra ID: the application ID URI of
+   - `aud` = `fors-data-api` (`FORS_DATA_AUDIENCE`). Keycloak: an *Audience* mapper; Entra ID: the application ID URI of
      an app registration that represents the Data API.
    - The permissions it may use, as values of `scope`, `scp` or `roles`: `usage.aggregate` (management dashboards),
      `usage.detail` (data warehouse), `security.read` (SIEM), `catalog.read` (dimensions). Keycloak: realm roles
-     mapped to a `roles` claim (see the `ume-data-dev` client in `dev/keycloak/ume-realm.json`); Entra ID: app roles
+     mapped to a `roles` claim (see the `fors-data-dev` client in `dev/keycloak/fors-realm.json`); Entra ID: app roles
      granted to the client as application permissions.
-   - Tokens are accepted from `UME_DATA_AUTHORITY` (defaults to `UME_OIDC_AUTHORITY`, never to the provider saved in
+   - Tokens are accepted from `FORS_DATA_AUTHORITY` (defaults to `FORS_OIDC_AUTHORITY`, never to the provider saved in
      the setup wizard; without either, only Data API keys).
    Alternatively (or for integrations that cannot do client credentials) a gateway admin creates a **Data API key** in
-   the admin UI (*Access → Data API access*). Set `UME_DATA_PUBLIC_URL` (admin API `DataApi__PublicUrl`) to the
+   the admin UI (*Access → Data API access*). Set `FORS_DATA_PUBLIC_URL` (admin API `DataApi__PublicUrl`) to the
    Data API's public address so the UI can show a ready-made example request.
-3. **Settings** (`DataApi__*` in the service environment; the Compose files expose `UME_DATA_AUTHORITY`,
-   `UME_DATA_AUDIENCE`, `UME_DATA_MINIMUM_GROUP_SIZE` and `UME_DATA_TIME_ZONE`): `MinimumGroupSize` (5; departments with fewer active keys in a period
+3. **Settings** (`DataApi__*` in the service environment; the Compose files expose `FORS_DATA_AUTHORITY`,
+   `FORS_DATA_AUDIENCE`, `FORS_DATA_MINIMUM_GROUP_SIZE` and `FORS_DATA_TIME_ZONE`): `MinimumGroupSize` (5; departments with fewer active keys in a period
    are reported without their department), `TimeZone` (Europe/Stockholm; day and month boundaries), `SettleSeconds`
    (60), `MaxPageSize` (10 000), `RequestsPerMinute` per client (600), `Detail__IncludePiiCategories` (false), `AllowKeys` (true; Data API keys),
    `KeyCacheSeconds` (30; how long a revoked key may still work).
@@ -444,13 +444,13 @@ Every read is logged as a `data.read` security event (client, path, status, curs
 ## Security events and SIEM
 
 The gateway and admin API write security events (refused keys, PII actions, policy refusals, admin changes) as
-log records in the category `Ume.LlmGateway.Security`; event names and fields are listed in
+log records in the category `Fors.Security`; event names and fields are listed in
 [data-access.md](data-access.md#phase-1-security-events). To ship them:
 
 1. Run an OpenTelemetry Collector (contrib distribution) that the services can reach. Start from
    `deploy/otel/collector-siem.example.yaml`: it keeps only the security category and sends it to syslog
    (RFC 5424 over TLS), with Splunk HEC, Elastic and Azure Monitor (Sentinel) as commented alternatives.
-2. Set `UME_OTEL_ENDPOINT` (for example `https://otel-collector.internal:4317`) in `deploy/.env` or the Portainer
+2. Set `FORS_OTEL_ENDPOINT` (for example `https://otel-collector.internal:4317`) in `deploy/.env` or the Portainer
    stack. Both services then export logs, traces and metrics over OTLP; when it is empty nothing is exported.
    Traces cover requests and provider calls, not single Redis commands: Redis command tracing holds every traced
    request in memory for 10 s, about 400 MB at 16 000 requests/s. Turn it on for a short investigation only, with
@@ -463,7 +463,7 @@ log records in the category `Ume.LlmGateway.Security`; event names and fields ar
 Push over OTLP is best-effort. The durable record is in the database: `AuthFailures` (refused keys, counted per
 reason, endpoint, key and client network), `UsageRecords` (PII actions and refusals) and `AuditLog`.
 
-`UME_SOURCE_ADDRESS` (`Truncated` by default, `Full` or `None`) sets how much of the client address is kept for
+`FORS_SOURCE_ADDRESS` (`Truncated` by default, `Full` or `None`) sets how much of the client address is kept for
 refused keys; record the choice in your DPIA. Behind a reverse proxy the gateway sees only the proxy's address until the
 proxy is listed under *Settings > Trusted proxies* (see *Client addresses and trusted proxies*). The gateway ignores
 `ASPNETCORE_FORWARDEDHEADERS_ENABLED`, which would believe `X-Forwarded-For` from any caller.
@@ -486,7 +486,7 @@ does not deploy/expose a public Aspire dashboard.
 | 402 budget_exceeded | Inspect every department/team/key budget and rotation lineage; rotation does not reset spend |
 | 429 | RPM/TPM or admin quota; respect Retry-After, do not remove limits to fix a test |
 | Queue grows / DB outage | Restore DB connectivity; consider draining gateway traffic; bounded queue back-pressures callers |
-| Requests go to an unexpected model | Check the `x-ume-rule` response header and the usage record's `RoutingRuleName`; use the routing rule dry run (`POST /api/routing-rules/test`) with the same headers, key and budget values; look for gateway warnings about ignored rules |
+| Requests go to an unexpected model | Check the `x-fors-rule` response header and the usage record's `RoutingRuleName`; use the routing rule dry run (`POST /api/routing-rules/test`) with the same headers, key and budget values; look for gateway warnings about ignored rules |
 | Rules not applying after a reorganisation | A rule whose team/department was removed is *orphaned* and disabled until it is reassigned (`GET /api/routing-rules?orphaned=true`) |
 | No providers | Residency/capability/enable/drain/circuit settings; inspect request_id metadata, not content |
 | 500 `internal_error` from the gateway | Unexpected failure after acceptance; the request is in the usage records (outcome `ProviderError`, error `internal_error`, nothing charged). Find the logged exception type by `request_id` |
@@ -506,15 +506,15 @@ does not deploy/expose a public Aspire dashboard.
 | Log "Content guard model unavailable …" / usage flag `guard_unavailable` | The guard model failed or took longer than `TimeoutMs`; check the on-prem server. With `FailOpen=false`, Block keys get 503 meanwhile |
 | Provider keeps failing but its circuit stays closed | Upstream 401/403/404, `https_required` and `credential_unavailable` are configuration errors: requests fall back but the circuit breaker ignores them. Fix the credential, URL or model name |
 | A service exits at startup with an options validation error | A required or out-of-range setting, e.g. an `Oidc:Authority` that is set but not an absolute https URL, `Admin:RequestsPerMinute` outside 1–10000, `Gateway:BaseUrl`/`OperationsUrl` not an absolute http(s) URL (admin API), or invalid `Seed:*` settings (migration service). A missing `Oidc:Authority` no longer stops the admin API: see the next row |
-| Sign-in not set up yet: `/bff/user` shows `signIn.configured: false`, `/bff/login` answers `409 sign_in_not_configured`, log "Sign-in refused: sign-in is not configured (no_authority)" | No authority in the deployment and none saved in the setup wizard. Use the setup code from the admin API's output (*First start without an authority*), or set `UME_OIDC_AUTHORITY`. `invalid_authority`: the saved authority is not an absolute https URL; `unreadable_client_secret`: see the restore notes in *Backup and restore* |
-| No setup code on the admin API's output | Declared deployments never print one (log "The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed" at the first start). Otherwise: setup was completed (re-open with a new `UME_SETUP_REOPEN`); the hour passed and the admin API has not started since (restart it; a never-completed setup opens a new hour); log "Setup mode would open, but the setup secret (Setup__Secret, at least 32 characters) is missing…": the deployment lacks `secrets/adminapi/Setup__Secret` (re-run `init-deployment.sh`, redeploy the Portainer stack, or `create-secrets.sh`); log "The SignInSettings row is missing…": run the migration service |
+| Sign-in not set up yet: `/bff/user` shows `signIn.configured: false`, `/bff/login` answers `409 sign_in_not_configured`, log "Sign-in refused: sign-in is not configured (no_authority)" | No authority in the deployment and none saved in the setup wizard. Use the setup code from the admin API's output (*First start without an authority*), or set `FORS_OIDC_AUTHORITY`. `invalid_authority`: the saved authority is not an absolute https URL; `unreadable_client_secret`: see the restore notes in *Backup and restore* |
+| No setup code on the admin API's output | Declared deployments never print one (log "The deployment declares the sign-in (Oidc:Authority): setup mode counts as completed" at the first start). Otherwise: setup was completed (re-open with a new `FORS_SETUP_REOPEN`); the hour passed and the admin API has not started since (restart it; a never-completed setup opens a new hour); log "Setup mode would open, but the setup secret (Setup__Secret, at least 32 characters) is missing…": the deployment lacks `secrets/adminapi/Setup__Secret` (re-run `init-deployment.sh`, redeploy the Portainer stack, or `create-secrets.sh`); log "The SignInSettings row is missing…": run the migration service |
 | `429 setup_attempts_exhausted` on the setup code | More than 20 wrong codes in a minute on that instance; wait for `Retry-After`. The right code is never refused, so check for a typo or an older code (each opening has its own). Repeated `admin.setup.code_refused` events you did not cause mean someone is guessing: finish setup or declare the authority |
 | The wizard's test sign-in fails with a `reason` | Each reason names the step ([admin-api.md](admin-api.md#setup-mode-bffsetup)): `authority_unreachable` or `token_endpoint_unreachable` (the admin API's egress or DNS), `tls` (the provider's certificate is not trusted: add its CA to `ca.pem`, `init-deployment.sh --ca-file`), `issuer_mismatch` (enter the authority exactly as the `issuer` in the provider's `/.well-known/openid-configuration`), `provider_error` or `token_refused` (client id, secret or redirect URI at the provider), `browser_mismatch` (finish the test in the browser that started it), `deployment_secret_without_authority` (remove the deployment's `Oidc__ClientSecret` or set the authority), `not_gateway_admin` on saving (the person has no `gateway-admin` role or group) |
 | Budget alert webhook not received | Each alert is posted once (5 s timeout, no retries) and is still stored (`GET /api/alerts`); a warning is logged when the post fails or the 1 000-alert queue is full |
 | Live audio: 400 "requires a WebSocket connection" | The proxy drops the `Upgrade` header; see *Reverse proxy and PKI* |
-| A successful request is missing from the gateway log | Only refused, failed and cancelled requests are logged at Information ("Request … key … status … in … ms"); successful ones are in the usage records (find them by `request_id`). To log every request, turn on **Settings > Request logging** (24 hours or no time limit; applies within seconds). Without the admin UI, set `Logging__LogLevel__Ume.LlmGateway.Gateway.Requests.GatewayRequestHandler=Debug` on the gateway and restart it. Either costs 6–14 % of peak throughput while on |
+| A successful request is missing from the gateway log | Only refused, failed and cancelled requests are logged at Information ("Request … key … status … in … ms"); successful ones are in the usage records (find them by `request_id`). To log every request, turn on **Settings > Request logging** (24 hours or no time limit; applies within seconds). Without the admin UI, set `Logging__LogLevel__Fors.Gateway.Requests.GatewayRequestHandler=Debug` on the gateway and restart it. Either costs 6–14 % of peak throughput while on |
 | Live audio: warning "session registry unavailable" | The Redis ACL lacks `zadd zrem zcard zremrangebyscore` (upgrade guide); sessions work but the per-key limit is off |
-| Live audio: sessions end with `gateway_shutting_down` | Expected on deploy/restart: open sessions are closed with an error event and clients reconnect. Metrics: `ume.gateway.realtime.sessions` (open now), `ume.gateway.realtime.session.duration`, `ume.gateway.audio` (seconds) |
+| Live audio: sessions end with `gateway_shutting_down` | Expected on deploy/restart: open sessions are closed with an error event and clients reconnect. Metrics: `fors.gateway.realtime.sessions` (open now), `fors.gateway.realtime.session.duration`, `fors.gateway.audio` (seconds) |
 
 ## Data retention
 
@@ -531,8 +531,8 @@ How long data is kept is set by a gateway admin under *Settings > Data retention
 - **What still works for removed months:** budgets (a yearly budget reads the totals of its earlier months), the usage
   summary and CSV export (whole months; by day one row per month), Data API monthly aggregates. **What does not:** the
   request list, PII incidents, request lookup by id, the Data API daily aggregate and feeds.
-- **The database does the removal.** The admin API calls `ume_retention_step(batch)` until it returns 0. The function runs
-  with the schema owner's rights and treats anything below 90 days as 90; `ume_admin` may execute it but has no `DELETE`
+- **The database does the removal.** The admin API calls `fors_retention_step(batch)` until it returns 0. The function runs
+  with the schema owner's rights and treats anything below 90 days as 90; `fors_admin` may execute it but has no `DELETE`
   on these tables, so the audit log stays append-only for recent entries even if the admin API's credentials leak.
 - **Check it ran:** *Settings > Data retention* shows the last run, rows removed, an error if it failed, the oldest kept
   usage and the next run; *Run now* starts one (audited as `run Settings`). The admin API logs
@@ -562,7 +562,7 @@ passwords are separately managed, not stored in the database archive.
 With the optional Keycloak ([keycloak.md](keycloak.md)), back up its database too, as its own archive:
 `-Database keycloak` on both scripts (restore it with Keycloak stopped; it never touches gatewaydb).
 
-**Setup mode and a restore.** Empty `UME_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) before restoring: a backup older
+**Setup mode and a restore.** Empty `FORS_SETUP_REOPEN` (Kubernetes: `Setup__Reopen`) before restoring: a backup older
 than its last re-open, restored while the variable holds that value, opens setup once more. On a deployment whose
 sign-in was set in the wizard, a backup from before setup was completed opens setup again at the next start (finish it
 again). A client secret saved in the wizard needs the same Data Protection certificate as the database; with another
@@ -585,7 +585,7 @@ cybersecurity reporting and GDPR breach assessment with the incident owner/DPO.
 
 A routing rule that misroutes traffic: disable it (Models & routing > Routing rules > Disable, or `PUT /api/routing-rules/{id}` with `isEnabled: false`).
 The change is audited and published to all gateway instances at once (the 30 s catalogue cache is only the fallback), and requests then go to the model they asked for.
-Find the affected requests by `RoutingRuleName` in the usage records or the `x-ume-rule` response header; do not capture conversations. Rules that are disabled or have no owner are never applied.
+Find the affected requests by `RoutingRuleName` in the usage records or the `x-fors-rule` response header; do not capture conversations. Rules that are disabled or have no owner are never applied.
 
 Stop accepting traffic, allow usage to drain and stop the **exact** deployment without
 `--volumes` for normal shutdown. Never use production `down --volumes`, `aspire destroy`

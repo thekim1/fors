@@ -7,7 +7,7 @@ const out = '../../site/public/screenshots'
 type Theme = (typeof themes)[number]
 
 async function setTheme(page: Page, theme: Theme): Promise<void> {
-  await page.evaluate(t => { try { localStorage.setItem('ume-theme', t) } catch { /* ignore */ } }, theme)
+  await page.evaluate(t => { try { localStorage.setItem('fors-theme', t) } catch { /* ignore */ } }, theme)
 }
 
 /** Opens a page in a theme and waits until its data has loaded (the helpers pace API calls) and its charts have drawn. */
@@ -50,7 +50,7 @@ test('website screenshots', async ({ page }) => {
     expect(budgetResponse.status()).toBe(201)
     const budget: Budget = await budgetResponse.json()
     const catalogue = await (await page.request.get('/api/catalog')).json()
-    const models = ['ume/chat-standard', 'ume/chat-standard', 'ume/chat-advanced', 'ume/chat-onprem', 'ume/demo-fallback']
+    const models = ['fors/chat-standard', 'fors/chat-standard', 'fors/chat-advanced', 'fors/chat-onprem', 'fors/demo-fallback']
     const chat = (i: number) => page.request.post(`${catalogue.gatewayBaseUrl}/v1/chat/completions`, {
       headers: { Authorization: `Bearer ${keys[i % 2].secret}` },
       data: { model: models[i % models.length], messages: [{ role: 'user', content: i % 7 === 0 ? `Ring mig på 070-123 45 67 om ärende ${i}` : `Sammanfatta ärende ${i}` }], max_tokens: 256, stream: i % 3 === 0 },
@@ -69,7 +69,7 @@ test('website screenshots', async ({ page }) => {
     // requests until the budget is past its 80 % alert level, and stop well before it runs out.
     const topUp = () => page.request.post(`${catalogue.gatewayBaseUrl}/v1/chat/completions`, {
       headers: { Authorization: `Bearer ${keys[1].secret}` },
-      data: { model: 'ume/chat-standard', messages: [{ role: 'user', content: 'Sammanfatta ärendet' }], max_tokens: 256 },
+      data: { model: 'fors/chat-standard', messages: [{ role: 'user', content: 'Sammanfatta ärendet' }], max_tokens: 256 },
     })
     for (let round = 0; round < 60 && spent < limit * 0.82; round++) {
       const statuses = await Promise.all([0, 1, 2, 3].map(async () => (await topUp()).status()))
@@ -119,7 +119,7 @@ test('website screenshots', async ({ page }) => {
       const secretDialog = page.getByRole('dialog', { name: 'Copy your secret now' })
       await expect(secretDialog).toBeVisible()
       // Never publish a secret, even a throw-away one.
-      await secretDialog.getByTestId('secret').evaluate(el => { el.textContent = 'ume-sk-' + '•'.repeat(40) })
+      await secretDialog.getByTestId('secret').evaluate(el => { el.textContent = 'fors-sk-' + '•'.repeat(40) })
       await page.waitForTimeout(400)
       await page.screenshot({ path: `${out}/secret-dialog-${theme}.png` })
       await secretDialog.getByRole('checkbox', { name: /stored the secret/ }).check()

@@ -13,7 +13,7 @@ const info = (overrides: Partial<VersionInfo> = {}): VersionInfo => ({
   version: '0.6.0',
   developmentBuild: false,
   checkEnabled: true,
-  latest: { version: '0.6.1', name: 'Ume LLM Gateway 0.6.1', url: 'https://github.com/thekim1/llmgateway/releases/tag/v0.6.1', publishedAt: '2026-10-18T18:57:01Z' },
+  latest: { version: '0.6.1', name: 'Fors 0.6.1', url: 'https://github.com/thekim1/fors/releases/tag/v0.6.1', publishedAt: '2026-10-18T18:57:01Z' },
   updateAvailable: true,
   checkedAt: '2026-10-20T08:00:00Z',
   checkFailed: false,
@@ -37,7 +37,7 @@ describe('VersionCard', () => {
     expect(wrapper.text()).toContain('Version 0.6.1 is available')
     expect(wrapper.text()).toContain('Update available')
     const links = wrapper.findAll('a').map((a) => a.attributes('href'))
-    expect(links).toContain('https://github.com/thekim1/llmgateway/releases/tag/v0.6.1')
+    expect(links).toContain('https://github.com/thekim1/fors/releases/tag/v0.6.1')
   })
 
   it('says up to date when the latest release is running', async () => {

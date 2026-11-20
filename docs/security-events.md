@@ -4,7 +4,7 @@ Security teams, BI and management get the gateway's data through interfaces, nev
 and the reasons are in [data-access.md](data-access.md). What exists today:
 
 - **Security events for your SIEM.** The gateway and admin API log security events under the category
-  `Ume.LlmGateway.Security` with stable event names: `gateway.auth.failed`, `gateway.pii.action`,
+  `Fors.Security` with stable event names: `gateway.auth.failed`, `gateway.pii.action`,
   `gateway.content.flagged` (the [content guard](content-guard.md); categories only, never text), `gateway.request.refused`, `gateway.delegation.refused` ([integrations](integrations.md)), `admin.change`, `admin.signin`, `admin.signin.failed`, `admin.signout`, `admin.session.extended`,
   `admin.access.denied`, `admin.data.read` and setup mode's `admin.setup.opened`, `admin.setup.code_refused`,
   `admin.setup.session`, `admin.setup.test` and `admin.setup.completed` (the table is in [data-access.md](data-access.md)). Set
@@ -51,7 +51,7 @@ Settings (`Gateway:Security:*`):
 
 ## Data API for BI, management and security
 
-An optional, read-only HTTPS service (`Ume.LlmGateway.DataApi`) for integrations: a data warehouse ETL job, a
+An optional, read-only HTTPS service (`Fors.DataApi`) for integrations: a data warehouse ETL job, a
 management dashboard, a SIEM connector. It never gives anyone database access.
 
 - **Each integration is an OAuth client** (client credentials) at your identity provider and gets only the
@@ -59,22 +59,22 @@ management dashboard, a SIEM connector. It never gives anyone database access.
   (one row per request), `security.read` (refused keys, PII actions, audit log, key inventory) or `catalog.read`
   (departments, teams, keys, models, prices, budgets). Works with Keycloak, AD FS and Entra ID.
 - **Or a Data API key**: a gateway admin creates one under *Access → Data API access* in the admin UI, ticks the
-  permissions and gets the key (`ume-dk-…`) once, with an example request. Send it as `Authorization: Bearer` or
+  permissions and gets the key (`fors-dk-…`) once, with an example request. Send it as `Authorization: Bearer` or
   `X-Api-Key`. Revoking takes effect within 30 seconds (`DataApi:KeyCacheSeconds`).
 - **Incremental feeds**: pass the `nextCursor` of one page as `after` on the next call. JSON, or `format=csv` /
   `format=ndjson` for bulk loads.
 - **Privacy by default**: departments with fewer than 5 active keys in a period are reported together without a
   department, and per-request PII categories are left out of `usage.detail`.
-- **Read-only by database role**: it connects as `ume_data`, which cannot read gateway key hashes, encrypted secrets
+- **Read-only by database role**: it connects as `fors_data`, which cannot read gateway key hashes, encrypted secrets
   or provider credentials at all (it reads only the hashes of Data API keys and writes only their last use). Every read is logged as a `data.read` security event.
 
 Locally it starts with the rest of the stack (resource `dataapi`, `https://localhost:7311/scalar`). Get a token from the
-bundled Keycloak with the `ume-data-dev` client (all four permissions); its secret is the AppHost parameter
+bundled Keycloak with the `fors-data-dev` client (all four permissions); its secret is the AppHost parameter
 `data-client-secret`:
 
 ```powershell
-$token = (Invoke-RestMethod -Method Post "<keycloak-url>/realms/ume/protocol/openid-connect/token" -Body @{
-  grant_type = 'client_credentials'; client_id = 'ume-data-dev'; client_secret = '<data-client-secret>' }).access_token
+$token = (Invoke-RestMethod -Method Post "<keycloak-url>/realms/fors/protocol/openid-connect/token" -Body @{
+  grant_type = 'client_credentials'; client_id = 'fors-data-dev'; client_secret = '<data-client-secret>' }).access_token
 Invoke-RestMethod "https://localhost:7311/v1/usage/records?limit=10" -Headers @{ Authorization = "Bearer $token" }
 ```
 

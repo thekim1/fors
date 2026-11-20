@@ -14,8 +14,8 @@ services:
       # On the stop signal a slot first answers for 5 s more with "Connection: close", so the proxy retires its pooled
       # connections to it cleanly; then it closes its listener (the proxy retries new requests on the other slot) and
       # finishes the requests it has (long streamed answers) for up to 5 minutes.
-      Shutdown__DrainSeconds: "${UME_DRAIN_SECONDS:-5}"
-      DOTNET_SHUTDOWNTIMEOUTSECONDS: "${UME_SHUTDOWN_TIMEOUT_SECONDS:-300}"
+      Shutdown__DrainSeconds: "${FORS_DRAIN_SECONDS:-5}"
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "${FORS_SHUTDOWN_TIMEOUT_SECONDS:-300}"
     stop_grace_period: 320s
     networks:
       llm:
@@ -25,10 +25,10 @@ services:
 
   gateway-b:
     extends: {file: compose.prod.yaml, service: gateway}
-    ports: !override ["${UME_GATEWAY_BIND:-127.0.0.1}:${UME_GATEWAY_B_PORT:-8444}:8443"]
+    ports: !override ["${FORS_GATEWAY_BIND:-127.0.0.1}:${FORS_GATEWAY_B_PORT:-8444}:8443"]
     environment:
-      Shutdown__DrainSeconds: "${UME_DRAIN_SECONDS:-5}"
-      DOTNET_SHUTDOWNTIMEOUTSECONDS: "${UME_SHUTDOWN_TIMEOUT_SECONDS:-300}"
+      Shutdown__DrainSeconds: "${FORS_DRAIN_SECONDS:-5}"
+      DOTNET_SHUTDOWNTIMEOUTSECONDS: "${FORS_SHUTDOWN_TIMEOUT_SECONDS:-300}"
       OTEL_SERVICE_INSTANCE_ID: gateway-b
     stop_grace_period: 320s
     depends_on:
@@ -45,15 +45,15 @@ services:
 
   adminapi:
     environment:
-      Shutdown__DrainSeconds: "${UME_DRAIN_SECONDS:-5}"
+      Shutdown__DrainSeconds: "${FORS_DRAIN_SECONDS:-5}"
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "30"
     stop_grace_period: 40s
 
   adminapi-b:
     extends: {file: compose.prod.yaml, service: adminapi}
-    ports: !override ["${UME_ADMIN_BIND:-127.0.0.1}:${UME_ADMIN_B_PORT:-9444}:8443"]
+    ports: !override ["${FORS_ADMIN_BIND:-127.0.0.1}:${FORS_ADMIN_B_PORT:-9444}:8443"]
     environment:
-      Shutdown__DrainSeconds: "${UME_DRAIN_SECONDS:-5}"
+      Shutdown__DrainSeconds: "${FORS_DRAIN_SECONDS:-5}"
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "30"
       OTEL_SERVICE_INSTANCE_ID: adminapi-b
     stop_grace_period: 40s

@@ -31,7 +31,7 @@ vi.mock('@/api', () => ({
 
 const integration = (overrides: Partial<Integration> = {}): Integration => ({
   id: 'i1',
-  name: 'Ume.Rag',
+  name: 'Källa',
   description: 'RAG platform',
   ownerTeamId: 't1',
   ownerTeamName: 'Platform',
@@ -65,7 +65,7 @@ describe('IntegrationsView', () => {
   it('lists integrations with owner team, key counts and status', async () => {
     const wrapper = await mountView([integration(), integration({ id: 'i2', name: 'Agents', isActive: false, credentialKeys: 1, assignedKeys: 0 })])
     const text = wrapper.text()
-    expect(text).toContain('Ume.Rag')
+    expect(text).toContain('Källa')
     expect(text).toContain('Platform')
     expect(text).toContain('2 credential keys')
     expect(text).toContain('5 assigned keys')
@@ -97,7 +97,7 @@ describe('IntegrationsView', () => {
     await owner.setValue('t2')
     await wrapper.find('form#integration-form').trigger('submit')
     await flushPromises()
-    expect(update).toHaveBeenCalledWith('i1', { name: 'Ume.Rag', description: 'RAG platform', ownerTeamId: 't2', isActive: true })
+    expect(update).toHaveBeenCalledWith('i1', { name: 'Källa', description: 'RAG platform', ownerTeamId: 't2', isActive: true })
     expect(wrapper.text()).toContain('Owners')
   })
 

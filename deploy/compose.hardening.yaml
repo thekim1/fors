@@ -12,8 +12,8 @@ services:
       POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=trust
     command: [postgres, -c, ssl=on, -c, ssl_cert_file=/run/certs/postgres.crt, -c, ssl_key_file=/run/certs/postgres.key, -c, ssl_ca_file=/run/certs/ca.pem, -c, hba_file=/run/config/pg_hba.conf, -c, log_statement=none]
     volumes:
-      - ${UME_CERTS_DIR:?Set UME_CERTS_DIR}/postgres:/run/certs:ro
-      - ${UME_SECRETS_DIR:?Set UME_SECRETS_DIR}/postgres:/run/postgres-secrets:ro
+      - ${FORS_CERTS_DIR:?Set FORS_CERTS_DIR}/postgres:/run/certs:ro
+      - ${FORS_SECRETS_DIR:?Set FORS_SECRETS_DIR}/postgres:/run/postgres-secrets:ro
       - ../postgres/init.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro
       - ../postgres/pg_hba.conf:/run/config/pg_hba.conf:ro
     networks: !override [data]
@@ -35,8 +35,8 @@ services:
     environment: !reset {}
     volumes:
       - ../redis/redis.conf:/run/config/redis.conf:ro
-      - ${UME_CERTS_DIR}/redis:/run/certs:ro
-      - ${UME_SECRETS_DIR}/redis:/run/redis-secrets:ro
+      - ${FORS_CERTS_DIR}/redis:/run/certs:ro
+      - ${FORS_SECRETS_DIR}/redis:/run/redis-secrets:ro
     networks: !override [data]
     healthcheck:
       test: [CMD-SHELL, "redis-cli --tls --cacert /run/certs/ca.pem -h redis PING | grep -q NOAUTH"]
@@ -60,11 +60,11 @@ services:
       Provisioning__Manifests: /run/integration-manifests
       Provisioning__SecretsPath: /run/integration-secrets
     volumes:
-      - ${UME_SECRETS_DIR}/migrations:/run/app-secrets:ro
-      - ${UME_CERTS_DIR}/migrations:/run/certs:ro
+      - ${FORS_SECRETS_DIR}/migrations:/run/app-secrets:ro
+      - ${FORS_CERTS_DIR}/migrations:/run/certs:ro
       - ../postgres/app-roles.sql:/run/config/app-roles.sql:ro
-      - ${UME_INTEGRATION_MANIFESTS_DIR:-../integration-manifests}:/run/integration-manifests:ro
-      - ${UME_INTEGRATION_SECRETS_DIR:-../integration-secrets}:/run/integration-secrets
+      - ${FORS_INTEGRATION_MANIFESTS_DIR:-../integration-manifests}:/run/integration-manifests:ro
+      - ${FORS_INTEGRATION_SECRETS_DIR:-../integration-secrets}:/run/integration-secrets
     depends_on: !override
       postgres: {condition: service_healthy}
     networks: !override [data]
@@ -76,7 +76,7 @@ services:
     tmpfs: [/tmp]
     restart: unless-stopped
     stop_grace_period: 60s
-    ports: !override ["${UME_GATEWAY_BIND:-127.0.0.1}:${UME_GATEWAY_PORT:-8443}:8443"]
+    ports: !override ["${FORS_GATEWAY_BIND:-127.0.0.1}:${FORS_GATEWAY_PORT:-8443}:8443"]
     environment: !override
       ASPNETCORE_ENVIRONMENT: Production
       Security__SecretsDirectory: /run/app-secrets
@@ -84,27 +84,27 @@ services:
       Kestrel__Endpoints__Https__Url: https://+:8443
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/gateway.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/gateway.key
-      Gateway__Security__SourceAddress: ${UME_SOURCE_ADDRESS:-Truncated}
-      Gateway__AdminUrl: ${UME_ADMIN_PUBLIC_URL:-}
-      Gateway__IntegrationApiUrl: ${UME_INTEGRATION_API_URL:-}
-      # The admin console's sign-in provider, handed to integrations on /v1/ume/context (docs/integrations.md).
-      Gateway__OidcAuthority: ${UME_OIDC_AUTHORITY:-}
+      Gateway__Security__SourceAddress: ${FORS_SOURCE_ADDRESS:-Truncated}
+      Gateway__AdminUrl: ${FORS_ADMIN_PUBLIC_URL:-}
+      Gateway__IntegrationApiUrl: ${FORS_INTEGRATION_API_URL:-}
+      # The admin console's sign-in provider, handed to integrations on /v1/fors/context (docs/integrations.md).
+      Gateway__OidcAuthority: ${FORS_OIDC_AUTHORITY:-}
       # Client addresses come from Settings > Trusted proxies in the admin UI, never from this switch.
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "false"
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${FORS_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: gateway
       SSL_CERT_FILE: /run/certs/ca.pem
       DOTNET_SHUTDOWNTIMEOUTSECONDS: "50"
     volumes:
-      - ${UME_SECRETS_DIR}/gateway:/run/app-secrets:ro
-      - ${UME_CERTS_DIR}/gateway:/run/certs:ro
+      - ${FORS_SECRETS_DIR}/gateway:/run/app-secrets:ro
+      - ${FORS_CERTS_DIR}/gateway:/run/certs:ro
     depends_on: !override
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       migrations: {condition: service_completed_successfully}
     networks: !override [edge, data, llm]
     healthcheck:
-      test: [CMD, dotnet, Ume.LlmGateway.Gateway.dll, --health-check]
+      test: [CMD, dotnet, Fors.Gateway.dll, --health-check]
       interval: 15s
       timeout: 10s
       start_period: 30s
@@ -116,7 +116,7 @@ services:
     security_opt: [no-new-privileges:true]
     tmpfs: [/tmp]
     restart: unless-stopped
-    ports: !override ["${UME_ADMIN_BIND:-127.0.0.1}:${UME_ADMIN_PORT:-9443}:8443"]
+    ports: !override ["${FORS_ADMIN_BIND:-127.0.0.1}:${FORS_ADMIN_PORT:-9443}:8443"]
     environment: !override
       ASPNETCORE_ENVIRONMENT: Production
       Security__SecretsDirectory: /run/app-secrets
@@ -124,27 +124,27 @@ services:
       Kestrel__Endpoints__Https__Url: https://+:8443
       Kestrel__Endpoints__Https__Certificate__Path: /run/certs/adminapi.crt
       Kestrel__Endpoints__Https__Certificate__KeyPath: /run/certs/adminapi.key
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${UME_OTEL_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${FORS_OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: adminapi
       # Sign-in: empty is unset (the setup wizard's value, else the code's default); a set authority keeps the wizard closed.
-      Oidc__Authority: ${UME_OIDC_AUTHORITY:-}
-      Oidc__ClientId: ${UME_OIDC_CLIENT_ID:-}
-      Setup__Reopen: ${UME_SETUP_REOPEN:-}
-      Gateway__BaseUrl: ${UME_GATEWAY_PUBLIC_URL:?Set HTTPS gateway URL}
-      DataApi__PublicUrl: ${UME_DATA_PUBLIC_URL:-}
+      Oidc__Authority: ${FORS_OIDC_AUTHORITY:-}
+      Oidc__ClientId: ${FORS_OIDC_CLIENT_ID:-}
+      Setup__Reopen: ${FORS_SETUP_REOPEN:-}
+      Gateway__BaseUrl: ${FORS_GATEWAY_PUBLIC_URL:?Set HTTPS gateway URL}
+      DataApi__PublicUrl: ${FORS_DATA_PUBLIC_URL:-}
       Gateway__OperationsUrl: https://gateway:8443
-      Admin__IntegrationRequestsPerMinute: ${UME_INTEGRATION_REQUESTS_PER_MINUTE:-60}
+      Admin__IntegrationRequestsPerMinute: ${FORS_INTEGRATION_REQUESTS_PER_MINUTE:-60}
       SSL_CERT_FILE: /run/certs/ca.pem
     volumes:
-      - ${UME_SECRETS_DIR}/adminapi:/run/app-secrets:ro
-      - ${UME_CERTS_DIR}/adminapi:/run/certs:ro
+      - ${FORS_SECRETS_DIR}/adminapi:/run/app-secrets:ro
+      - ${FORS_CERTS_DIR}/adminapi:/run/certs:ro
     depends_on: !override
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       migrations: {condition: service_completed_successfully}
     networks: !override [edge, data]
     healthcheck:
-      test: [CMD, dotnet, Ume.LlmGateway.AdminApi.dll, --health-check]
+      test: [CMD, dotnet, Fors.AdminApi.dll, --health-check]
       interval: 15s
       timeout: 10s
       start_period: 30s

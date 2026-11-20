@@ -71,7 +71,7 @@ Optional administrator-defined rules (see [routing-rules.md](routing-rules.md)) 
 (model name, headers, selected body parameters, key/team/department, budget and token-limit use, PII found, prompt size) and rewrites where it goes: weighted targets,
 ordered fallbacks and optional chaining. Rules are stored in Postgres (`RoutingRules`, `RoutingRuleTargets`), compiled once per catalogue snapshot (invalid rules are skipped
 and logged), and invalidated like other configuration over the Redis bus (30 s cache as fallback). `IRouteResolver` turns a decision into an attempt list and applies every hard
-constraint afterwards, so a rule can never widen a key's access. The matched rule id is returned in `x-ume-rule` and stored on the usage record; credentials and prompt content are never
+constraint afterwards, so a rule can never widen a key's access. The matched rule id is returned in `x-fors-rule` and stored on the usage record; credentials and prompt content are never
 visible to conditions. The admin API (`/api/routing-rules`) audits every change and offers validation and a dry run.
 
 Budgets are calendar-aligned in Europe/Stockholm; persisted timestamps are UTC. Limits, spend counters and
@@ -83,7 +83,7 @@ removed in 0.8.1).
 
 Usage records go from the request into a bounded in-memory queue; a background writer copies them to Postgres in batches,
 off the request path. **Usage journal** (`Gateway:UsageJournal`, `UsageWriter`/`IUsageJournal`): when Postgres refuses a
-batch (`Spill`, the default), the writer puts it in Redis (`ume:usage-journal*`) and keeps draining the queue there, so a
+batch (`Spill`, the default), the writer puts it in Redis (`fors:usage-journal*`) and keeps draining the queue there, so a
 database outage neither drops records nor holds up requests; journaled batches are written when Postgres is back (a
 separate loop, every 2 s), deduplicated by request id. A gateway instance that stops leaves its batches behind; after
 `AbandonedAfterSeconds` (120) another instance takes them over. `Always` journals every batch before writing it, so a
@@ -97,14 +97,14 @@ differ from provider billing; the costs must not be presented as exact invoicing
 providers of one residency (for on-prem capacity, whose models cost nothing). Both kinds are reserved in the same Redis
 script (one amount per counter); a residency quota applies when one of the candidate providers has that residency, and is
 charged the actual tokens only when the provider that served the request does (a fallback elsewhere refunds the
-reservation). Counters are `ume:spend-tok:*`, seeded from usage records and monthly totals like the USD ones.
+reservation). Counters are `fors:spend-tok:*`, seeded from usage records and monthly totals like the USD ones.
 
 ### Code layout
 
 - **Gateway.** `GatewayEndpoints` (Domain) is the one table of endpoint semantics: routing name, client and upstream
   path, required capability, model kinds, and the audio, realtime and streaming flags. Each kind of client request has
   its entry point (`GatewayRequestHandler` for HTTP, `RealtimeRequestHandler` for live sessions, `ModelListEndpoint`
-  for `/v1/models`, `ContextEndpoint` for `/v1/ume/context`, see [integrations](integrations.md)); they share the pipeline stages in `RequestStages` (authentication, rate limits, routing, candidates,
+  for `/v1/models`, `ContextEndpoint` for `/v1/fors/context`, see [integrations](integrations.md)); they share the pipeline stages in `RequestStages` (authentication, rate limits, routing, candidates,
   budget reservation, credentials, circuit recording), the content guard in `ContentGuardStage` and the accounting in
   `RequestAccounting` (one usage record per request). All of them log under the `GatewayRequestHandler` category.
   `ProviderAuth`/`ProviderTransport` hold provider authentication and HTTP details, and `FailureKind` decides fallback
@@ -128,7 +128,7 @@ reservation). Counters are `ume:spend-tok:*`, seeded from usage records and mont
   their records and cursor paging); `DataApiServices` registers options, authentication and the per-client rate limit.
 - **ServiceDefaults.** What every host shares: telemetry, health endpoints, shutdown drain, error responses, security
   headers, `AddValidatedOptions` (bind and validate on start) and `AddPerMinutePolicy` (fixed one-minute rate limits).
-- **Shared.** `RedisKeys` (Infrastructure) lists every Redis key and channel; all live under `ume:`, which the restricted
+- **Shared.** `RedisKeys` (Infrastructure) lists every Redis key and channel; all live under `fors:`, which the restricted
   ACL in `deploy/redis/users.acl.example` relies on. `GatewayQueries` (Infrastructure) holds the key
   rotation lineage and budget spend queries used by both the gateway and the admin API.
 - **Admin API.** One folder (and namespace) per feature: `Organisation`, `Keys`, `Integrations`, `DataAccess`, `Catalog` (providers,
@@ -139,8 +139,8 @@ reservation). Counters are `ume:spend-tok:*`, seeded from usage records and mont
   `AdminRequest` validation, `OwnerScopeResolver`, `AdminOptions`), `Auditing` (action and entity names, audit snapshots)
   and `Security` (sign-in, roles and policies, sessions, CSRF, admin activity, rate limiting). `AdminServices` registers
   every service and `AdminEndpoints` maps every feature under `/api`.
-- **ServiceDefaults.** `WebDefaults` (`ExitIfHealthProbeAsync`, `AddUmeWebDefaults`/`UseUmeWebDefaults`,
-  `UseUmeSecurityHeaders`) and `ApiExceptionHandler` with `ApiFaultException` give the admin API and Data API the same
+- **ServiceDefaults.** `WebDefaults` (`ExitIfHealthProbeAsync`, `AddForsWebDefaults`/`UseForsWebDefaults`,
+  `UseForsSecurityHeaders`) and `ApiExceptionHandler` with `ApiFaultException` give the admin API and Data API the same
   JSON, problem responses, security headers and 500 message. API messages are in English.
 
 ## Stored and transient data
@@ -161,7 +161,7 @@ ring makes existing provider credentials and BFF state unreadable.
 ## Operational surfaces
 
 `/health/live`, `/health/ready`, `/version` are metadata-only. OTel metrics use bounded
-labels for request outcomes, providers, endpoints, tokens, cost (`ume.gateway.cost.usd`), duration and queue depth. With `Gateway:GenAiMetrics=true` (off by default: four more histogram
+labels for request outcomes, providers, endpoints, tokens, cost (`fors.gateway.cost.usd`), duration and queue depth. With `Gateway:GenAiMetrics=true` (off by default: four more histogram
 recordings per request) also the OpenTelemetry GenAI semantic-convention metrics (`gen_ai.client.token.usage`,
 `gen_ai.client.operation.duration`, `gen_ai.server.request.duration`, `gen_ai.server.time_to_first_token`, with the
 catalogue's upstream model name), so standard GenAI dashboards work.

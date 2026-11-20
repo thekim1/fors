@@ -7,21 +7,21 @@ memory during the demo and then revoke it; never paste it into shell history.
 
 For a clean environment without demo data, start with `.\scripts\Start-Dev.ps1 -Empty` (see [Local development](local-development.md)).
 
-1. Start `src\Ume.LlmGateway.AppHost\Ume.LlmGateway.AppHost.csproj` via Aspire and wait for admin-ui. Sign in through real
+1. Start `src\Fors.AppHost\Fors.AppHost.csproj` via Aspire and wait for admin-ui. Sign in through real
    Keycloak as gateway-admin using the development secret store without printing credentials.
 2. Create a synthetic department/team and key in Organisation/Nycklar. Review the PII,
    model/residency and limit fields. Acknowledge show-once handling; demonstrate that the
    secret cannot be retrieved from a later key-details page.
-3. Make a request in a nonpersisting client to `ume/demo-fallback`. Inspect only safe
-   response headers: selected fake-eu and `x-ume-fallbacks: 1`, plus request_id. Do not print
+3. Make a request in a nonpersisting client to `fors/demo-fallback`. Inspect only safe
+   response headers: selected fake-eu and `x-fors-fallbacks: 1`, plus request_id. Do not print
    or save the body. Open Användning and locate metadata/cost using request_id.
 4. With RerouteToOnPrem, submit a synthetic detector-valid personnummer fixture held in
-   memory to `ume/chat-standard`. Verify `x-ume-residency: OnPrem`/fake-onprem; category
+   memory to `fors/chat-standard`. Verify `x-fors-residency: OnPrem`/fake-onprem; category
    counts in usage contain no matched value. Explain false positives/negatives.
 5. Set a zero budget and verify 402 `budget_exceeded`. Immediately rotate the key and
    verify the replacement is still blocked: rotation does not reset the budget.
 6. Routing rules: in **Models & routing > Routing rules** open *Premium via header* (demo data). Send a synthetic request to
-   `ume/chat-standard` with the header `x-ume-tier: premium` and inspect only `x-ume-rule` and `x-ume-provider`; without the header
+   `fors/chat-standard` with the header `x-fors-tier: premium` and inspect only `x-fors-rule` and `x-fors-provider`; without the header
    no rule applies. Use **Test a request** with the same header to show why, and with a missing header to show "could not be
    evaluated". Create a team with a rule, then delete the team and show the question: deactivate the rule, find it under
    *Needs owner* and assign it to another team.

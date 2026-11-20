@@ -1,0 +1,26 @@
+<Solution>
+  <Folder Name="/Aspire/">
+    <Project Path="src/Fors.AppHost/Fors.AppHost.csproj" />
+    <Project Path="src/Fors.ServiceDefaults/Fors.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Fors.Benchmarks/Fors.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Fors.AdminApi/Fors.AdminApi.csproj" />
+    <Project Path="src/Fors.DataApi/Fors.DataApi.csproj" />
+    <Project Path="src/Fors.Domain/Fors.Domain.csproj" />
+    <Project Path="src/Fors.FakeLlm/Fors.FakeLlm.csproj" />
+    <Project Path="src/Fors.Gateway/Fors.Gateway.csproj" />
+    <Project Path="src/Fors.Infrastructure/Fors.Infrastructure.csproj" />
+    <Project Path="src/Fors.MigrationService/Fors.MigrationService.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Fors.AdminApi.Tests/Fors.AdminApi.Tests.csproj" />
+    <Project Path="tests/Fors.DataApi.Tests/Fors.DataApi.Tests.csproj" />
+    <Project Path="tests/Fors.Domain.Tests/Fors.Domain.Tests.csproj" />
+    <Project Path="tests/Fors.Gateway.Tests/Fors.Gateway.Tests.csproj" />
+    <Project Path="tests/Fors.IntegrationTests/Fors.IntegrationTests.csproj" />
+    <Project Path="tests/Fors.TestKit/Fors.TestKit.csproj" />
+  </Folder>
+</Solution>

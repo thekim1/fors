@@ -23,21 +23,21 @@ test('final synthetic demo: fallback, PII on-prem, budget block, live writer and
       headers: { Authorization: `Bearer ${key.secret}` },
       data: { model, messages: [{ role: 'user', content }], max_tokens: 32 },
     }).catch(() => { throw new Error('Synthetic gateway request failed; request details suppressed') })
-    const fallback = await call('ume/demo-fallback', 'Synthetic demonstration')
+    const fallback = await call('fors/demo-fallback', 'Synthetic demonstration')
     expect(fallback.status()).toBe(200)
-    expect(fallback.headers()['x-ume-fallbacks']).toBe('1')
-    expect(fallback.headers()['x-ume-provider']).toBe('fake-eu')
-    const rerouted = await call('ume/chat-standard', 'Synthetic fixture 19121212-1212')
+    expect(fallback.headers()['x-fors-fallbacks']).toBe('1')
+    expect(fallback.headers()['x-fors-provider']).toBe('fake-eu')
+    const rerouted = await call('fors/chat-standard', 'Synthetic fixture 19121212-1212')
     expect(rerouted.status()).toBe(200)
-    expect(rerouted.headers()['x-ume-residency']).toBe('OnPrem')
-    expect(rerouted.headers()['x-ume-provider']).toBe('fake-onprem')
+    expect(rerouted.headers()['x-fors-residency']).toBe('OnPrem')
+    expect(rerouted.headers()['x-fors-provider']).toBe('fake-onprem')
     const requestId = rerouted.headers()['x-request-id']
     await expect.poll(async () => (await page.request.get(`/api/usage/requests/${requestId}`)).status()).toBe(200)
     const budget = await mutate(page, '/api/budgets', {
       scope: 'VirtualKey', scopeId: key.key.id, limitUsd: 0, period: 'Monthly', alertThresholds: [80, 100], isActive: true,
     })
     expect(budget.status()).toBe(201)
-    expect((await call('ume/chat-standard', 'Synthetic budget check')).status()).toBe(402)
+    expect((await call('fors/chat-standard', 'Synthetic budget check')).status()).toBe(402)
     await ready(page, '/operations')
     await expect.poll(async () => {
       const health = await (await page.request.get('/api/ops/health')).json()

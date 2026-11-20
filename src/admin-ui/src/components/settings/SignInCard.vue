@@ -81,7 +81,7 @@ const secretText = computed(() => {
         <p class="mb-0 mt-3 text-small text-fg-3">
           <template v-if="settings.updatedAt">Last changed in setup {{ formatDateTime(settings.updatedAt) }}. </template>
           These values change only in setup mode, never here. To open it again, give <code class="font-mono">Setup:Reopen</code>
-          (<code class="font-mono">UME_SETUP_REOPEN</code>) a new value, for example today’s date, and restart the admin API: setup opens for an hour,
+          (<code class="font-mono">FORS_SETUP_REOPEN</code>) a new value, for example today’s date, and restart the admin API: setup opens for an hour,
           with a setup code in the admin API’s log, and the current sign-in keeps working meanwhile. A value set by the deployment
           (<code class="font-mono">Oidc:*</code>) always wins and is changed there.
         </p>

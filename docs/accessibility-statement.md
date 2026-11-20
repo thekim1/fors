@@ -1,6 +1,6 @@
 # Tillgänglighetsredogörelse: underlag
 
-Umeå kommun LLM Gateway, bedömd automatiskt 2026-10-09. Detta är ett **utkast**,
+Fors, bedömd automatiskt 2026-10-09. Detta är ett **utkast**,
 inte en publicerad eller godkänd kommunal redogörelse. Ansvarig verksamhet,
 kontaktväg, publiceringsdatum och rapporteringsrutiner ska fyllas i före publicering.
 

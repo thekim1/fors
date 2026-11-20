@@ -38,7 +38,7 @@ namespace can enforce the **restricted** Pod Security Standard. Requirements: Ku
 2. **Create the secrets** in your namespace:
 
    ```bash
-   ./deploy/kubernetes/create-secrets.sh --namespace ume-gateway --datastores
+   ./deploy/kubernetes/create-secrets.sh --namespace fors-gateway --datastores
    ```
 
    Leave out `--datastores` if you bring your own Postgres and Redis (see below). The script can run again after
@@ -47,7 +47,7 @@ namespace can enforce the **restricted** Pod Security Standard. Requirements: Ku
 
 3. **Make an overlay.** Copy `deploy/kubernetes/example` (for example to `deploy/kubernetes/prod`, or into your GitOps
    repository with the `../base` paths adjusted) and change:
-   - `images`: the release's images (`ghcr.io/thekim1/llmgateway/<service>`), pinned by digest from the release notes.
+   - `images`: the release's images (`ghcr.io/thekim1/fors/<service>`), pinned by digest from the release notes.
      A release bundle already pins the base.
    - `Gateway__BaseUrl`, and how sign-in is set up (*Sign-in* below): `Oidc__Authority` to declare it, or nothing for the
      setup wizard; claim mapping as in [Identity provider and roles](identity-and-roles.md) (`Oidc__RoleClaim`,
@@ -75,22 +75,22 @@ Settings go into the overlay as ConfigMap literals named the way the apps read t
 
 The admin console's sign-in is set one of two ways ([identity and roles](identity-and-roles.md#setup-mode)):
 
-- **Declared:** the overlay sets `Oidc__Authority` in `ume-adminapi-config` (and `Oidc__ClientId`, claim names as
-  needed; a confidential client's secret as `Oidc__ClientSecret` in `ume-adminapi-secrets`, from
+- **Declared:** the overlay sets `Oidc__Authority` in `fors-adminapi-config` (and `Oidc__ClientId`, claim names as
+  needed; a confidential client's secret as `Oidc__ClientSecret` in `fors-adminapi-secrets`, from
   `init-deployment.sh --oidc-authority ... --oidc-client-secret-file`). Setup counts as completed at the first start and
   never opens (unless `Setup__Reopen` is used); each `Oidc__*` set is locked in the wizard. **Set
-  `Gateway__OidcAuthority` in `ume-gateway-config` to the same address:** the gateway cannot see the admin API's
-  configuration, and without it `/v1/ume/context` hands out the address saved in the wizard, which is an old one on a
+  `Gateway__OidcAuthority` in `fors-gateway-config` to the same address:** the gateway cannot see the admin API's
+  configuration, and without it `/v1/fors/context` hands out the address saved in the wizard, which is an old one on a
   deployment that was set up in the wizard and declares its provider later (Compose and Portainer set both from one
   variable).
 - **The setup wizard:** leave `Oidc__Authority` out. After `deploy.sh` (it says when setup mode is open), read the code
-  with `kubectl -n ume-gateway logs deploy/adminapi | grep 'Setup code'` (every pod prints the same code) and open
-  `https://<admin host>/setup` within the hour. It needs `Setup__Secret` in `ume-adminapi-secrets`, which
+  with `kubectl -n fors-gateway logs deploy/adminapi | grep 'Setup code'` (every pod prints the same code) and open
+  `https://<admin host>/setup` within the hour. It needs `Setup__Secret` in `fors-adminapi-secrets`, which
   `create-secrets.sh` takes from `init-deployment.sh`'s files.
 
 To re-open the wizard later, set `Setup__Reopen` to a new value (for example today's date) in the overlay and run
 `deploy.sh`; empty it before restoring a database. The Data API does not follow the wizard: set `DataApi__Authority` in
-`ume-dataapi-config` for access tokens. The admin API reaches the provider over outbound 443 (see *Network policies*).
+`fors-dataapi-config` for access tokens. The admin API reaches the provider over outbound 443 (see *Network policies*).
 
 ## Updates without downtime
 
@@ -125,8 +125,8 @@ patches:
 is a short outage. In production prefer your platform's database service or an operator (CloudNativePG for Postgres).
 Then:
 
-- Create the database and roles as `deploy/postgres/init.sql` does: `ume_migrator` owns the database `gatewaydb`, and
-  `ume_gateway`, `ume_admin` and (for the Data API) `ume_data` may only connect. The migrations Job grants the rest.
+- Create the database and roles as `deploy/postgres/init.sql` does: `fors_migrator` owns the database `gatewaydb`, and
+  `fors_gateway`, `fors_admin` and (for the Data API) `fors_data` may only connect. The migrations Job grants the rest.
 - Require TLS. The connection strings verify the server certificate against `ca.pem` (`SSL Mode=VerifyFull`): append
   your database's and Redis's CA to `deploy/certs/<service>/ca.pem` for gateway, adminapi, migrations and dataapi.
 - Redis needs TLS and a user `gateway` with the commands and keys in `deploy/redis/users.acl.example`.

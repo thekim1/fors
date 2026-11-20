@@ -1,7 +1,7 @@
 """Seed the eneo tenant with a default completion model wired to the shared fake LLM.
 
 Adapted from eneo's own e2e/seed.py (v2.2.1): same tables and fields, but the endpoint and model name come from the
-environment so eneo and the Ume gateway call the same fake upstream with the same model name. Runs after
+environment so eneo and Fors call the same fake upstream with the same model name. Runs after
 init_db.py (which migrates and creates the tenant and user). Idempotent.
 
 Credentials are plaintext on purpose: the stack runs with ENCRYPTION_KEY unset and TENANT_CREDENTIALS_ENABLED=false,
@@ -21,7 +21,7 @@ from eneo.main.config import get_settings
 
 ENDPOINT = os.environ["FAKE_LLM_ENDPOINT"]
 MODEL_NAME = os.environ.get("FAKE_LLM_MODEL", "fake-chat")
-# A virtual key when the endpoint is the Ume gateway (eneo behind the gateway); the fake LLM ignores it.
+# A virtual key when the endpoint is Fors (eneo behind the gateway); the fake LLM ignores it.
 API_KEY = os.environ.get("FAKE_LLM_API_KEY") or "fake-key"
 TENANT_NAME = os.environ["DEFAULT_TENANT_NAME"]
 PROVIDER_NAME = "Fake LLM"

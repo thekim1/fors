@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# How the Ume LLM gateway and Bifrost (and eneo, PLATFORMS=eneo) scale, against the same fake LLM. See README.md in this folder.
+# How Fors and Bifrost (and eneo, PLATFORMS=eneo) scale, against the same fake LLM. See README.md in this folder.
 #
 #   1. Load:      concurrent clients LOAD_VUS on fixed resources (4 application cores each).
 #   2. Resources: application cores CORES (eneo: one gunicorn worker per core). Each core count starts on a fresh
@@ -8,7 +8,7 @@
 #
 #   ./scale.sh
 #   CORES="1 2 4" LOAD_VUS="1 16 128" DURATION=30s ./scale.sh
-#   PLATFORMS="ume eneo" LOAD_VUS="" ./scale.sh      # resources only
+#   PLATFORMS="fors eneo" LOAD_VUS="" ./scale.sh      # resources only
 #
 # CPU sets are the shared layout in lib.sh (application from 8, CORES counts its hardware threads, i.e. cloud-style
 # vCPUs), so neither the harness nor the database limits the application. 6 vCPUs borrow one thread each from the fake
@@ -17,7 +17,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PLATFORMS="${PLATFORMS:-fake ume bifrost}" # eneo still works: PLATFORMS=eneo
+PLATFORMS="${PLATFORMS:-fake fors bifrost}" # eneo still works: PLATFORMS=eneo
 LOAD_VUS="${LOAD_VUS-1 2 4 8 16 32 64 128 256}" # empty skips the load sweep
 CORES="${CORES:-1 2 4 6}"
 PEAK_FACTORS="${PEAK_FACTORS:-2 4 8 32 64}"

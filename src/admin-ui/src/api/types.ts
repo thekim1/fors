@@ -355,7 +355,7 @@ export interface VirtualKey {
   allowProviderTools?: boolean
   /** Conversations kept at the provider (store, background, conversations). False: refused, Responses get store: false. */
   allowProviderStorage?: boolean
-  /** Every request must send x-ume-max-residency (400 otherwise). */
+  /** Every request must send x-fors-max-residency (400 otherwise). */
   requireMaxResidency?: boolean
   /** The integration the key belongs to (docs/integrations.md); null for an ordinary key. */
   integrationId?: string | null
@@ -979,9 +979,9 @@ export interface UsageRequest {
   timeToFirstTokenMs: number | null
   /** Streamed answers: from sending the request to the provider that answered until its first event (no fallbacks, no gateway time). */
   providerFirstTokenMs: number | null
-  /** The integration's credential key that made the request as this key (x-ume-on-behalf-of); null when the key was used itself. */
+  /** The integration's credential key that made the request as this key (x-fors-on-behalf-of); null when the key was used itself. */
   viaKeyId?: string | null
-  /** The client's opaque run id and step (x-ume-run-id, x-ume-step). */
+  /** The client's opaque run id and step (x-fors-run-id, x-fors-step). */
   runId?: string | null
   step?: string | null
 }

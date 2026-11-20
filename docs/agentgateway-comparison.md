@@ -32,7 +32,7 @@ with the organisation (departments, teams, keys, budgets) and its rules in Postg
 | Client auth | JWT, OIDC, OAuth, API keys, basic auth, external authz, CEL RBAC | Virtual keys (HMAC), IP allow-lists, rotation with grace period, attachment policy | Them on breadth; SSO for clients is out of our scope |
 | Data protection | Logs can include content (configurable) | Metadata only, never content; retention job, PII incidents, masked audit | **Us** |
 | Organisation and admin | Config files/CRDs, a read-mostly UI and playground | OIDC BFF admin UI with RBAC per department, reports, CSV per cost centre, Data API, audit log, config import/export | **Us** |
-| Telemetry | OpenTelemetry GenAI semantic conventions (`gen_ai.client.token.usage`, `gen_ai.server.request.duration`, time to first token, time per output token, inter-chunk latency) | Own `ume.gateway.*` metrics including overhead, TTFT, stream gaps | Them on interoperability (standard dashboards work); us on gateway-overhead visibility |
+| Telemetry | OpenTelemetry GenAI semantic conventions (`gen_ai.client.token.usage`, `gen_ai.server.request.duration`, time to first token, time per output token, inter-chunk latency) | Own `fors.gateway.*` metrics including overhead, TTFT, stream gaps | Them on interoperability (standard dashboards work); us on gateway-overhead visibility |
 | MCP / A2A | Full MCP and A2A gateways | Removed (out of scope) | Them; deliberately not ours |
 | Deployment | Kubernetes controller (Gateway API), xDS, single binary | Aspire, Compose with hardening, Kubernetes manifests, zero-downtime updates, backup/restore | Different targets |
 | Performance | Rust, no GC; designed as a general proxy | .NET 10, measured 0 Postgres calls and 1 Redis round trip before the first byte, about 21 000 streamed msg/s on 4 vCPUs per instance (2026-11-02 baseline) | Not measured head to head |
@@ -72,8 +72,8 @@ Ordered by value for our users against risk to the hot path.
 | 1 | **Honour upstream `Retry-After`.** A 429/503 with `Retry-After` (or `retry-after-ms`) puts that *deployment* on cooldown for that long (capped by `CircuitBreaker:MaxRetryAfter`, default 5 min), shared through Redis. Cooled-down deployments go last, like open circuits. Read in the same `MGET` as circuit state: no extra round trip. | Implemented |
 | 2 | **Latency-aware load balancing (opt-in).** `Gateway:LoadBalancing=LeastLoaded` picks the first target within a priority group by power of two choices over a per-instance score of EWMA latency, EWMA success and in-flight requests (agentgateway's formula); the rest keep the weighted order as fallbacks. In memory only: no Redis. Default stays `Weighted` because P2C does not keep weight proportions (a 90/10 canary). | Implemented |
 | 3 | **Cache-write pricing.** Separate cache-write tokens in usage and an optional cache-write price per deployment (empty = input price, as today). | Implemented |
-| 4 | Automatic Anthropic cache markers for translated requests, and session affinity (`x-ume-session`) for on-prem prefix caches. | Implemented |
-| 5 | GenAI semantic-convention metrics next to `ume.gateway.*` (opt-in: `Gateway:GenAiMetrics`), and a USD cost counter. | Implemented |
+| 4 | Automatic Anthropic cache markers for translated requests, and session affinity (`x-fors-session`) for on-prem prefix caches. | Implemented |
+| 5 | GenAI semantic-convention metrics next to `fors.gateway.*` (opt-in: `Gateway:GenAiMetrics`), and a USD cost counter. | Implemented |
 | 6 | Content guardrails on requests and answers, **on-prem only**: in-process rules plus an optional guard model (Llama Guard, Granite Guardian) on an on-prem provider, per key policy, metadata-only incidents. No cloud moderation services. | Implemented (docs/content-guard.md) |
 | 7 | Anthropic `count_tokens` passthrough, and skipping models whose context window the prompt exceeds. | Implemented |
 | 9 | Retry of the last candidate after a passing failure. | Implemented |

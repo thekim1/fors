@@ -1,19 +1,19 @@
-# Platform comparison: Ume LLM gateway vs. Bifrost (and eneo)
+# Platform comparison: Fors vs. Bifrost (and eneo)
 
-Runs the Ume LLM gateway, the [Bifrost](https://github.com/maximhq/bifrost) LLM gateway (release v2.5.1, the official
+Runs Fors, the [Bifrost](https://github.com/maximhq/bifrost) LLM gateway (release v2.5.1, the official
 image; `BIFROST_VERSION` picks another) and, on request, [eneo](https://github.com/eneo-ai/eneo) (v2.2.3; `ENEO_VERSION`
 picks another) against **the same fake LLM**
-(`src/Ume.LlmGateway.FakeLlm`, which answers instantly), so the numbers are the platforms' own cost per chat message.
+(`src/Fors.FakeLlm`, which answers instantly), so the numbers are the platforms' own cost per chat message.
 A third target sends the same requests straight to the fake LLM: that is the floor, and everything above it is
-platform overhead. The default targets are `fake ume bifrost`; `PLATFORMS=eneo` runs eneo. Results and interpretation:
+platform overhead. The default targets are `fake fors bifrost`; `PLATFORMS=eneo` runs eneo. Results and interpretation:
 [docs/performance.md](../../docs/performance.md) (*Bifrost v2.5.1* and *eneo v2.2.3*) and
 [results-bifrost-2026-11-19.md](results-bifrost-2026-11-19.md).
 
 ## Bifrost
 
-| | Ume LLM gateway | Bifrost v2.5.1 |
+| | Fors | Bifrost v2.5.1 |
 |---|---|---|
-| Request | `POST /v1/chat/completions` (`ume/chat` alias), virtual key | `POST /v1/chat/completions`, model `fake-chat` with no provider prefix so the virtual key's providers route it, virtual key `sk-bf-…` as `Authorization: Bearer` |
+| Request | `POST /v1/chat/completions` (`fors/chat` alias), virtual key | `POST /v1/chat/completions`, model `fake-chat` with no provider prefix so the virtual key's providers route it, virtual key `sk-bf-…` as `Authorization: Bearer` |
 | Image | `dotnet publish /t:PublishContainer` (Release, chiseled) | `maximhq/bifrost:v2.5.1` (`sha256:5ec9873a…`), as published |
 | Concurrency model | One process (all cores) | One Go process, `GOMAXPROCS` = the vCPUs given (`NUM_WORKERS`) |
 | Data | Postgres 17, Redis 7.4 | Postgres 17 (config store and logs store); no Redis |
@@ -57,9 +57,9 @@ What Bifrost does differently, from its code at v2.5.1 (file names relative to i
 
 ## What is compared
 
-| | Ume LLM gateway | eneo v2.2.3 |
+| | Fors | eneo v2.2.3 |
 |---|---|---|
-| Request | `POST /v1/chat/completions` (`ume/chat` alias), virtual key | `POST /api/v1/conversations/`: with a service API key (`ENEO_AUTH=apikey`, the fair comparison) or as a signed-in user (default). See *The eneo message* below |
+| Request | `POST /v1/chat/completions` (`fors/chat` alias), virtual key | `POST /api/v1/conversations/`: with a service API key (`ENEO_AUTH=apikey`, the fair comparison) or as a signed-in user (default). See *The eneo message* below |
 | Image | `dotnet publish /t:PublishContainer` (Release, chiseled) | `backend/Dockerfile` from the v2.2.3 tag (production image, gunicorn + uvicorn workers) |
 | Concurrency model | One process (all cores) | `NUM_WORKERS=4` gunicorn workers (default 3), one per core, plus eneo's background worker container on the same cores |
 | Data | Postgres 17, Redis 7.4 | pgvector/pg13, Redis (as eneo's own compose files) |
@@ -123,8 +123,8 @@ pulled as published (`docker pull maximhq/bifrost:v2.5.1`). Build the other imag
 
 ```bash
 # from the repository root
-dotnet publish src/Ume.LlmGateway.Gateway -c Release /t:PublishContainer -p:ContainerImageTag=compare
-dotnet publish src/Ume.LlmGateway.FakeLlm -c Release /t:PublishContainer -p:ContainerImageTag=compare
+dotnet publish src/Fors.Gateway -c Release /t:PublishContainer -p:ContainerImageTag=compare
+dotnet publish src/Fors.FakeLlm -c Release /t:PublishContainer -p:ContainerImageTag=compare
 
 # eneo, from a clone of https://github.com/eneo-ai/eneo. Export with LF line endings: a Windows checkout
 # (core.autocrlf) gives run.sh CRLF endings and the container exits with "./run.sh: not found".
@@ -140,7 +140,7 @@ Then:
 ```bash
 benchmarks/compare/run.sh                               # 1, 16 and 64 clients; 30 s per scenario (~12 min)
 VUS="1 32" DURATION=60s benchmarks/compare/run.sh       # other loads
-PLATFORMS="ume" benchmarks/compare/run.sh               # re-run one platform; other results are kept
+PLATFORMS="fors" benchmarks/compare/run.sh               # re-run one platform; other results are kept
 ENEO_AUTH=apikey PLATFORMS=eneo benchmarks/compare/run.sh  # eneo through a service API key
 ```
 
@@ -182,7 +182,7 @@ container on the k6 cores) measures what the user experiences: time to first tok
 stream, at 1, 16, 64 and 256 clients.
 
 ```bash
-dotnet build benchmarks/Ume.LlmGateway.Benchmarks -c Release   # the probe
+dotnet build benchmarks/Fors.Benchmarks -c Release   # the probe
 benchmarks/compare/latency.sh
 PROFILE=stalls FAKE_STALL_P=0.01 FAKE_STALL_MS=1500 VUS="16" benchmarks/compare/latency.sh
 ```
@@ -193,7 +193,7 @@ It writes `results/latency/<PROFILE>/report.md`.
 gateway to 0.5 vCPU and 512 MB, Postgres to 1 vCPU and 1 GB on a disk volume and Redis to 0.25 vCPU and 256 MB, turns on
 PII detection (*Allow*) and the content guard (*Record*), gives the fake LLM real-provider timing and sends mixed traffic
 (`sizing/k6/mix.js`) at fixed rates. It reports CPU, memory, CPU throttling, latency against the fake LLM directly and
-bytes per usage record in `results/sizing/report.txt`. Bifrost (`PLATFORMS="ume bifrost"`, the default) gets the same
+bytes per usage record in `results/sizing/report.txt`. Bifrost (`PLATFORMS="fors bifrost"`, the default) gets the same
 budget, its Postgres the same limits, and the same traffic; its report is `results/sizing/report-bifrost.txt` with the
 bytes per request log row.
 
@@ -228,7 +228,7 @@ installed into `results/profile/tools` on the first run. `profile_report.py` wri
 (`1x2 2x2 3x2 1x4 2x3 1x6`) on one shared Postgres and Redis, with the load generator spreading its clients over them
 (no load balancer, so the measurement is the gateway tier and the shared components). Reports throughput, p99, gateway
 CPU per message and how busy Redis, Postgres and the fake LLM were in `results/scale-out/report.md`; the extra instances
-are `ume-gateway-2` and `ume-gateway-3` in `compose.yaml`.
+are `fors-gateway-2` and `fors-gateway-3` in `compose.yaml`.
 
 ```bash
 benchmarks/compare/scale-out.sh
@@ -248,7 +248,7 @@ the fake LLM's answer, so an error can never pass as a fast response.
 
 | File | Purpose |
 |---|---|
-| `compose.yaml` | Fake LLM, the platforms (profiles `ume`, `bifrost`, `eneo`) and k6 (profile `tools`) |
+| `compose.yaml` | Fake LLM, the platforms (profiles `fors`, `bifrost`, `eneo`) and k6 (profile `tools`) |
 | `run.sh` | Starts each platform on fresh databases, seeds it, warms up, runs the scenarios, samples CPU and query counts |
 | `scale.sh` | Load and resource scaling (see above) |
 | `gc.sh` | Memory, throughput and latency per garbage collector configuration (see above) |
@@ -258,7 +258,7 @@ the fake LLM's answer, so an error can never pass as a fast response.
 | `sizing/` | A small host: the gateway with PII and content guard on, Bifrost with governance and logging (see above) |
 | `latency.sh`, `latency_report.py` | Streaming latency with real-provider timing (see above), via the stream probe |
 | `lib.sh` | Shared shell helpers (start/seed platforms, k6, CPU and query sampling) |
-| `k6/chat.js` | One chat message per iteration for `TARGET=ume|bifrost|eneo|fake`, streaming or not |
+| `k6/chat.js` | One chat message per iteration for `TARGET=fors|bifrost|eneo|fake`, streaming or not |
 | `bifrost/config.json` | Bifrost's providers, virtual key, rate limit, budgets, price and stores (variants: `config-no-content.json`, `config-bare.json`) |
 | `eneo/seed.py` | Adds a completion model pointing at the fake LLM (adapted from eneo's own `e2e/seed.py`) |
 | `eneo/seed_api_key.py` | Creates the shared space, assistant and service API key for `ENEO_AUTH=apikey` |
@@ -266,8 +266,8 @@ the fake LLM's answer, so an error can never pass as a fast response.
 | `report.py`, `scale_report.py` | Build `results/report.md` and `results/scale-report.md` |
 
 To run **eneo behind the gateway** (eneo's model provider pointing at the gateway instead of the fake LLM), start the
-`ume` profile first, then the `eneo` profile with `ENEO_LLM_ENDPOINT=http://ume-gateway:8080/v1`,
-`ENEO_LLM_MODEL=ume/chat` and `ENEO_LLM_API_KEY=<virtual key>`. This is how the PII and fallback checks in
+`fors` profile first, then the `eneo` profile with `ENEO_LLM_ENDPOINT=http://fors-gateway:8080/v1`,
+`ENEO_LLM_MODEL=fors/chat` and `ENEO_LLM_API_KEY=<virtual key>`. This is how the PII and fallback checks in
 `docs/performance.md` were made.
 
-The gateway database is seeded with `dotnet run --project benchmarks/Ume.LlmGateway.Benchmarks -- compare-seed`.
+The gateway database is seeded with `dotnet run --project benchmarks/Fors.Benchmarks -- compare-seed`.

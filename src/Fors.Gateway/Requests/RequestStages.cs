@@ -1,0 +1,673 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
+using Fors.Domain;
+using Fors.Domain.Entities;
+using Fors.Domain.Routing;
+using Fors.Domain.Usage;
+using Fors.Gateway.Authentication;
+using Fors.Gateway.Budgets;
+using Fors.Gateway.Routing;
+using Fors.Gateway.Usage;
+using Fors.Infrastructure.Providers;
+using Fors.Infrastructure.Security;
+using Fors.Infrastructure.Stores;
+
+namespace Fors.Gateway.Requests;
+
+/// <summary>
+/// The key a request is made as, and the integration's credential key that made it as that key (<c>x-fors-on-behalf-of</c>,
+/// docs/integrations.md); <see cref="Via"/> is null when the key was presented itself.
+/// </summary>
+internal readonly record struct AuthenticatedKey(VirtualKey Key, VirtualKey? Via);
+
+/// <summary>The models chosen for a request, as an ordered attempt list, and the name failures are reported under.</summary>
+internal readonly record struct SelectedRoute(IReadOnlyList<RouteTarget> Candidates, string ModelName);
+
+/// <summary>
+/// Pipeline stages shared by HTTP requests (<see cref="GatewayRequestHandler"/>), live sessions
+/// (<see cref="RealtimeRequestHandler"/>) and the model list. A stage that refuses the request writes the answer and
+/// accounts it, and tells the caller to stop (false / null).
+/// </summary>
+public sealed partial class RequestStages(
+    KeyAuthenticator keys,
+    AuthFailureThrottle authThrottle,
+    AuthFailureRecorder authFailures,
+    IRouteResolver router,
+    IRateLimiter rateLimiter,
+    IAdmissionStore admission,
+    BudgetService budgets,
+    ICircuitBreakerStore circuits,
+    IOptions<CircuitBreakerOptions> circuitOptions,
+    CredentialProtector credentials,
+    GatewayMetrics metrics,
+    RequestAccounting accounting,
+    IOptionsMonitor<GatewayOptions> options,
+    ILoggerFactory loggers,
+    ILogger<GatewayRequestHandler> logger)
+{
+    private readonly ILogger _security = SecurityEvents.CreateLogger(loggers);
+
+    // Logs under the GatewayRequestHandler category, as before the handler was split: operators set that category's level
+    // (Logging__LogLevel__Fors.Gateway.Requests.GatewayRequestHandler, docs/runbook.md) to see every request.
+
+    /// <summary>
+    /// The presented key, checked; with <see cref="GatewayHeaders.OnBehalfOf"/> from a credential key, the assigned key it
+    /// names, checked the same way. Null when refused (the answer has been written).
+    /// </summary>
+    internal async Task<AuthenticatedKey?> AuthenticateAsync(HttpContext http, GatewayEndpoint endpoint, DateTimeOffset now, CancellationToken ct)
+    {
+        var docs = options.CurrentValue.ErrorDocsUrl;
+        var presented = KeyAuthenticator.ExtractKey(http.Request);
+        var address = http.Connection.RemoteIpAddress;
+        VirtualKey? key;
+        if (authThrottle.IsLimited(address, out var retryAfter))
+        {
+            // Too many failed authentications from this address: no database lookups for it until the window ends.
+            key = keys.FindCached(presented);
+            if (key is null)
+            {
+                http.Response.Headers.RetryAfter = retryAfter.ToString(CultureInfo.InvariantCulture);
+                await GatewayErrors.WriteAsync(http, endpoint, GatewayError.TooManyAuthFailures(retryAfter), docs);
+                return null;
+            }
+        }
+        else
+        {
+            key = await keys.FindAsync(presented, ct);
+        }
+
+        if (key is null)
+        {
+            authThrottle.RecordFailure(address);
+            authFailures.Record(string.IsNullOrEmpty(presented) ? AuthFailureReason.MissingKey : AuthFailureReason.InvalidKey,
+                endpoint, null, http.Connection.RemoteIpAddress);
+            http.Response.Headers.WWWAuthenticate = "Bearer";
+            await GatewayErrors.WriteAsync(http, endpoint, GatewayError.InvalidApiKey, docs);
+            return null;
+        }
+
+        var (error, reason) = key.GetStatus(now) switch
+        {
+            KeyStatus.Revoked => (GatewayError.KeyRevoked, AuthFailureReason.KeyRevoked),
+            KeyStatus.Expired => (GatewayError.KeyExpired, AuthFailureReason.KeyExpired),
+            KeyStatus.Disabled => (GatewayError.KeyDisabled, AuthFailureReason.KeyDisabled),
+            _ when key.Team is not { IsActive: true } || key.Team.Department is not { IsActive: true }
+                => (GatewayError.KeyOwnerInactive, AuthFailureReason.OwnerInactive),
+            _ when key.IntegrationId is not null && key.Integration is not { IsActive: true }
+                => (GatewayError.IntegrationInactive, AuthFailureReason.IntegrationInactive),
+            _ when key.IntegrationRole == IntegrationRole.Assigned => (GatewayError.IntegrationOnly, AuthFailureReason.IntegrationOnly),
+            _ => (null, default),
+        };
+
+        // After the status checks, so a revoked key is reported as revoked from wherever it is used.
+        if (error is null && !key.IsAddressAllowed(http.Connection.RemoteIpAddress))
+        {
+            (error, reason) = (GatewayError.AddressNotAllowed, AuthFailureReason.AddressNotAllowed);
+        }
+
+        if (error is not null)
+        {
+            authFailures.Record(reason, endpoint, key, http.Connection.RemoteIpAddress);
+            await GatewayErrors.WriteAsync(http, endpoint, error, docs);
+            return null;
+        }
+
+        var onBehalfOf = GatewayHeaders.Read(http.Request.Headers, GatewayHeaders.OnBehalfOf);
+        if (onBehalfOf.Count == 0)
+        {
+            return new AuthenticatedKey(key, null);
+        }
+
+        var acting = ActAs(http, endpoint, key, onBehalfOf, now);
+        if (acting.Error is { } refusal)
+        {
+            await GatewayErrors.WriteAsync(http, endpoint, refusal, docs);
+            return null;
+        }
+
+        // Echoed, so the caller can check that the gateway applied it (an older instance ignores the header).
+        GatewayHeaders.Write(http.Response.Headers, GatewayHeaders.OnBehalfOf, acting.Key!.Id.ToString());
+        return new AuthenticatedKey(acting.Key, key);
+    }
+
+    /// <summary>
+    /// The assigned key named in <c>x-fors-on-behalf-of</c> (docs/integrations.md): only a credential key may send it, and
+    /// only for a key of its own integration, which it already carries from the key cache, so this is a lookup. The named
+    /// key's status and owner are checked as if it had been presented; the client address and the credential key's own
+    /// status were checked already. Its residencies were narrowed to the credential key's when it was loaded
+    /// (<see cref="VirtualKey.BoundBy"/>); a key with none left is refused. Refusals are security event 1006, not authentication failures: the caller did
+    /// authenticate.
+    /// </summary>
+    private (VirtualKey? Key, GatewayError? Error) ActAs(HttpContext http, GatewayEndpoint endpoint, VirtualKey caller, StringValues value, DateTimeOffset now)
+    {
+        if (value.Count != 1 || !Guid.TryParseExact(value[0].AsSpan().Trim(), "D", out var id))
+        {
+            return (null, GatewayError.InvalidOnBehalfOf);
+        }
+
+        var assigned = caller.IntegrationRole == IntegrationRole.Credential ? caller.AssignedKey(id) : null;
+        // A refusal of the assigned key is 403: the caller authenticated, so a 401 would wrongly say its own key failed.
+        var (error, reason) = assigned is null
+            ? caller.IntegrationRole != IntegrationRole.Credential
+                ? (GatewayError.NotCredentialKey, "not_credential")
+                : caller.IsRevokedAssignedKey(id)
+                    ? (GatewayError.ActingKeyRevoked, "key_revoked")
+                    : (GatewayError.KeyNotAssigned, "key_not_assigned")
+            : assigned.GetStatus(now) switch
+            {
+                KeyStatus.Revoked => (GatewayError.ActingKeyRevoked, "key_revoked"),
+                KeyStatus.Expired => (GatewayError.ActingKeyExpired, "key_expired"),
+                KeyStatus.Disabled => (GatewayError.KeyDisabled, "key_disabled"),
+                _ when assigned.Team is not { IsActive: true } || assigned.Team.Department is not { IsActive: true }
+                    => (GatewayError.KeyOwnerInactive, "owner_inactive"),
+                _ when assigned.NoCommonResidency => (GatewayError.NoCommonResidency, "no_common_residency"),
+                _ => ((GatewayError?)null, (string?)null),
+            };
+        if (error is null)
+        {
+            return (assigned, null);
+        }
+
+        if (_security.IsEnabled(LogLevel.Warning))
+        {
+            SecurityEvents.DelegationRefused(_security, reason!, RequestIdMiddleware.Get(http), SecurityEvents.Printable(Shorten(value.ToString())),
+                endpoint.ToString(), caller.Id, caller.Prefix, caller.TeamId, caller.Team?.DepartmentId ?? Guid.Empty);
+        }
+
+        return (null, error);
+    }
+
+    private static string Shorten(string value) => value.Length > 100 ? value[..100] : value;
+
+    /// <summary>
+    /// The client's run id and step (<see cref="GatewayHeaders.RunId"/>, <see cref="GatewayHeaders.Step"/>), stored on the
+    /// usage record: opaque, trimmed, at most 100 characters kept, control characters replaced. Never refused, since
+    /// metadata must not fail a model call; absent headers cost a lookup each and allocate nothing.
+    /// </summary>
+    internal static (string? RunId, string? Step) ReadRunMetadata(HttpRequest request) =>
+        (Metadata(GatewayHeaders.Read(request.Headers, GatewayHeaders.RunId)), Metadata(GatewayHeaders.Read(request.Headers, GatewayHeaders.Step)));
+
+    private static string? Metadata(StringValues values)
+    {
+        if (values.Count == 0 || values[0] is not { } first)
+        {
+            return null;
+        }
+
+        var trimmed = first.Trim();
+        return trimmed.Length == 0 ? null : SecurityEvents.Printable(Shorten(trimmed));
+    }
+
+    /// <summary>
+    /// Step 1b: the request's residency ceiling (<see cref="GatewayHeaders.MaxResidency"/>). Null when it is absent and
+    /// the key does not require it, or when it is valid; otherwise the 400 to answer with. Two values (a repeated header or
+    /// a list) are refused: a ceiling that is not understood must not be ignored. Allocates nothing.
+    /// </summary>
+    internal static GatewayError? ReadMaxResidency(HttpRequest request, AuthenticatedKey key, out DataResidency? ceiling)
+    {
+        ceiling = null;
+        var values = GatewayHeaders.Read(request.Headers, GatewayHeaders.MaxResidency);
+        if (values.Count == 0)
+        {
+            // Required when either key requires it: a platform's credential key keeps its rule for every key it acts as.
+            return key.Key.RequireMaxResidency || key.Via?.RequireMaxResidency == true ? GatewayError.MaxResidencyMissing : null;
+        }
+
+        if (values.Count > 1 || !ResidencyCeiling.TryParse(values[0], out var parsed))
+        {
+            return GatewayError.InvalidMaxResidency;
+        }
+
+        ceiling = parsed;
+        return null;
+    }
+
+    /// <summary>Answers with <paramref name="error"/> without accounting it (endpoints that record no usage, such as the model list).</summary>
+    internal Task WriteErrorAsync(HttpContext http, GatewayEndpoint endpoint, GatewayError error) =>
+        GatewayErrors.WriteAsync(http, endpoint, error, options.CurrentValue.ErrorDocsUrl);
+
+    /// <summary>
+    /// Counts the request against the key's per-minute limits and, with <paramref name="inFlight"/>, takes one of the
+    /// key's in-flight slots until the response has completed (or the client went away). When refused, the 429 has been written.
+    /// </summary>
+    internal async Task<bool> AcquireRateLimitAsync(HttpContext http, RequestState state, VirtualKey key, CancellationToken ct, bool inFlight = true)
+    {
+        var request = RateLimitFor(key, inFlight);
+        var rate = await rateLimiter.AcquireAsync(request.KeyId, request.RequestsPerMinute, request.TokensPerMinute, request.MaxConcurrent, request.LeaseId, ct);
+        return await ApplyRateLimitAsync(http, state, key, request, rate);
+    }
+
+    /// <summary>
+    /// The rate limit and the budget reservation in one round trip (<see cref="IAdmissionStore"/>): the reservation is
+    /// made only when the rate limit admits the request. Answers as <see cref="AcquireRateLimitAsync"/> and then
+    /// <see cref="TryReserveAsync"/> would; false when refused (the 429 or 402 has been written).
+    /// </summary>
+    internal async Task<bool> AdmitAsync(HttpContext http, RequestState state, VirtualKey key, IReadOnlyList<Budget> applicable, decimal estimateUsd,
+        long estimateTokens, IReadOnlyCollection<DataResidency>? residencies, CancellationToken ct)
+    {
+        if (budgets.Prepare(applicable, estimateUsd, estimateTokens, residencies) is not { } budget)
+        {
+            // No budget applies to these targets (token quotas of another residency): only the rate limit is left.
+            if (!await AcquireRateLimitAsync(http, state, key, ct))
+            {
+                return false;
+            }
+
+            state.Reservation = BudgetReservation.None;
+            return true;
+        }
+
+        var request = RateLimitFor(key, inFlight: true);
+        var admitted = await admission.AdmitAsync(request, budget.Counters, budget.Amounts, ct);
+        if (!await ApplyRateLimitAsync(http, state, key, request, admitted.Rate))
+        {
+            return false;
+        }
+
+        return await ApplyReservationAsync(http, state, await budgets.CompleteAsync(budget, admitted.Spend!, ct)) is not null;
+    }
+
+    private static RateLimitRequest RateLimitFor(VirtualKey key, bool inFlight)
+    {
+        var maxConcurrent = inFlight ? key.MaxConcurrentRequests : null;
+        // Not the request id: a client may set that, and repeating it would share one slot.
+        var lease = maxConcurrent is > 0 ? Guid.NewGuid().ToString("N") : null;
+        return new RateLimitRequest(key.Id, key.RequestsPerMinute, key.TokensPerMinute, maxConcurrent, lease);
+    }
+
+    /// <summary>Whether the key has a rate limit to check (otherwise no store is asked).</summary>
+    internal static bool HasRateLimit(VirtualKey key) =>
+        key.RequestsPerMinute is > 0 || key.TokensPerMinute is > 0 || key.MaxConcurrentRequests is > 0;
+
+    private async Task<bool> ApplyRateLimitAsync(HttpContext http, RequestState state, VirtualKey key, RateLimitRequest request, RateLimitDecision rate)
+    {
+        if (rate.Allowed && request.LeaseId is { } lease)
+        {
+            var (limiter, keyId) = (rateLimiter, key.Id);
+            http.Response.OnCompleted(() =>
+            {
+                limiter.Release(keyId, lease);
+                return Task.CompletedTask;
+            });
+        }
+
+        if (rate.RequestLimit is { } limit)
+        {
+            http.Response.Headers[GatewayHeaders.RateLimitLimitRequests] = limit.ToString(CultureInfo.InvariantCulture);
+            http.Response.Headers[GatewayHeaders.RateLimitRemainingRequests] = Math.Max(0, rate.RequestsRemaining ?? 0).ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (rate.Allowed)
+        {
+            return true;
+        }
+
+        var retryAfter = Math.Max(1, (int)Math.Ceiling(rate.RetryAfter.TotalSeconds));
+        http.Response.Headers.RetryAfter = retryAfter.ToString(CultureInfo.InvariantCulture);
+        await RejectAsync(http, state, rate.Reason == "concurrency"
+            ? GatewayError.TooManyConcurrentRequests(key.MaxConcurrentRequests ?? 0)
+            : GatewayError.RateLimited(rate.Reason == "tokens", retryAfter), RequestOutcome.RateLimited);
+        return false;
+    }
+
+    /// <summary>
+    /// Evaluates the routing rules (when there are any) and reports the rules that applied in <c>x-fors-rule</c>.
+    /// <paramref name="parameters"/> holds what conditions may read: the body, or a session's query parameters.
+    /// </summary>
+    internal async Task<RoutingDecision> ApplyRoutingAsync(HttpContext http, RequestState state, CatalogSnapshot snapshot, VirtualKey key, string model,
+        JsonObject parameters, long promptTokens, bool? piiDetected, CancellationToken ct)
+    {
+        if (snapshot.Rules.Count == 0)
+        {
+            return RoutingDecision.Empty;
+        }
+
+        var routing = snapshot.Rules.Evaluate(
+            await BuildRoutingContextAsync(http, snapshot, key, state.Endpoint, model, parameters, promptTokens, piiDetected, ct), Random.Shared);
+        if (routing.Applied.Count > 0)
+        {
+            state.Rule = routing.Applied[^1];
+            GatewayHeaders.Write(http.Response.Headers, GatewayHeaders.Rule, string.Join(',', routing.Applied.Select(a => a.RuleId.ToString("D"))));
+        }
+
+        return routing;
+    }
+
+    /// <summary>Turns the routing decision into models and orders their eligible targets into an attempt list.</summary>
+    /// <summary>
+    /// What keeps a conversation on one server (so its prompt cache is reused): the <c>x-fors-session</c> header, else
+    /// OpenAI's <c>prompt_cache_key</c> body parameter. Null when the client sends neither. Scoped to the key, so two
+    /// applications using the same session name do not share a target by accident (they would not share a cache either).
+    /// </summary>
+    internal static string? SessionAffinity(HttpContext http, JsonObject body, VirtualKey key)
+    {
+        var session = GatewayHeaders.Read(http.Request.Headers, GatewayHeaders.Session).ToString();
+        if (string.IsNullOrEmpty(session) && body["prompt_cache_key"] is JsonValue v && v.TryGetValue<string>(out var cacheKey))
+        {
+            session = cacheKey;
+        }
+
+        return string.IsNullOrEmpty(session) || session.Length > 200 ? null : $"{key.Id:N}:{session}";
+    }
+
+    /// <summary>
+    /// The estimate may exceed a model's context window by this much before the model is skipped: it is counted from the
+    /// body's bytes (JSON syntax included), so it runs high for prompts in English and low for Swedish.
+    /// </summary>
+    private const double ContextWindowMargin = 1.1;
+
+    /// <summary>
+    /// The candidates in attempt order, or null when the request was refused. With <paramref name="estimatedInputTokens"/>,
+    /// models whose context window the prompt clearly exceeds are skipped (a route's larger fallback model takes it);
+    /// when none is left the request is refused with <c>context_length_exceeded</c> instead of failing at the provider.
+    /// </summary>
+    internal async Task<SelectedRoute?> SelectRouteAsync(HttpContext http, RequestState state, CatalogSnapshot snapshot, VirtualKey key, string model,
+        ResolvedModel? requested, RoutingDecision routing, DataResidency? restrictTo, bool stream, CircuitPrefetch? prefetch, CancellationToken ct,
+        long estimatedInputTokens = 0, string? affinity = null)
+    {
+        var plan = router.Plan(snapshot, key, state.Endpoint, model, requested, routing);
+        if (plan.Rejection is { } planRejection)
+        {
+            await RejectAsync(http, state, planRejection, RequestOutcome.Rejected);
+            return null;
+        }
+
+        var selection = await router.SelectCandidatesAsync(plan.Models, key, state.Endpoint, restrictTo, stream, ct, prefetch, affinity, state.MaxResidency);
+        if (selection.Rejection is { } selectionRejection)
+        {
+            if (selectionRejection.StatusCode == 503 && state.MaxResidency is not null && restrictTo is null)
+            {
+                // Targets within the ceiling exist but are drained or disabled: the caller waits instead of retrying with
+                // a wider ceiling (a 403 says none is configured).
+                http.Response.Headers.RetryAfter = Math.Max(1, (int)Math.Ceiling(circuitOptions.Value.BreakDuration.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+            }
+
+            await RejectAsync(http, state, selectionRejection, RequestOutcome.Rejected);
+            return null;
+        }
+
+        var candidates = selection.Candidates;
+        if (estimatedInputTokens > 0 && candidates.Any(t => !Fits(t, estimatedInputTokens)))
+        {
+            var fitting = candidates.Where(t => Fits(t, estimatedInputTokens)).ToList();
+            if (fitting.Count == 0)
+            {
+                var largest = candidates.Max(t => t.ModelDeployment!.ContextWindow ?? 0);
+                await RejectAsync(http, state, GatewayError.ContextTooLong(plan.Models[0].Name, estimatedInputTokens, largest), RequestOutcome.Rejected);
+                return null;
+            }
+
+            candidates = fitting;
+        }
+
+        return new SelectedRoute(candidates, plan.Models[0].Name);
+
+        static bool Fits(RouteTarget target, long tokens) =>
+            target.ModelDeployment!.ContextWindow is not { } window || tokens <= window * ContextWindowMargin;
+    }
+
+    /// <summary>
+    /// Reserves <paramref name="estimateUsd"/> against every applicable cost budget and <paramref name="estimateTokens"/>
+    /// against the token budgets that count one of <paramref name="residencies"/>, and reports what remains in
+    /// <c>x-fors-budget-remaining-usd</c>. Null when a budget is exhausted (the 402 has been written).
+    /// </summary>
+    internal async Task<BudgetReservation?> TryReserveAsync(HttpContext http, RequestState state, CatalogSnapshot snapshot, IReadOnlyList<Budget> applicable,
+        decimal estimateUsd, CancellationToken ct, long estimateTokens = 0, IReadOnlyCollection<DataResidency>? residencies = null)
+    {
+        return await ApplyReservationAsync(http, state, await budgets.ReserveAsync(applicable, estimateUsd, estimateTokens, residencies, ct));
+    }
+
+    private async Task<BudgetReservation?> ApplyReservationAsync(HttpContext http, RequestState state, BudgetReservation reservation)
+    {
+        state.Reservation = reservation;
+        if (reservation.RemainingUsd is { } remainingBefore)
+        {
+            SetBudgetRemainingHeaders(http, remainingBefore);
+        }
+
+        if (reservation.Allowed)
+        {
+            return reservation;
+        }
+
+        await RejectAsync(http, state, GatewayError.BudgetExceeded(reservation.Exceeded!.Budget, "Contact the budget owner."), RequestOutcome.BudgetExceeded);
+        return null;
+    }
+
+    /// <summary>The provider's decrypted credential (cached per catalogue snapshot). False when it cannot be decrypted.</summary>
+    internal bool TryGetCredential(CatalogSnapshot snapshot, ProviderAccount provider, out string? credential)
+    {
+        try
+        {
+            credential = snapshot.Credentials.Get(provider, credentials);
+            return true;
+        }
+        catch (CryptographicException)
+        {
+            LogCredentialUnavailable(logger, provider.Name);
+            credential = null;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Logs a failed attempt the next candidate will take over. A transient failure with <c>Retry-After</c> puts the
+    /// deployment on cooldown for that long (capped by <see cref="Infrastructure.Stores.CircuitBreakerOptions.MaxRetryAfter"/>): the provider
+    /// said when to come back, so it is a quota rather than a health problem and does not count against the provider's
+    /// circuit; other transient failures do. The circuit store being unavailable does not fail the request.
+    /// </summary>
+    internal async Task RecordFailureAsync(RequestState state, ModelDeployment deployment, ProviderFailure failure)
+    {
+        var provider = deployment.ProviderAccount!;
+        LogProviderFailed(logger, state.RequestId, provider.Name, failure.StatusCode, failure.Reason);
+        if (!failure.CountsAgainstCircuit)
+        {
+            return;
+        }
+
+        try
+        {
+            var maxCooldown = circuitOptions.Value.MaxRetryAfter;
+            if (failure.RetryAfter is { } retryAfter && maxCooldown > TimeSpan.Zero)
+            {
+                var cooldown = retryAfter < maxCooldown ? retryAfter : maxCooldown;
+                LogDeploymentCooldown(logger, state.RequestId, provider.Name, deployment.UpstreamModel, (long)cooldown.TotalMilliseconds);
+                await circuits.CoolDownAsync(deployment.Id, cooldown, CancellationToken.None);
+                return;
+            }
+
+            await circuits.RecordFailureAsync(provider.Id, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogCircuitStoreFailed(logger, ex.GetType().Name, state.RequestId);
+        }
+    }
+
+    internal async Task RecordSuccessAsync(RequestState state, ProviderAccount provider)
+    {
+        try
+        {
+            await circuits.RecordSuccessAsync(provider.Id, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogCircuitStoreFailed(logger, ex.GetType().Name, state.RequestId);
+        }
+    }
+
+    /// <summary>Answers with <paramref name="error"/> and accounts the refused request.</summary>
+    internal async Task RejectAsync(HttpContext http, RequestState state, GatewayError error, RequestOutcome outcome)
+    {
+        await GatewayErrors.WriteAsync(http, state.Endpoint, error, options.CurrentValue.ErrorDocsUrl);
+        await accounting.AccountAsync(state, null, default, error.StatusCode, outcome, error.Code, null);
+    }
+
+    /// <summary>
+    /// Every attempt failed (<paramref name="candidates"/> counts retries too): 504 when the last one timed out, else 502. The usage record names the last provider tried
+    /// (nothing is charged), so a provider that is down shows up in the provider statistics instead of only in its circuit.
+    /// </summary>
+    internal async Task RejectAllFailedAsync(HttpContext http, RequestState state, int candidates, string modelName, ProviderFailure? lastFailure)
+    {
+        state.Fallbacks = Math.Max(0, candidates - 1);
+        GatewayHeaders.Write(http.Response.Headers, GatewayHeaders.Fallbacks, state.Fallbacks.ToString(CultureInfo.InvariantCulture));
+        var error = GatewayError.AllProvidersFailed(lastFailure?.StatusCode == 504, candidates, modelName, lastFailure?.Reason);
+        await GatewayErrors.WriteAsync(http, state.Endpoint, error, options.CurrentValue.ErrorDocsUrl);
+        await accounting.AccountAsync(state, state.Deployment, default, error.StatusCode, RequestOutcome.ProviderError, error.Code, null);
+    }
+
+    /// <summary>
+    /// An exception escaped after the budget reservation: account it (releasing the reservation and recording the usage)
+    /// and answer 500 if nothing was sent yet. Returns false when the exception should still propagate (the answer had
+    /// started, so the connection has to be aborted).
+    /// </summary>
+    internal async Task<bool> AccountUnexpectedAsync(HttpContext http, RequestState state, CatalogSnapshot snapshot, Exception ex,
+        TokenUsage usage = default, decimal? costUsd = null)
+    {
+        if (ex is OperationCanceledException && http.RequestAborted.IsCancellationRequested)
+        {
+            await accounting.AccountAsync(state, state.Deployment, usage, 499, RequestOutcome.ClientCancelled, null, snapshot, costUsd);
+            return true;
+        }
+
+        LogUnexpectedFailure(logger, ex, state.RequestId);
+        await accounting.AccountAsync(state, state.Deployment, usage, 500, RequestOutcome.ProviderError, GatewayErrorCodes.InternalError, snapshot, costUsd);
+        if (http.Response.HasStarted)
+        {
+            return false;
+        }
+
+        await GatewayErrors.WriteAsync(http, state.Endpoint, GatewayError.InternalError, options.CurrentValue.ErrorDocsUrl);
+        return true;
+    }
+
+    internal static void SetRoutingHeaders(HttpContext http, ModelDeployment deployment, int fallbacks)
+    {
+        GatewayHeaders.Write(http.Response.Headers, GatewayHeaders.Provider, deployment.ProviderAccount!.Name);
+        GatewayHeaders.Write(http.Response.Headers, GatewayHeaders.Model, deployment.Name);
+        GatewayHeaders.Write(http.Response.Headers, GatewayHeaders.Residency, deployment.ProviderAccount.Residency.ToString());
+        GatewayHeaders.Write(http.Response.Headers, GatewayHeaders.Fallbacks, fallbacks.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static readonly HashSet<string> HiddenHeaders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "authorization", "proxy-authorization", "x-api-key", "api-key", "cookie", "set-cookie",
+    };
+
+    /// <summary>Request fields that carry prompt content; never exposed to routing conditions.</summary>
+    private static readonly HashSet<string> ContentFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "messages", "input", "prompt", "system", "instructions", "tools", "contents",
+    };
+
+    /// <summary>
+    /// What routing conditions may see. Credentials and prompt content are never included, and the budget and token
+    /// lookups only happen when an enabled rule mentions them.
+    /// </summary>
+    private async Task<RoutingContext> BuildRoutingContextAsync(HttpContext http, CatalogSnapshot snapshot, VirtualKey key, GatewayEndpoint endpoint, string model, JsonObject body, long promptTokens, bool? piiDetected, CancellationToken ct)
+    {
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, value) in http.Request.Headers)
+        {
+            if (!HiddenHeaders.Contains(name))
+            {
+                var text = value.ToString();
+                headers[name] = text.Length > 512 ? text[..512] : text;
+            }
+        }
+
+        var parameters = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, node) in body)
+        {
+            if (node is JsonValue scalar && !ContentFields.Contains(name))
+            {
+                parameters[name] = scalar.TryGetValue<bool>(out var flag) ? flag
+                    : scalar.TryGetValue<double>(out var number) ? number
+                    : scalar.TryGetValue<string>(out var text) ? (text.Length > 512 ? text[..512] : text)
+                    : null;
+            }
+        }
+
+        double? budgetUsed = null;
+        if (snapshot.Rules.References("budget_used"))
+        {
+            budgetUsed = await budgets.PeekUsedPercentAsync(BudgetService.ApplicableBudgets(snapshot, key), ct);
+        }
+
+        double? tokensUsed = null;
+        if (snapshot.Rules.References("tokens_used"))
+        {
+            tokensUsed = await rateLimiter.PeekTokensUsedPercentAsync(key.Id, key.TokensPerMinute, ct);
+        }
+
+        return new RoutingContext
+        {
+            Model = model,
+            Endpoint = GatewayEndpoints.Info(endpoint).RoutingName,
+            Headers = headers,
+            Params = parameters,
+            KeyId = key.Id,
+            KeyLineage = snapshot.KeyLineage(key.Id),
+            KeyName = key.Name,
+            TeamId = key.TeamId,
+            TeamName = key.Team?.Name,
+            DepartmentId = key.Team?.DepartmentId,
+            DepartmentName = key.Team?.Department?.Name,
+            BudgetUsed = budgetUsed,
+            TokensUsed = tokensUsed,
+            PiiDetected = piiDetected,
+            PromptTokens = promptTokens,
+        };
+    }
+
+    /// <summary>The remaining budget in USD.</summary>
+    internal static void SetBudgetRemainingHeaders(HttpContext http, decimal remainingUsd) =>
+        GatewayHeaders.Write(http.Response.Headers, GatewayHeaders.BudgetRemainingUsd, remainingUsd.ToString("0.00", CultureInfo.InvariantCulture));
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Request {RequestId}: provider {Provider} failed with {Status} ({Reason}); trying next")]
+    private static partial void LogProviderFailed(ILogger logger, string requestId, string provider, int status, string reason);
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA5394:Do not use insecure randomness", Justification = "Retry jitter, not a security decision.")]
+    internal static TimeSpan RetryDelay(RetryOptions retry, int retryIndex) =>
+        TimeSpan.FromMilliseconds(retry.BaseDelayMs * (1 << retryIndex) * (0.5 + Random.Shared.NextDouble()));
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Request {RequestId}: retrying provider {Provider} in {DelayMs} ms")]
+    internal static partial void LogRetrying(ILogger logger, string requestId, string provider, long delayMs);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Request {RequestId}: provider {Provider} asked to retry {UpstreamModel} after {CooldownMs} ms; it goes last until then")]
+    private static partial void LogDeploymentCooldown(ILogger logger, string requestId, string provider, string upstreamModel, long cooldownMs);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Request {RequestId}: circuit breaker store unavailable ({ExceptionType}); provider health not recorded")]
+    private static partial void LogCircuitStoreFailed(ILogger logger, string exceptionType, string requestId);
+
+    /// <summary>One stream's gap figures as metrics, and a log line when the provider stalled (so a slow request can be found by id).</summary>
+    internal void RecordStreamGaps(RequestState state, ModelDeployment deployment, in StreamGaps gaps)
+    {
+        if (gaps.Events < 2)
+        {
+            return;
+        }
+
+        var provider = deployment.ProviderAccount!.Name;
+        metrics.StreamGaps(provider, state.Endpoint, gaps.MaxUpstream.TotalMilliseconds, gaps.MaxWrite.TotalMilliseconds, gaps.Stalls);
+        if (gaps.Stalls > 0)
+        {
+            LogStreamStalled(logger, state.RequestId, provider, gaps.Stalls, (long)gaps.MaxUpstream.TotalMilliseconds, (long)gaps.MaxWrite.TotalMilliseconds);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Request {RequestId}: stream from {Provider} stalled {Stalls} time(s); longest wait for the provider {MaxUpstreamGapMs} ms, longest client write {MaxWriteMs} ms")]
+    private static partial void LogStreamStalled(ILogger logger, string requestId, string provider, int stalls, long maxUpstreamGapMs, long maxWriteMs);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Request {RequestId}: stream from {Provider} interrupted ({Error})")]
+    internal static partial void LogStreamBroken(ILogger logger, string requestId, string provider, string error);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Credential for provider {Provider} cannot be decrypted (Data Protection key ring missing?)")]
+    private static partial void LogCredentialUnavailable(ILogger logger, string provider);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Request {RequestId} failed unexpectedly; its budget reservation was released and the usage recorded")]
+    private static partial void LogUnexpectedFailure(ILogger logger, Exception ex, string requestId);
+}

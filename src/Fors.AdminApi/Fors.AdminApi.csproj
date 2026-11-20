@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <UserSecretsId>fors-adminapi</UserSecretsId>
+    <ContainerRepository>fors/adminapi</ContainerRepository>
+    <ForsServiceContainer>true</ForsServiceContainer>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
+    <PackageReference Include="Scalar.AspNetCore" />
+  </ItemGroup>
+  <!-- Integration presets (manifests the admin console offers; docs/integrations.md), data rather than code. -->
+  <ItemGroup>
+    <None Include="..\..\deploy\integration-presets\*.json" Link="integration-presets\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(PublishAdminUi)' == 'true'">
+    <Content Include="..\admin-ui\dist\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="RequireAdminUiAssets" BeforeTargets="Publish" Condition="'$(PublishAdminUi)' == 'true'">
+    <Error Condition="!Exists('..\admin-ui\dist\index.html')" Text="Build src\admin-ui before publishing with PublishAdminUi=true." />
+  </Target>
+  <!-- Local builds only: surfaces admin UI lint problems as a build warning (CI runs the strict lint itself). -->
+  <ItemGroup>
+    <AdminUiSources Include="..\admin-ui\src\**\*.vue;..\admin-ui\src\**\*.ts" />
+  </ItemGroup>
+  <Target Name="LintAdminUi" BeforeTargets="CoreCompile" Condition="'$(Configuration)' == 'Debug' And '$(CI)' != 'true' And Exists('..\admin-ui\node_modules\eslint')"
+          Inputs="..\admin-ui\eslint.config.js;@(AdminUiSources)" Outputs="$(IntermediateOutputPath)admin-ui-lint.stamp">
+    <Exec Command="npm run lint --silent" WorkingDirectory="..\admin-ui" ContinueOnError="true">
+      <Output TaskParameter="ExitCode" PropertyName="AdminUiLintExit" />
+    </Exec>
+    <Touch Files="$(IntermediateOutputPath)admin-ui-lint.stamp" AlwaysCreate="true" Condition="'$(AdminUiLintExit)' == '0'" />
+  </Target>
+  <ItemGroup>
+    <ProjectReference Include="..\Fors.Infrastructure\Fors.Infrastructure.csproj" />
+    <ProjectReference Include="..\Fors.ServiceDefaults\Fors.ServiceDefaults.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Fors.AdminApi.Tests" />
+    <Using Include="Fors.ServiceDefaults" />
+    <Using Include="Fors.Infrastructure.Auditing" />
+  </ItemGroup>
+</Project>

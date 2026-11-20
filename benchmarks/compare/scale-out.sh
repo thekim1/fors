@@ -38,18 +38,18 @@ for rep in $(seq "$REPEATS"); do
     total=0
     for s in "${sets[@]}"; do total=$((total + $(threads "$s"))); done
     log "$name, run $rep: instances on ${sets[*]}, $total vCPUs"
-    start_platform ume
-    UME_TARGETS="http://ume-gateway:8080"
+    start_platform fors
+    FORS_TARGETS="http://fors-gateway:8080"
     if ((REPLICAS > 1)); then
       for i in $(seq 2 "$REPLICAS"); do
-        "${COMPOSE[@]}" --profile ume up -d "ume-gateway-$i" >/dev/null
+        "${COMPOSE[@]}" --profile fors up -d "fors-gateway-$i" >/dev/null
         wait_http "http://127.0.0.1:$((18079 + i))/v1/models" '^401$'
-        UME_TARGETS+=",http://ume-gateway-$i:8080"
+        FORS_TARGETS+=",http://fors-gateway-$i:8080"
       done
     fi
-    export UME_TARGETS
-    warm_up ume
-    for f in 32 64; do measure ume true $((f * total)) "$DURATION" "scale-out/$name-r$rep-vus_$((f * total))"; done
+    export FORS_TARGETS
+    warm_up fors
+    for f in 32 64; do measure fors true $((f * total)) "$DURATION" "scale-out/$name-r$rep-vus_$((f * total))"; done
     stop_all
   done
 done
@@ -64,10 +64,10 @@ for f in sorted(glob.glob('results/scale-out/*-vus_*.json')):
     name, rep, vus = re.match(r'.*/(.+)-r(\d+)-vus_(\d+)\.json', f).groups()
     seconds = d['requests'] / d['rps']
     busy = lambda keys: sum(c[k]['cpu_ns'] for k in keys if k in c) / 1e9 / seconds
-    gateways = [k for k in c if k.startswith('ume-gateway')]
+    gateways = [k for k in c if k.startswith('fors-gateway')]
     r, v = (int(x) for x in name.split('x'))
     rows.append((r * v, name, int(vus), int(rep), d['rps'], d['duration_ms']['med'], d['duration_ms']['p(99)'],
-                 busy(gateways) / d['rps'] * 1000, busy(gateways), busy(['ume-redis']), busy(['ume-db']),
+                 busy(gateways) / d['rps'] * 1000, busy(gateways), busy(['fors-redis']), busy(['fors-db']),
                  busy(['fake-llm']), d.get('errorRate', 0)))
 with open('results/scale-out/report.md', 'w') as out:
     out.write('# Several gateway instances on shared Postgres and Redis (streaming chat)\n\n')

@@ -1,6 +1,6 @@
-# Side-by-side performance comparison: the Ume LLM gateway, Bifrost (BIFROST_VERSION, default v2.5.1) and eneo (ENEO_VERSION,
+# Side-by-side performance comparison: Fors, Bifrost (BIFROST_VERSION, default v2.5.1) and eneo (ENEO_VERSION,
 # default v2.2.3) against the SAME fake LLM, so only the platforms themselves are measured. Driven by run.sh, which starts one
-# platform at a time (profiles `ume` / `bifrost` / `eneo`).
+# platform at a time (profiles `fors` / `bifrost` / `eneo`).
 #
 # CPU pinning keeps the components from competing; the layout is set in lib.sh (application 8-11, Postgres 12-13,
 # Redis 14-15, fake LLM 0-3, load generator 4-7) and shared by run.sh, scale.sh and latency.sh. Both platforms get
@@ -18,7 +18,7 @@ x-redis-cpus: &redis-cpus
 
 services:
   fake-llm:
-    image: ume-llm-gateway/fake-llm:compare
+    image: fors/fake-llm:compare
     cpuset: "${FAKE_CPUS:-0-3}"
     environment:
       ASPNETCORE_HTTP_PORTS: "8080"
@@ -35,9 +35,9 @@ services:
       FakeLlm__Latency__StallMs: "${FAKE_STALL_MS:-0}"
     ports: ["127.0.0.1:18090:8080"]
 
-  # ---------- Ume LLM gateway ----------
-  ume-db:
-    profiles: [ume]
+  # ---------- Fors ----------
+  fors-db:
+    profiles: [fors]
     image: postgres:17-alpine
     <<: *pg-cpus
     command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "max_connections=500"] # statements per request; eneo opens up to 30 connections per worker
@@ -51,30 +51,30 @@ services:
       interval: 2s
       retries: 30
 
-  ume-redis:
-    profiles: [ume]
+  fors-redis:
+    profiles: [fors]
     image: redis:7.4-alpine
     <<: *redis-cpus
     # No snapshots: the image's default saves to disk (a fork) every minute once 10 000 keys have changed, which shows
     # up as latency spikes under load. The gateway's counters do not need to survive a restart of this stack.
     command: ["redis-server", "--save", "", "--appendonly", "no"]
 
-  ume-gateway: &gateway
-    profiles: [ume]
-    image: ume-llm-gateway/gateway:compare
+  fors-gateway: &gateway
+    profiles: [fors]
+    image: fors/gateway:compare
     <<: *app-cpus
     # A container memory limit (gc.sh), as Kubernetes sets one (deploy/kubernetes: 1Gi); 0 = none.
     mem_limit: ${APP_MEM:-0}
     depends_on:
-      ume-db: { condition: service_healthy }
-      ume-redis: { condition: service_started }
+      fors-db: { condition: service_healthy }
+      fors-redis: { condition: service_started }
     environment:
       # Not "Production": that profile insists on TLS to Postgres/Redis and a Data Protection certificate. Everything
       # else (Release build, appsettings.json logging at Information, caches, Redis stores) is as in production.
       ASPNETCORE_ENVIRONMENT: Staging
       ASPNETCORE_HTTP_PORTS: "8080"
-      ConnectionStrings__gatewaydb: Host=ume-db;Database=gatewaydb;Username=postgres;Password=postgres
-      ConnectionStrings__redis: ume-redis:6379
+      ConnectionStrings__gatewaydb: Host=fors-db;Database=gatewaydb;Username=postgres;Password=postgres
+      ConnectionStrings__redis: fors-redis:6379
       Security__KeyPepper: compare-only-pepper-0123456789abcdef0123456789abcdef
       # GATEWAY_LOG_LEVEL=Warning measures what the per-request Information log line costs.
       Logging__LogLevel__Default: ${GATEWAY_LOG_LEVEL:-Information}
@@ -90,13 +90,13 @@ services:
       Gateway__UsageBatchWindowMs: ${USAGE_WINDOW_MS:-50}
     ports: ["127.0.0.1:18080:8080"]
 
-  # More instances of the same gateway for scale-out.sh (profile `ume`, started by name): own CPU set and host port, same database
-  # and Redis. The load generator spreads its clients over them (UME_TARGETS); there is no load balancer in between.
-  ume-gateway-2:
+  # More instances of the same gateway for scale-out.sh (profile `fors`, started by name): own CPU set and host port, same database
+  # and Redis. The load generator spreads its clients over them (FORS_TARGETS); there is no load balancer in between.
+  fors-gateway-2:
     <<: *gateway
     cpuset: "${APP2_CPUS:-10-11}"
     ports: ["127.0.0.1:18081:8080"]
-  ume-gateway-3:
+  fors-gateway-3:
     <<: *gateway
     cpuset: "${APP3_CPUS:-12-13}"
     ports: ["127.0.0.1:18082:8080"]
@@ -159,7 +159,7 @@ services:
       DEFAULT_USER_NAME: CompareUser
       DEFAULT_USER_EMAIL: compare@example.com
       DEFAULT_USER_PASSWORD: ComparePassword123!
-      # Overridable to put eneo behind the Ume gateway: endpoint http://ume-gateway:8080/v1, model ume/chat, a virtual key.
+      # Overridable to put eneo behind Fors: endpoint http://fors-gateway:8080/v1, model fors/chat, a virtual key.
       FAKE_LLM_ENDPOINT: ${ENEO_LLM_ENDPOINT:-http://fake-llm:8080/v1}
       FAKE_LLM_MODEL: ${ENEO_LLM_MODEL:-fake-chat}
       FAKE_LLM_API_KEY: ${ENEO_LLM_API_KEY:-fake-key}
@@ -188,7 +188,7 @@ services:
       RUN_AS_WORKER: "true"
 
   # ---------- Bifrost (official image, pinned release; see README.md) ----------
-  # Config and logs stores in Postgres on the Postgres cores, as the Ume gateway's database. Bifrost has no Redis: its
+  # Config and logs stores in Postgres on the Postgres cores, as Fors's database. Bifrost has no Redis: its
   # rate-limit and budget counters live in process memory and are written to the config store every 10 s
   # (plugins/governance/tracker.go). BIFROST_CONFIG=config-bare.json runs the bare proxy (no stores, no governance).
   bifrost-db:
