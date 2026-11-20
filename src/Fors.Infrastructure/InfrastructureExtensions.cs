@@ -21,7 +21,7 @@ public static class InfrastructureExtensions
 {
     public const string DatabaseResourceName = "gatewaydb";
     public const string RedisResourceName = "redis";
-    public const string DataProtectionApplicationName = "Fors";
+    public const string DataProtectionApplicationName = Security.StoredFormatNames.DataProtectionApplication;
 
     public static IHostApplicationBuilder AddDeploymentSecrets(this IHostApplicationBuilder builder)
     {

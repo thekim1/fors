@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A gateway upgraded from 0.11 reads its stored secrets again** (#116): 0.12.0 renamed the Data Protection
+  application name and purposes, so the provider credentials and the sign-in client secret saved in the setup wizard no
+  longer unprotected after an in-place upgrade. They keep their names from before the rename now (`Ume.LlmGateway`,
+  `Ume.LlmGateway.ProviderCredential.v1`, …, in `StoredFormatNames`): format constants that nobody sees. Upgrade
+  from 0.11 to this release directly, not through 0.12.0. A gateway that already runs 0.12.0 enters again, after
+  this upgrade, the provider credentials and the sign-in client secret it saved under 0.12.0; what it saved under
+  0.11 is readable again.
+
 ## 0.12.0 - 2026-11-20
 
 The rename to Fors: the gateway is now **Fors** and the RAG platform Ume.Rag is **Källa**, every "ume" name becomes

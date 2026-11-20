@@ -67,7 +67,7 @@ public sealed class SetupTestSignIn(GatewayDbContext db, IConfiguration configur
     public const string DonePath = "/setup?test=done";
 
     /// <summary>The Data Protection purpose of a test's payload; no other ciphertext unprotects as it.</summary>
-    public const string Purpose = "Fors.AdminApi.SetupTest.v1";
+    public const string Purpose = Fors.Infrastructure.Security.StoredFormatNames.SetupTestPurpose;
 
     /// <summary>The event id sampled for callbacks of an unknown test (security event <c>admin.setup.test</c>).</summary>
     public const int UnknownTestEvent = 2011;
