@@ -59,7 +59,8 @@ p code, li code, td code, dd code { font-size: 0.875em; padding: 2px 6px; border
 .top-in { max-width: 1200px; margin: 0 auto; height: 64px; padding: 0 24px; display: flex; align-items: center; gap: 24px; }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--fg); flex-shrink: 0; font-weight: 600; font-size: 15px; letter-spacing: -0.01em; white-space: nowrap; }
 .brand:hover { color: var(--fg); }
-.logo { width: 30px; height: 30px; border-radius: 9px; background: var(--fg); color: var(--on-fg); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.logo { width: 30px; height: 30px; border-radius: 9px; background: var(--fg); color: var(--on-fg); display: grid; place-items: center; }
+.logo .ms { font-size: 17px; } /* the admin console's mark: the hub icon at 20 px in a 36 px square */
 .nav-main { display: flex; gap: 4px; }
 .nav-main a { height: 34px; padding: 0 12px; display: inline-flex; align-items: center; border-radius: 9px; text-decoration: none; font-size: 14px; font-weight: 500; white-space: nowrap; color: var(--fg-2); }
 .nav-main a:hover, .nav-main a[aria-current="page"] { background: var(--hover); color: var(--fg); }

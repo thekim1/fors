@@ -144,7 +144,7 @@ ${origin ? `<link rel="canonical" href="${esc(origin + url(path))}">\n` : ''}<li
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <div class="top-in">
-    <a class="brand" href="${url('')}"><span class="logo" aria-hidden="true">U</span><span>Fors</span></a>
+    <a class="brand" href="${url('')}"><span class="logo" aria-hidden="true">${icon('hub')}</span><span>Fors</span></a>
     <nav class="nav-main" aria-label="Main">${nav}</nav>
     <div class="spacer"></div>
     <div class="seg theme-top" role="group" aria-label="Theme">${THEMES.map(([id, label, ic]) => `<button type="button" data-theme-set="${id}" aria-pressed="false" aria-label="${label} theme" title="${label}">${icon(ic)}</button>`).join('')}</div>

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The website has the admin console's mark:** the favicon and the header logo show the hub icon instead of a "U".
 - **The gateway is now called Fors** (and the RAG platform Ume.Rag is now Källa, thekim1/ume-rag-platform#899). Every
   "ume" name changes: the projects and namespaces (`Fors.*`, `Fors.slnx`), the variables `UME_*` → `FORS_*`, the
   headers `x-ume-*` → `x-fors-*`, new keys `fors-sk-…` and `fors-dk-…`, `/v1/fors/context`, the model facts under
