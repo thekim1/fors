@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **The admin UI shows its own font.** `@fontsource-variable/geist` registers the families `Geist Variable` and
+  `Geist Mono Variable`, but the tokens and the Tailwind config asked for `Geist` and `Geist Mono`, so a machine without
+  Geist installed got the fallback (Segoe UI, DejaVu). Both now name the bundled families first (found by
+  thekim1/ume-rag-platform#869).
+
 ## 0.11.0 - 2026-11-16
 
 Setup mode: the admin console's sign-in can be set in a browser wizard with a setup code and a test sign-in instead of
