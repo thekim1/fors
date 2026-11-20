@@ -113,7 +113,9 @@ public sealed class KeyAuthenticator : IDisposable
     {
         // Captured before the query: if a revocation lands while it runs, the result is neither cached nor shared.
         var generation = CurrentGeneration();
-        if (_loading.TryGetValue(hash, out var running) && !running.Generation.IsCancellationRequested)
+        // A finished lookup is still registered until its finally block removes it; sharing it would hand out an answer
+        // read before this call (for example "unknown" for a key created since), so only a running one is shared.
+        if (_loading.TryGetValue(hash, out var running) && !running.Generation.IsCancellationRequested && !running.Task.IsCompleted)
         {
             return running.Task;
         }

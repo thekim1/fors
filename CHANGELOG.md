@@ -17,6 +17,9 @@
   in the [upgrade guide](docs/upgrade-guide.md#unreleased-0120-the-rename-to-fors).
 - **Licence: Apache-2.0** instead of EUPL-1.2, copyright Kim Vallén and Nichlas Löfdahl. Releases up to 0.11.0 stay
   available under EUPL-1.2.
+- **A key created just after a failed lookup is found at once.** A finished key lookup stayed shared until it was
+  removed, so a lookup that started in that moment got the earlier answer (for example "unknown" for a new key) until
+  the key cache expired. Only a running lookup is shared now (found by CI on this pull request).
 - **The default owner code of a manifest drops accents:** å, ä and ö count as a, a and o, so a name such as
   `Ålesund.Rag` gets the code `alesund-rag` (0.11 made `lesund-rag`). The preset `kalla.json` names its integration
   `Kalla`; rename an existing `Ume.Rag` integration to `Kalla` before provisioning from it.
