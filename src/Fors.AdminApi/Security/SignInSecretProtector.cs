@@ -44,7 +44,7 @@ public sealed class StoredSecretValue
 /// </summary>
 public sealed partial class SignInSecretProtector(IDataProtectionProvider protection, ILogger<SignInSecretProtector> logger)
 {
-    public const string Purpose = "Fors.AdminApi.SignInClientSecret.v1";
+    public const string Purpose = Fors.Infrastructure.Security.StoredFormatNames.SignInClientSecretPurpose;
 
     private readonly IDataProtector _protector = protection.CreateProtector(Purpose);
 

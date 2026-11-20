@@ -14,7 +14,7 @@ namespace Fors.AdminApi.Security;
 /// </summary>
 public sealed class AdminTicketStore(IAdminSessionStore store, IDataProtectionProvider protection, TimeProvider time) : ITicketStore
 {
-    private readonly IDataProtector _protector = protection.CreateProtector("Fors.AdminApi.Session.v1");
+    private readonly IDataProtector _protector = protection.CreateProtector(Fors.Infrastructure.Security.StoredFormatNames.AdminSessionPurpose);
 
     public async Task<string> StoreAsync(AuthenticationTicket ticket)
     {

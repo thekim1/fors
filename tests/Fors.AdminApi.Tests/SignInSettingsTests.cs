@@ -108,7 +108,7 @@ public sealed class SignInSettingsTests(AdminFixture fixture)
 
         // Another key ring (a replaced certificate, a lost key), a damaged value, and a payload of another purpose.
         var other = new SignInSecretProtector(new EphemeralDataProtectionProvider(), new ListLogger());
-        var otherPurpose = provider.CreateProtector("Fors.ProviderCredential.v1").Protect(StoredSecret);
+        var otherPurpose = provider.CreateProtector("Ume.LlmGateway.ProviderCredential.v1").Protect(StoredSecret);
         foreach (var bad in new[] { other.Protect(StoredSecret), "not-a-payload", otherPurpose })
         {
             var result = protector.Unprotect(bad);

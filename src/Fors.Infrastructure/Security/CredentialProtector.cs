@@ -5,7 +5,7 @@ namespace Fors.Infrastructure.Security;
 /// <summary>Encrypts provider credentials at rest using ASP.NET Core Data Protection (key ring in Postgres).</summary>
 public sealed class CredentialProtector(IDataProtectionProvider provider)
 {
-    private readonly IDataProtector _protector = provider.CreateProtector("Fors.ProviderCredential.v1");
+    private readonly IDataProtector _protector = provider.CreateProtector(StoredFormatNames.ProviderCredentialPurpose);
 
     public string? Protect(string? plaintext) =>
         string.IsNullOrEmpty(plaintext) ? null : _protector.Protect(plaintext);
