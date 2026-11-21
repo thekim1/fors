@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **The release bundle holds `docs/`** (#113): `fors-X.Y.Z.tar.gz` had only `deploy/`, `LICENSE` and `NOTICE`, while
+  `init-deployment.sh`, `init-keycloak.sh`, the Compose files and the release notes send the operator to
+  `docs/runbook.md`, `docs/keycloak.md`, `docs/identity-and-roles.md` and others. The bundle now carries the guides at
+  the released version, and `build-release-bundle.sh` (run by the verify workflow too) fails when a bundled file names
+  a `docs/` guide the bundle does not contain.
 - **The setup callback limit counts each caller on its own with `Admin:AuditSourceAddress=None`** (#105): no address
   was resolved then, so every caller shared one count of 20 a minute and a stranger's forged callbacks could make the
   deployer's own test answer `429` while setup was open. The limit now uses the client address behind the trusted
