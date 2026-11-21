@@ -120,6 +120,8 @@ if [ -n "${FORS_INTEGRATION_MANIFEST:-}" ]; then
 fi
 cp /config/postgres-init.sql "$F/postgres-init/10-roles.sql"
 cp /config/pg_hba.conf "$F/postgres/pg_hba.conf"
+# The one-shot roles runs it before the migrations (renames the roles from before the rename to Fors; until 0.13).
+cp /config/rename-roles.sql "$F/postgres/rename-roles.sql"
 cp /config/redis.conf "$F/redis/redis.conf"
 cp /config/app-roles.sql "$F/migrations/app-roles.sql"
 chmod -R a+rX "$F"

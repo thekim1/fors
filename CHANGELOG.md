@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **The Compose forms rename the database roles themselves** (the upgrade from 0.11): a one-shot service `roles` in
+  `compose.prod.yaml` and the Portainer stack renames the roles `ume_*` to `fors_*` as the Postgres superuser, over
+  Postgres's Unix socket and with no network, before `migrations` runs (`roles: service_completed_successfully`). It
+  ends their sessions first, and does nothing on a new installation or one already renamed. A Portainer stack from 0.11
+  is upgraded by renaming its variables and updating the stack, with no SQL by hand; in a stack that also holds Källa,
+  the gateway's migration service no longer holds up Källa's bootstrap. Postgres's socket directory is now the tmpfs
+  volume `postgres-socket`, shared with `roles`. Kubernetes still renames the roles by hand. Upgrade guide: *0.12.2*.
+
 ## 0.12.1 - 2026-11-20
 
 Patch release: a gateway upgraded from 0.11 reads its stored secrets again. No migration, no configuration change.
