@@ -54,10 +54,14 @@ grep -q "FORS_ADMIN_PUBLIC_URL=https://admin.test.invalid:9443" "$work/deploy/ke
 [ -s "$work/secrets/adminapi/Oidc__ClientSecret" ] || fail "admin API client secret not created"
 cmp -s <(tr -d '\n' < "$work/secrets/adminapi/Oidc__ClientSecret") "$work/secrets/keycloak-import/admin-client-secret" || fail "client secrets differ"
 first_secret="$(cat "$work/secrets/keycloak/db_password")"
+[ "$(stat -c %a "$work/certs/keycloak-import")" = 755 ] || fail "the import job cannot read its trust store's directory (#112)"
+chmod 700 "$work/certs/keycloak-import"   # as earlier versions of the script left it
 "$work/deploy/keycloak/init-keycloak.sh" --no-chown >/dev/null
 [ "$first_secret" = "$(cat "$work/secrets/keycloak/db_password")" ] || fail "a re-run replaced an existing secret"
+[ "$(stat -c %a "$work/certs/keycloak-import")" = 755 ] || fail "a re-run did not repair the trust store's directory"
 # The containers run as other users (Postgres 70, Keycloak 1000, import 65534); in this throw-away copy, let them read.
-chmod -R a+rX "$work/certs" "$work/secrets"
+# Not certs/keycloak-import: init-keycloak.sh makes that readable itself.
+chmod -R a+rX "$work/certs/keycloak" "$work/certs/postgres" "$work/secrets"
 chmod 600 "$work/certs/postgres/postgres.key"
 docker run --rm --user 0 --entrypoint chown -v "$work/certs/postgres:/c" "$postgres_image" 70:70 /c/postgres.key
 
@@ -239,8 +243,11 @@ FORS_KEYCLOAK_ADDITIONS_DIR=$work/additions
 FORS_KEYCLOAK_IMPORT_ENV=$work/additions/import.env
 EOF
 compose() { docker compose -p "$id" -f "$work/deploy/keycloak/compose.yaml" --env-file "$work/deploy/keycloak/.env" "$@"; }
-compose up -d --build --wait keycloak >/dev/null 2>&1 || { compose logs keycloak | tail -40; fail "Keycloak did not become healthy"; }
-compose run --rm realm-import > "$work/import1.log" 2>&1 || { tail -40 "$work/import1.log"; fail "realm import failed"; }
+# The command docs/keycloak.md gives: it returns once the import has succeeded (#112).
+compose up -d --build --wait > "$work/up1.log" 2>&1 \
+  || { tail -20 "$work/up1.log"; compose logs keycloak realm-import | tail -40; fail "up --wait failed"; }
+[ "$(docker inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$(compose ps -aq realm-import)")" = "exited 0" ] \
+  || fail "up --wait returned before the realm import had succeeded"
 
 kc="https://localhost:$port"
 curl_kc() { curl -sf --cacert "$work/certs/ca.pem" "$@"; }
@@ -338,6 +345,15 @@ compose run --rm realm-import > "$work/import2.log" 2>&1 || { tail -40 "$work/im
 api "$kc/admin/realms/fors/clients?clientId=made-by-hand" | json 'len(d)' | grep -qx 1 || fail "the import deleted a client made by hand"
 api "$kc/admin/realms/fors/clients?clientId=other-app" | json 'len(d)' | grep -qx 1 || fail "the import deleted the other system's client"
 api "$kc/admin/realms/fors/users?username=pilot.user&exact=true" | json 'len(d)' | grep -qx 1 || fail "the import deleted a user"
+
+step "up --wait fails when the import fails, and an empty additions directory imports"
+echo '{ "realm": ' > "$work/additions/99-broken.json"
+compose up -d --wait > "$work/up2.log" 2>&1 && fail "up --wait succeeded with a realm file that does not parse"
+grep -q 'realm-import.*exit 1' "$work/up2.log" || { tail -20 "$work/up2.log"; fail "up --wait did not name the failed import"; }
+empty="$(mktemp -d)"; chmod 755 "$empty"
+compose run --rm -v "$empty:/config/additions:ro" realm-import > "$work/import3.log" 2>&1 \
+  || { tail -40 "$work/import3.log"; fail "the import failed without additions"; }
+rmdir "$empty"; rm -f "$work/additions/99-broken.json"
 
 step "backup and restore of the keycloak database"
 # With PowerShell, the operators' scripts; without, the same pg_dump/pg_restore calls.
