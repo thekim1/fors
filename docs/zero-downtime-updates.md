@@ -26,9 +26,12 @@ When an instance is told to stop (`docker stop`, a Kubernetes pod being replaced
    proxy closes its pooled connection after the current request. Without this, a proxy can send a request on a pooled
    connection at the moment the instance closes it. The proxy retries such a request when it is a GET, but not when it is a
    POST (every model call), so the client gets a 502.
-3. **Closes its listener.** New connections are refused, and the proxy sends the request to the other instance. The few
-   connections the operating system had already accepted for it but the instance never read are reset; the request in
-   them did not run, so the proxy can retry them too (see the nginx settings below).
+3. **Refuses new connections for a second**, then **closes its listener.** A new connection is closed before its TLS
+   handshake, so the proxy sends the request to the other instance (it has not sent it yet, so this is safe for a POST
+   too). The connections accepted just before get their request answered in that second. Without it, the web server's
+   shutdown closed every connection that was not in a request, also a new one whose first request was still on its way
+   from the proxy: that POST was lost as a 502 (thekim1/fors#106). After the listener has closed, new connections are
+   refused, and the proxy retries them in the same way.
 4. **Finishes the requests it has** within the shutdown timeout (`DOTNET_SHUTDOWNTIMEOUTSECONDS`), including long
    streamed answers, then exits.
 
@@ -88,10 +91,13 @@ proxy_connect_timeout 5s;
 
 `proxy_next_upstream` makes a failed connection go to the other slot. `non_idempotent` lets nginx retry a POST (every
 model call) too. Without it, a POST in a connection the stopping slot reset is lost as a 502. The CI test lost 3 of
-62 000 that way. A retry happens only when the connection failed before any response, and `proxy_next_upstream_timeout`
-allows it only within 10 seconds, so a request that ran long and then failed is never repeated. The one case where a
-model call could run twice is a gateway that crashes within 10 seconds of receiving it, after passing it on to the
-provider; that client would otherwise get an error.
+62 000 that way. On the gateway's host, which passes request bodies straight through (`proxy_request_buffering off`),
+nginx retries only a request it has not started sending (a refused connection, a reset TLS handshake): the reason a
+stopping slot refuses new connections before its TLS handshake (step 3 above). A retry happens only when the
+connection failed before any response, and `proxy_next_upstream_timeout` allows it only within 10 seconds, so a
+request that ran long and then failed is never repeated. The one case where a model call could run twice is a gateway
+that crashes within 10 seconds of receiving it, after passing it on to the provider; that client would otherwise get
+an error.
 
 **Nginx Proxy Manager:** a proxy host has one upstream. Put the `upstream` blocks above in a custom configuration
 (`/data/nginx/custom/http_top.conf`) and point the proxy host's *Advanced* tab at them (`proxy_pass https://fors_gateway;`).
