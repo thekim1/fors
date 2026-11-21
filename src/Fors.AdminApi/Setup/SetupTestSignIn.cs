@@ -448,9 +448,12 @@ public sealed class SetupTestSignIn(GatewayDbContext db, IConfiguration configur
 /// real sign-in's callback included, passes on untouched; reading the form leaves it cached for the handler. Anyone can send such
 /// a request, so before a test is looked up: while setup is closed by the sign-in values last read (<see cref="AdminSignIn"/>,
 /// read at most once per <see cref="AdminSignIn.SignInRefreshInterval"/>) the answer is 404 with nothing more read, and while it is
-/// open <see cref="SetupCallbackThrottle"/> limits the callbacks per client address (429).
+/// open <see cref="SetupCallbackThrottle"/> limits the callbacks per client address (429). That address is the one behind the
+/// trusted proxies, whatever <c>Admin:AuditSourceAddress</c> keeps: the setting decides what is written down, and the limit's
+/// address is held in memory for a minute only, so with <c>None</c> callers do not share one count.
 /// </summary>
-public sealed class SetupCallbackMiddleware(RequestDelegate next, AdminSignIn signIn, SetupCallbackThrottle throttle, TimeProvider time)
+public sealed class SetupCallbackMiddleware(RequestDelegate next, AdminSignIn signIn, SetupCallbackThrottle throttle, AdminClientAddresses addresses,
+    TimeProvider time)
 {
     public async Task InvokeAsync(HttpContext http, IOptionsMonitor<OpenIdConnectOptions> monitor, IOptionsMonitorCache<OpenIdConnectOptions> cache)
     {
@@ -492,7 +495,8 @@ public sealed class SetupCallbackMiddleware(RequestDelegate next, AdminSignIn si
                     return;
                 }
 
-                if (!throttle.TryAcquire(http.Items[AdminClientAddresses.ItemKey] as string, out var retryAfter))
+                var caller = ClientAddresses.Format(await addresses.ClientAddressAsync(http), SourceAddressMode.Full);
+                if (!throttle.TryAcquire(caller, out var retryAfter))
                 {
                     http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
                     http.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);

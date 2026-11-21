@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **The setup callback limit counts each caller on its own with `Admin:AuditSourceAddress=None`** (#105): no address
+  was resolved then, so every caller shared one count of 20 a minute and a stranger's forged callbacks could make the
+  deployer's own test answer `429` while setup was open. The limit now uses the client address behind the trusted
+  proxies whatever the setting keeps (the setting decides what is stored, not how the limit counts), and with
+  `Truncated` it counts per full address instead of per /24 or /48. No configuration change.
 - **The Compose forms rename the database roles themselves** (the upgrade from 0.11): a one-shot service `roles` in
   `compose.prod.yaml` and the Portainer stack renames the roles `ume_*` to `fors_*` as the Postgres superuser, over
   Postgres's Unix socket and with no network, before `migrations` runs (`roles: service_completed_successfully`). It
