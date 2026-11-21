@@ -38,6 +38,15 @@ See [runbook](runbook.md) for the actual deployment procedure.
   files recreates the `postgres` container: a short restart of the database, which the gateway's request path does not
   use. `rolling-update.sh` leaves `postgres` running and runs `migrations` without its dependencies, so without
   `roles`: an update without downtime starts from 0.12.0 or later, whose roles are renamed.
+- **The bundled Keycloak** (`deploy/keycloak`, #112): its realm import could not read its trust store after
+  `init-keycloak.sh`, so the realm was never imported, while `up --wait` reported success. Re-run
+  `./deploy/keycloak/init-keycloak.sh` (it keeps every secret and setting), then
+  `docker compose -f deploy/keycloak/compose.yaml --env-file deploy/keycloak/.env up -d --build --wait`, which now waits
+  for the import and fails when it fails. A new idle service `realm-imported` stays up for that.
+- **Also in 0.12.2, nothing to do:** the setup callback's limit counts each caller on its own when
+  `Admin:AuditSourceAddress` is `None`, and with `Truncated` it now counts per full address (#105); a rolling update no
+  longer loses a POST now and then: a stopping instance refuses new connections for a second after its drain time
+  (#106); the release bundle holds `docs/` (#113).
 
 ## 0.12.1: stored secrets readable after the rename
 

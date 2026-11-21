@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.12.2 - 2026-11-21
+
+Patch release: the Compose forms rename the database roles from before the rename to Fors themselves, so a Portainer
+stack from 0.11 upgrades with no SQL by hand; with four fixes. No migration. **Rolling update: yes** from 0.12.0 and
+0.12.1; the first update recreates `postgres` once. From 0.11 as for 0.12.0, without its step 3. The bundled Keycloak:
+re-run `init-keycloak.sh`, then `up --wait` ([upgrade guide](docs/upgrade-guide.md#0122-the-database-roles-renamed-by-the-stack)).
+
 - **A rolling update no longer loses a POST now and then** (#106): when a slot's drain time was over, Kestrel's
   shutdown closed every connection that was not in a request, also a new one whose first request was still on its way
   from nginx. nginx cannot resend a request it has started passing on (the gateway's host passes bodies straight
