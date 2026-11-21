@@ -35,6 +35,15 @@ jobs:
         run: |
           sh deploy/build-portainer-stack.sh
           git diff --exit-code -- deploy/compose.portainer.yaml || { echo "Run deploy/build-portainer-stack.sh and commit compose.portainer.yaml"; exit 1; }
+      - name: Release bundle builds and holds the guides it names
+        run: |
+          # The same script as release.yml, with placeholder images: it fails when a bundled file names a docs/ guide
+          # the bundle does not contain (#113).
+          digest="sha256:$(printf '0%.0s' $(seq 64))"
+          GATEWAY_IMAGE="ghcr.io/thekim1/fors/gateway:0.0.0@$digest" ADMINAPI_IMAGE="ghcr.io/thekim1/fors/adminapi:0.0.0@$digest" \
+            MIGRATIONS_IMAGE="ghcr.io/thekim1/fors/migrations:0.0.0@$digest" DATAAPI_IMAGE="ghcr.io/thekim1/fors/dataapi:0.0.0@$digest" \
+            sh deploy/build-release-bundle.sh 0.0.0 "$RUNNER_TEMP/bundle"
+          tar -tzf "$RUNNER_TEMP/bundle/fors-0.0.0.tar.gz" | grep -qx 'fors-0.0.0/docs/runbook.md'
       - name: Local image defaults are untagged dev images
         run: |
           # ${X_IMAGE:-fors/<service>:latest} is the locally built image; a release bundle pins the pushed one
