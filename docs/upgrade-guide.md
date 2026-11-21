@@ -94,6 +94,13 @@ installation (`compose.rolling.yaml`) is upgraded the same way; start it with it
 
 ### Portainer
 
+**A stack that also holds Källa** (Källa's `compose.portainer.yaml`, which has the gateway in it): follow
+[Källa's Portainer guide, *Upgrade*](https://github.com/thekim1/kalla/blob/main/docs/portainer.md#upgrade), not the
+steps below. That guide renames the roles in both databases first, with the services stopped, and updates the stack
+once; it uses the statement of step 3 for the gateway's roles. In the order below, Källa's bootstrap waits for the
+gateway's migration service, which fails in step 2, so Källa's volumes are not copied and its database does not start.
+If you already updated that way, the same guide says how to go on.
+
 1. **Rename the variables** in the stack: every `UME_*` becomes `FORS_*`. If you relied on the old defaults, add
    `FORS_OIDC_CLIENT_ID=ume-admin` (when `FORS_OIDC_AUTHORITY` is set) and `FORS_DATA_AUDIENCE=ume-data-api`.
 2. **Update the stack** with the release's `compose.portainer.yaml`. The bootstrap copies the volumes `ume-certs` and
