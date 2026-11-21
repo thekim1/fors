@@ -240,7 +240,10 @@ the authority, client id or client secret into its variables. The API is in [adm
   seconds per instance, however many requests arrive; an instance other than the one that completed setup therefore
   follows a change of the values within 2 seconds. A callback that claims to be a setup test's answers 404 with nothing
   more read while setup is closed, and while it is open at most 20 a minute per client address reach the database
-  (`429` beyond that).
+  (`429` beyond that). The address is the one behind the trusted proxies, whatever `Admin:AuditSourceAddress` keeps: the
+  setting decides what is written down, not how the limit counts, so with `None` one caller's flood does not hold back
+  another's callback. Behind a proxy that is not among the trusted proxies every caller has the proxy's address and
+  shares its count, as for the other limits.
 - **A passed test stands for the claim mapping it ran with** (the claim names and the deployment's role groups, besides
   the values): if those differ when setup is completed, for example during a rolling change of `Oidc:RoleGroups`, the
   answer is `values_changed` and the test is run again.

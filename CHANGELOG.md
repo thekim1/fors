@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **The setup callback limit counts each caller on its own with `Admin:AuditSourceAddress=None`** (#105): no address
+  was resolved then, so every caller shared one count of 20 a minute and a stranger's forged callbacks could make the
+  deployer's own test answer `429` while setup was open. The limit now uses the client address behind the trusted
+  proxies whatever the setting keeps (the setting decides what is stored, not how the limit counts), and with
+  `Truncated` it counts per full address instead of per /24 or /48. No configuration change.
+
 ## 0.12.1 - 2026-11-20
 
 Patch release: a gateway upgraded from 0.11 reads its stored secrets again. No migration, no configuration change.
