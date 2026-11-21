@@ -8,7 +8,8 @@
 # Its database is `keycloak` (role fors_keycloak) in the gateway's Postgres, reached over the gateway project's internal
 # `data` network, so the gateway's backup procedure covers it (Backup-Database.ps1 -Database keycloak).
 # realm-import applies the realm files with keycloak-config-cli on every `up`: realm/*.json (this repository), then
-# additions/*.json (other systems' parts of the realm), in name order. See docs/keycloak.md.
+# additions/*.json (other systems' parts of the realm), in name order. `up --wait` returns when it has finished and
+# fails when it fails (realm-imported). See docs/keycloak.md.
 name: fors-keycloak
 
 x-hardened: &hardened
@@ -70,8 +71,18 @@ services:
 
   realm-import:
     <<: *hardened
-    image: docker.io/adorsys/keycloak-config-cli:6.5.1-26.5.5@sha256:0955d98c8a341898b7aa177477edf8a1e90569ae50bbe7598141c1270b773274
+    image: &import-image docker.io/adorsys/keycloak-config-cli:6.5.1-26.5.5@sha256:0955d98c8a341898b7aa177477edf8a1e90569ae50bbe7598141c1270b773274
     restart: "no"
+    # keycloak-config-cli fails on a location that matches no file, so the additions are named only when there are some
+    # (the directory is empty unless another system has put its realm files there).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        locations=file:/config/realm/*.json
+        for f in /config/additions/*.json; do [ -e "$$f" ] && locations="$$locations,file:/config/additions/*.json"; break; done
+        export IMPORT_FILES_LOCATIONS="$$locations"
+        exec java $$JAVA_OPTS -jar /app/keycloak-config-cli.jar
     environment:
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_GRANTTYPE: client_credentials
@@ -80,7 +91,6 @@ services:
       KEYCLOAK_AVAILABILITYCHECK_TIMEOUT: 120s
       # The client secret and the realm files' secrets come from files (Spring config tree / file: lookups).
       SPRING_CONFIG_IMPORT: configtree:/run/import-secrets/config/
-      IMPORT_FILES_LOCATIONS: file:/config/realm/*.json,file:/config/additions/*.json
       IMPORT_VARSUBSTITUTION_ENABLED: "true"
       # A realm file may only add and change what it declares; nothing another file (or an administrator) made is
       # deleted. Remove a client or role by hand when a file drops it (docs/keycloak.md).
@@ -114,6 +124,19 @@ services:
     depends_on:
       keycloak: {condition: service_healthy}
     networks: [edge]
+
+  # Only for `up --wait`: it starts once realm-import has exited with 0, so `up --wait` waits for the import and fails
+  # when it fails (Compose waits for a one-off job only when another service depends on its successful completion).
+  realm-imported:
+    <<: *hardened
+    image: *import-image
+    entrypoint: [sleep, infinity]
+    init: true
+    restart: "no"
+    mem_limit: 16m
+    network_mode: none
+    depends_on:
+      realm-import: {condition: service_completed_successfully}
 
 networks:
   edge: {driver: bridge}

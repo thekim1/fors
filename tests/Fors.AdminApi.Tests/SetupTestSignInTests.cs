@@ -4,7 +4,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Web;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -659,6 +662,57 @@ public sealed class SetupTestSignInTests(AdminFixture fixture) : IAsyncLifetime
             using var answered = await CallbackAsync(client, forged);
             answered.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         }
+    }
+
+    [Theory]
+    [InlineData("Full")]
+    [InlineData("Truncated")]
+    [InlineData("None")]
+    public async Task A_flood_of_setup_callbacks_from_one_address_does_not_keep_the_deployers_test_out_whatever_the_audit_keeps(string auditSourceAddress)
+    {
+        // thekim1/fors#105: with Admin:AuditSourceAddress=None no address was resolved and every caller shared one count, so a
+        // stranger's 20 forged callbacks made the deployer's own answer 429 until the window ended.
+        using var provider = new FakeProvider();
+        await using var host = Host(provider, settings: ("Admin:AuditSourceAddress", auditSourceAddress));
+        await using var peers = host.WithWebHostBuilder(web => web.ConfigureTestServices(services =>
+            services.AddSingleton<IStartupFilter>(new PeerAddressFilter())));
+        using var session = await SessionAsync(peers, fixture);
+        session.DefaultRequestHeaders.Add(PeerAddressFilter.Header, "192.0.2.10");
+        using var stranger = peers.CreateHttpsClient();
+        stranger.DefaultRequestHeaders.Add(PeerAddressFilter.Header, "198.51.100.7");
+        var forged = SetupTestSignIn.StatePrefix + new string('x', 43);
+        for (var i = 0; i < SetupCallbackThrottle.Limit; i++)
+        {
+            using var answered = await CallbackAsync(stranger, forged);
+            answered.Headers.Location!.OriginalString.ShouldBe(SetupTestSignIn.DonePath);
+        }
+
+        using (var limited = await CallbackAsync(stranger, forged))
+        {
+            limited.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
+        }
+
+        (await RunTestAsync(session, provider)).ShouldBeNull();
+    }
+
+    /// <summary>Sets the connection's remote address from <see cref="Header"/>, as a real connection from that address would.</summary>
+    private sealed class PeerAddressFilter : IStartupFilter
+    {
+        public const string Header = "X-Test-Peer";
+
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use((http, nextMiddleware) =>
+            {
+                if (http.Request.Headers.TryGetValue(Header, out var peer))
+                {
+                    http.Connection.RemoteIpAddress = IPAddress.Parse(peer.ToString());
+                }
+
+                return nextMiddleware(http);
+            });
+            next(app);
+        };
     }
 
     [Fact]

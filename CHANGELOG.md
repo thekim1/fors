@@ -10,6 +10,32 @@
   already accepted, then stops (only with a drain time, `Shutdown__DrainSeconds`, as `compose.rolling.yaml` and the
   Kubernetes manifests set). No configuration change; the first rolling update to this release still stops slots of the
   previous version.
+- **The bundled Keycloak's realm import works after `init-keycloak.sh`, and `up --wait` reports its outcome** (#112):
+  the script created `certs/keycloak-import` with mode 700, so the import job (user 65534) could not read its trust
+  store and failed with `PKIX path building failed` after 120 seconds, and the realm was never created. The script
+  now makes the directory readable (755; the trust store holds only the internal CA's certificate), also on a
+  re-run. `up -d --build --wait` returned while the import was still running and never failed: it now waits for the
+  import and fails when it fails, through a new `realm-imported` service that starts only after a successful import.
+  The import no longer fails when the additions directory has no realm files. **Upgrade:** re-run
+  `./deploy/keycloak/init-keycloak.sh` (it keeps every secret and setting), then
+  `docker compose -f deploy/keycloak/compose.yaml --env-file deploy/keycloak/.env up -d --build --wait`.
+- **The release bundle holds `docs/`** (#113): `fors-X.Y.Z.tar.gz` had only `deploy/`, `LICENSE` and `NOTICE`, while
+  `init-deployment.sh`, `init-keycloak.sh`, the Compose files and the release notes send the operator to
+  `docs/runbook.md`, `docs/keycloak.md`, `docs/identity-and-roles.md` and others. The bundle now carries the guides at
+  the released version, and `build-release-bundle.sh` (run by the verify workflow too) fails when a bundled file names
+  a `docs/` guide the bundle does not contain.
+- **The setup callback limit counts each caller on its own with `Admin:AuditSourceAddress=None`** (#105): no address
+  was resolved then, so every caller shared one count of 20 a minute and a stranger's forged callbacks could make the
+  deployer's own test answer `429` while setup was open. The limit now uses the client address behind the trusted
+  proxies whatever the setting keeps (the setting decides what is stored, not how the limit counts), and with
+  `Truncated` it counts per full address instead of per /24 or /48. No configuration change.
+- **The Compose forms rename the database roles themselves** (the upgrade from 0.11): a one-shot service `roles` in
+  `compose.prod.yaml` and the Portainer stack renames the roles `ume_*` to `fors_*` as the Postgres superuser, over
+  Postgres's Unix socket and with no network, before `migrations` runs (`roles: service_completed_successfully`). It
+  ends their sessions first, and does nothing on a new installation or one already renamed. A Portainer stack from 0.11
+  is upgraded by renaming its variables and updating the stack, with no SQL by hand; in a stack that also holds Källa,
+  the gateway's migration service no longer holds up Källa's bootstrap. Postgres's socket directory is now the tmpfs
+  volume `postgres-socket`, shared with `roles`. Kubernetes still renames the roles by hand. Upgrade guide: *0.12.2*.
 
 ## 0.12.1 - 2026-11-20
 
