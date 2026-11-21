@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **The release bundle holds `docs/`** (#113): `fors-X.Y.Z.tar.gz` had only `deploy/`, `LICENSE` and `NOTICE`, while
+  `init-deployment.sh`, `init-keycloak.sh`, the Compose files and the release notes send the operator to
+  `docs/runbook.md`, `docs/keycloak.md`, `docs/identity-and-roles.md` and others. The bundle now carries the guides at
+  the released version, and `build-release-bundle.sh` (run by the verify workflow too) fails when a bundled file names
+  a `docs/` guide the bundle does not contain.
+
 ## 0.12.1 - 2026-11-20
 
 Patch release: a gateway upgraded from 0.11 reads its stored secrets again. No migration, no configuration change.
