@@ -198,8 +198,9 @@ public sealed class SetupCodeThrottle(TimeProvider time)
 /// <summary>
 /// The limit on setup test callbacks (<see cref="SetupCallbackMiddleware"/>), which anyone can send while setup is open and which
 /// each cost a database statement: at most <see cref="Limit"/> per minute and client address in this process, a fixed window;
-/// further ones answer 429 before anything is read. Per address, so a flood from elsewhere does not keep the deployer's own
-/// callback out; past <see cref="MaxAddresses"/> addresses in a window the rest share one count. A deployer runs a few tests an hour.
+/// further ones answer 429 before anything is read. Per address (the full one behind the trusted proxies, whatever
+/// <c>Admin:AuditSourceAddress</c> keeps), so a flood from elsewhere does not keep the deployer's own callback out; past
+/// <see cref="MaxAddresses"/> addresses in a window the rest share one count. A deployer runs a few tests an hour.
 /// </summary>
 public sealed class SetupCallbackThrottle(TimeProvider time)
 {
