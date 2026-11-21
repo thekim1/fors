@@ -66,9 +66,72 @@ public sealed class ShutdownDrainTests
         (await StatusAsync(drain)).ShouldBe(HealthStatus.Unhealthy);
         time.Advance(TimeSpan.FromSeconds(9));
         stopping.IsCompleted.ShouldBeFalse();
+        drain.RefusesConnections.ShouldBeFalse();
 
+        // The drain time is over: new connections are refused for a moment before the web server stops (#106).
         time.Advance(TimeSpan.FromSeconds(1));
+        drain.RefusesConnections.ShouldBeTrue();
+        stopping.IsCompleted.ShouldBeFalse();
+
+        time.Advance(TimeSpan.FromSeconds(ShutdownDrain.RefuseSeconds));
         await stopping.WaitAsync(TimeSpan.FromSeconds(5), Ct);
+    }
+
+    [Fact]
+    public async Task Without_a_drain_time_connections_are_never_refused()
+    {
+        using var lifetime = new Lifetime();
+        var drain = Drain(0, lifetime, new FakeTimeProvider());
+
+        await drain.StoppingAsync(Ct);
+
+        drain.RefusesConnections.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task After_the_drain_Kestrel_closes_new_connections_and_answers_those_accepted_before()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration["Kestrel:Endpoints:Http:Url"] = "http://127.0.0.1:0";   // as deployments set them
+        builder.Configuration["Shutdown:DrainSeconds"] = "1";
+        builder.AddDefaultHealthChecks();
+        await using var app = builder.Build();
+        app.MapGet("/", () => "ok");
+        await app.StartAsync(Ct);
+        var port = new Uri(app.Urls.Single()).Port;
+
+        // Accepted during the drain; its request is sent only once new connections are refused.
+        using var early = new System.Net.Sockets.TcpClient();
+        await early.ConnectAsync(IPAddress.Loopback, port, Ct);
+        var stopped = app.StopAsync(Ct);
+        var drain = app.Services.GetRequiredService<ShutdownDrain>();
+        while (!drain.RefusesConnections)
+        {
+            await Task.Delay(20, Ct);
+        }
+
+        using var late = new System.Net.Sockets.TcpClient();
+        await late.ConnectAsync(IPAddress.Loopback, port, Ct);
+        (await SendAsync(late)).ShouldBeEmpty();
+        var answer = await SendAsync(early);
+        answer.ShouldStartWith("HTTP/1.1 200");
+        answer.ShouldContain("Connection: close");
+        await stopped;
+    }
+
+    private static async Task<string> SendAsync(System.Net.Sockets.TcpClient client)
+    {
+        var stream = client.GetStream();
+        try
+        {
+            await stream.WriteAsync("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"u8.ToArray(), Ct);
+            using var reader = new StreamReader(stream);
+            return await reader.ReadToEndAsync(Ct);
+        }
+        catch (IOException)
+        {
+            return "";
+        }
     }
 
     [Fact]

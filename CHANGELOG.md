@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A rolling update no longer loses a POST now and then** (#106): when a slot's drain time was over, Kestrel's
+  shutdown closed every connection that was not in a request, also a new one whose first request was still on its way
+  from nginx. nginx cannot resend a request it has started passing on (the gateway's host passes bodies straight
+  through), so that model call ended as a 502. A stopping service now closes new connections before their TLS handshake
+  for one second after the drain (nginx retries those on the other slot, POST included) and answers the ones it had
+  already accepted, then stops (only with a drain time, `Shutdown__DrainSeconds`, as `compose.rolling.yaml` and the
+  Kubernetes manifests set). No configuration change; the first rolling update to this release still stops slots of the
+  previous version.
 - **The bundled Keycloak's realm import works after `init-keycloak.sh`, and `up --wait` reports its outcome** (#112):
   the script created `certs/keycloak-import` with mode 700, so the import job (user 65534) could not read its trust
   store and failed with `PKIX path building failed` after 120 seconds, and the realm was never created. The script
