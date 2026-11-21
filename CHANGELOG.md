@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **The bundled Keycloak's realm import works after `init-keycloak.sh`, and `up --wait` reports its outcome** (#112):
+  the script created `certs/keycloak-import` with mode 700, so the import job (user 65534) could not read its trust
+  store and failed with `PKIX path building failed` after 120 seconds, and the realm was never created. The script
+  now makes the directory readable (755; the trust store holds only the internal CA's certificate), also on a
+  re-run. `up -d --build --wait` returned while the import was still running and never failed: it now waits for the
+  import and fails when it fails, through a new `realm-imported` service that starts only after a successful import.
+  The import no longer fails when the additions directory has no realm files. **Upgrade:** re-run
+  `./deploy/keycloak/init-keycloak.sh` (it keeps every secret and setting), then
+  `docker compose -f deploy/keycloak/compose.yaml --env-file deploy/keycloak/.env up -d --build --wait`.
 - **The release bundle holds `docs/`** (#113): `fors-X.Y.Z.tar.gz` had only `deploy/`, `LICENSE` and `NOTICE`, while
   `init-deployment.sh`, `init-keycloak.sh`, the Compose files and the release notes send the operator to
   `docs/runbook.md`, `docs/keycloak.md`, `docs/identity-and-roles.md` and others. The bundle now carries the guides at

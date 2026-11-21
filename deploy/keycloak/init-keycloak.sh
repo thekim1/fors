@@ -85,6 +85,9 @@ if ! openssl pkcs12 -export -nokeys -in "$certs/ca.pem" -jdktrust anyExtendedKey
     -file /certs/ca.pem -keystore /certs/keycloak-import/truststore.p12 -storetype PKCS12 -storepass changeit >/dev/null \
     || die "could not write the trust store with keytool"
 fi
+# The import job (user 65534) must read it whoever runs this script, also with --no-chown; the store holds only the CA's
+# certificate. umask 077 makes the directory 700, as earlier versions of this script left it: a re-run repairs that.
+chmod 755 "$certs/keycloak-import"
 chmod 644 "$store"
 
 # --- Secrets -------------------------------------------------------------------------------------------------------

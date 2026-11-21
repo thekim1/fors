@@ -43,6 +43,9 @@ Run the gateway's `deploy/init-deployment.sh` first; this setup uses its interna
    docker compose -f deploy/keycloak/compose.yaml --env-file deploy/keycloak/.env up -d --build --wait
    ```
    `realm-import` runs after Keycloak is ready and exits; `docker compose ... logs realm-import` shows what it did.
+   `--wait` returns once the import has succeeded, and fails with `service "realm-import" didn't complete
+   successfully` when it fails: the small `realm-imported` container starts only after a successful import and exists
+   for that alone.
 4. **Reverse proxy.** Forward `https://auth.example.se` to the HTTPS port (re-encrypting, like the gateway's hosts in
    `deploy/proxy/nginx.conf.example`) with `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host`; Keycloak
    trusts them (`proxy-headers=xforwarded`), so the port must only be reachable from the proxy. A proxy health check
