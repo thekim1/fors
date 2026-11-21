@@ -11,6 +11,34 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
+## 0.12.2: the database roles renamed by the stack
+
+- **Rolling update: yes** from 0.12.0 and 0.12.1. No migration, no configuration change. From 0.11, upgrade straight to
+  0.12.2 and follow the 0.12.0 steps below (rolling update: no) with the difference below; skip 0.12.0 and 0.12.1.
+- **The Compose forms rename the database roles themselves.** `compose.prod.yaml` (and so `compose.rolling.yaml`) and
+  the Portainer stack have a one-shot service `roles` that runs before `migrations` on every start. As the Postgres
+  superuser, over Postgres's Unix socket and with no network, it ends the sessions of the roles `ume_*` and renames them
+  to `fors_*` (`deploy/upgrade/0.12-rename-roles.sql`). On a new installation, and on one whose roles are renamed, it
+  does nothing. `migrations` waits for it (`roles: service_completed_successfully`), and the gateway, admin API and Data
+  API wait for `migrations`, so none of them starts before the rename.
+- **Portainer from 0.11:** rename the variables (0.12.0, *Portainer*, step 1) and update the stack with 0.12.2's
+  `compose.portainer.yaml` (step 2). The migration service signs in at that update, so step 3 is not needed. A stack
+  that was updated with 0.12.0's or 0.12.1's file and stopped at its migration service goes on the same way: update it
+  with 0.12.2's file. Step 3's statement stays as the fallback: if `roles` fails, its log says why, and the statement
+  does the same by hand. In a stack that also holds Källa, the gateway's roles are renamed before `migrations` runs,
+  and Källa's bootstrap waits for `migrations`; Källa's own database follows Källa's guide.
+- **Compose from 0.11:** unchanged, `deploy/upgrade/upgrade-to-0.12.sh` (it renames the variables and moves the
+  database volume, whose name follows the project). Its step 3 still renames the roles; `roles` then does nothing.
+- **Kubernetes from 0.11:** unchanged, the roles are renamed by hand (0.12.0, *Kubernetes*, step 2): the base uses a
+  Postgres outside the cluster, whose superuser it does not have.
+- **What changes in the files:** Postgres's socket directory `/var/run/postgresql` is the volume `postgres-socket` (a
+  tmpfs, in memory and empty at every start, as before), which `roles` mounts too. `roles` uses the Postgres image the
+  stack already pins and the superuser password file `postgres` reads; the Portainer bootstrap writes the statement to
+  `fors-config` (`postgres/rename-roles.sql`). Because its mounts change, the first `up` (or stack update) with 0.12.2's
+  files recreates the `postgres` container: a short restart of the database, which the gateway's request path does not
+  use. `rolling-update.sh` leaves `postgres` running and runs `migrations` without its dependencies, so without
+  `roles`: an update without downtime starts from 0.12.0 or later, whose roles are renamed.
+
 ## 0.12.1: stored secrets readable after the rename
 
 - **Rolling update: yes** from 0.12.0. No migration, no configuration change. From 0.11, upgrade straight to 0.12.1 and
