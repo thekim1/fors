@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Options;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -110,6 +111,7 @@ public static class Extensions
         builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<ShutdownDrain>(sp, sp.GetService<TimeProvider>() ?? TimeProvider.System));
         builder.Services.AddHostedService(sp => sp.GetRequiredService<ShutdownDrain>());
         builder.Services.AddTransient<Microsoft.AspNetCore.Hosting.IStartupFilter, ShutdownDrain.StartupFilter>();
+        builder.Services.AddTransient<IConfigureOptions<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>, ShutdownDrain.KestrelSetup>();
         // "shutdown" has no "live" tag: a stopping host is not ready, but it is alive and must not be restarted.
         builder.Services.AddHealthChecks()
             .AddCheck("self", () => HealthCheckResult.Healthy(), ["live"])

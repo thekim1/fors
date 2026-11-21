@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **A rolling update no longer loses a POST now and then** (#106): when a slot's drain time was over, Kestrel's
+  shutdown closed every connection that was not in a request, also a new one whose first request was still on its way
+  from nginx. nginx cannot resend a request it has started passing on (the gateway's host passes bodies straight
+  through), so that model call ended as a 502. A stopping service now closes new connections before their TLS handshake
+  for one second after the drain (nginx retries those on the other slot, POST included) and answers the ones it had
+  already accepted, then stops (only with a drain time, `Shutdown__DrainSeconds`, as `compose.rolling.yaml` and the
+  Kubernetes manifests set). No configuration change; the first rolling update to this release still stops slots of the
+  previous version.
+
 ## 0.12.1 - 2026-11-20
 
 Patch release: a gateway upgraded from 0.11 reads its stored secrets again. No migration, no configuration change.
