@@ -223,7 +223,7 @@ matches your environment; they combine (a proxy in front, with PKI certificates 
 | Scheme / Forward host / port | `https` / Docker host / 8443 | `https` / Docker host / 9443 |
 | SSL tab | your certificate, Force SSL, HTTP/2 | same |
 | Websockets Support | **on** (live audio, `/v1/realtime`) | off |
-| Advanced (custom nginx configuration) | `proxy_buffering off; proxy_request_buffering off; proxy_read_timeout 600s; proxy_send_timeout 600s; client_max_body_size 52m;` | (none) |
+| Advanced (custom nginx configuration) | `proxy_buffering off; proxy_request_buffering off; proxy_read_timeout 600s; proxy_send_timeout 600s; client_max_body_size 52m;` | `proxy_buffer_size 32k; proxy_buffers 8 32k; proxy_busy_buffers_size 64k; large_client_header_buffers 4 32k;` (the sign-in's cookies outgrow nginx's 4 KB default: without it, `502 Bad Gateway` after signing in until the user clears their cookies) |
 
 ### Client addresses and trusted proxies
 

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **No more `502 Bad Gateway` after signing in to the admin console behind nginx**: coming back from the sign-in
+  provider with an old session's cookies still in the browser (after an update, for example), the callback's
+  `Set-Cookie` headers outgrew nginx's default 4 KB buffer, and nginx answered 502 ("upstream sent too big header")
+  until the user cleared their cookies. `deploy/proxy/nginx.conf.example` now sets `proxy_buffer_size 32k;
+  proxy_buffers 8 32k; proxy_busy_buffers_size 64k; large_client_header_buffers 4 32k;`, the runbook's Nginx Proxy
+  Manager table has them for the admin UI host, and the Kubernetes Ingress example sets `proxy-buffer-size: 32k`.
+  **Operators:** an existing `proxy/nginx.conf` (from `init-deployment.sh --proxy`), a Nginx Proxy Manager host or an
+  Ingress of your own needs the same lines; reload the proxy.
+
 ## 0.12.2 - 2026-11-21
 
 Patch release: the Compose forms rename the database roles from before the rename to Fors themselves, so a Portainer
