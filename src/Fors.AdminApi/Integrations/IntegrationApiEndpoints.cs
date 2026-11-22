@@ -1,4 +1,5 @@
 using Fors.AdminApi.Security;
+using Fors.AdminApi.Settings;
 using Fors.Domain.Keys;
 using Fors.Infrastructure.Security;
 
@@ -36,5 +37,26 @@ public static class IntegrationApiEndpoints
             TypedResults.Ok(await service.BudgetsAsync(IntegrationKeyHandler.Caller(http.User).IntegrationId, keyId, ct)))
             .RequireAuthorization(usage).WithName("IntegrationBudgets")
             .WithSummary("The budgets that apply to one of the integration's keys, with what each used this period (scope usage.read)");
+        // The admin console's logo for a platform that shows it beside the organisation name (feature organisation-logo). No scope:
+        // /bff/branding/logo serves it to every visitor. From BrandingCache, with the logo's hash as its ETag.
+        api.MapGet("/branding/logo", async (HttpContext http, BrandingCache cache, CancellationToken ct) =>
+            {
+                var branding = await cache.GetAsync(ct);
+                if (branding.Logo is not { } logo)
+                {
+                    return Results.NotFound();
+                }
+
+                var etag = $"\"{branding.Version}\"";
+                http.Response.Headers.ETag = etag;
+                http.Response.Headers.CacheControl = "no-cache";
+                // Opened directly, an SVG would be a document on this origin: no scripts, no requests, sandboxed.
+                http.Response.Headers.ContentSecurityPolicy = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";
+                // Weak comparison (RFC 9110 §13.1.2), as the gateway's discovery endpoints: a W/ added by a proxy still matches.
+                var matches = http.Request.GetTypedHeaders().IfNoneMatch.Any(t => t.Equals(Microsoft.Net.Http.Headers.EntityTagHeaderValue.Any) || t.Tag.Equals(etag, StringComparison.Ordinal));
+                return matches ? Results.StatusCode(StatusCodes.Status304NotModified) : Results.Bytes(logo, branding.LogoContentType);
+            })
+            .RequireAuthorization(IntegrationKeyHandler.AnyCredentialPolicy).WithName("IntegrationBrandingLogo")
+            .WithSummary("The admin console's logo (PNG, JPEG, WebP or SVG), with an ETag; 404 when the built-in icon is shown (no scope)");
     }
 }
