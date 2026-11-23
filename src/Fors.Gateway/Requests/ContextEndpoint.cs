@@ -18,7 +18,7 @@ namespace Fors.Gateway.Requests;
 public sealed class ContextEndpoint(RequestStages stages, GatewayCatalog catalog, IOptionsMonitor<GatewayOptions> options, TimeProvider time)
 {
     /// <summary>What this gateway supports, for clients to test instead of comparing versions. Values are only added.</summary>
-    public static IReadOnlyList<string> Features { get; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups", "organisation-name", "integration-api-url", "oidc-authority"];
+    public static IReadOnlyList<string> Features { get; } = ["max-residency", "model-facts", "integrations", "act-as-key", "run-metadata", "stream-cost", "credential-residencies", "organisation", "member-groups", "organisation-name", "integration-api-url", "oidc-authority", "organisation-logo"];
 
     /// <summary>The release version, without the commit after <c>+</c> (as <c>/version</c> reports it in full).</summary>
     private static readonly string? Version = typeof(ContextEndpoint).Assembly

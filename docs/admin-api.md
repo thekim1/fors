@@ -250,6 +250,8 @@ of its credential keys (`Authorization: Bearer fors-sk-…`) that holds the scop
   `{ from, to, granularity, groupBy, items: { period, keyId, keyName, model, step, requests, successfulRequests, inputTokens, cachedInputTokens, outputTokens, costUsd }[] }`
 - `GET /integration/v1/budgets?keyId=` (scope `usage.read`) →
   `{ keyId, items: { id, scope, scopeId, unit, limit, residency, period, periodStart, periodEnd, spent, percentUsed, exhausted }[] }`
+- `GET /integration/v1/branding/logo` (no scope) → the logo of *Settings > Branding* with its type and an `ETag`
+  (`If-None-Match` → 304), 404 when none is set.
 - 401 without a usable credential key of an active integration, 403 without the scope, 404 for a key of another
   integration, 429 above `Admin:IntegrationRequestsPerMinute` per key.
 

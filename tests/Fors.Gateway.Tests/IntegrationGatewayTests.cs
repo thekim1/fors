@@ -458,6 +458,7 @@ public sealed class IntegrationGatewayTests(GatewayFixture fixture)
         features.ShouldContain("organisation-name");
         features.ShouldContain("integration-api-url");
         features.ShouldContain("oidc-authority");
+        features.ShouldContain("organisation-logo"); // the logo itself is on the Integration API
 
         // An empty name means "show no name"; the ETag follows the change.
         await SetOrganisationNameAsync("");

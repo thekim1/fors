@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Integrations can show the admin console's logo** (feature `organisation-logo`): Källa showed the organisation's name
+  from `/v1/fors/context` but never its logo, because the logo was only on the admin console's own `/bff/branding/logo`.
+  The Integration API now serves it at `GET /integration/v1/branding/logo` to any usable credential key of an active
+  integration, without a scope (the console shows it to every visitor anyway), with its type and an `ETag` (`304` on
+  `If-None-Match`), `404` when none is set. The gateway still never loads the logo; it only announces the feature. Added
+  to `docs/openapi/integrations.json`. No configuration change.
+- **The favicon is an "F"** in the console's green, in place of the "U" mark Källa's admin UI has too, so the two
+  consoles' tabs can be told apart.
 - **No more `502 Bad Gateway` after signing in to the admin console behind nginx**: coming back from the sign-in
   provider with an old session's cookies still in the browser (after an update, for example), the callback's
   `Set-Cookie` headers outgrew nginx's default 4 KB buffer, and nginx answered 502 ("upstream sent too big header")

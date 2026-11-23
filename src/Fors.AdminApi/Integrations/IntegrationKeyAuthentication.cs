@@ -144,13 +144,20 @@ public sealed class IntegrationKeyHandler(
         return (Guid.Parse(user.FindFirst(IntegrationClaim)!.Value), Guid.Parse(user.FindFirst(KeyClaim)!.Value));
     }
 
+    /// <summary>
+    /// The policy of an endpoint any usable credential key of an active integration may read, without a scope: what the admin
+    /// console shows to every visitor anyway (the branding).
+    /// </summary>
+    public const string AnyCredentialPolicy = "integration";
+
     /// <summary>The policy name for an endpoint that needs <paramref name="scope"/>.</summary>
     public static string Policy(string scope) => "integration:" + scope;
 
-    /// <summary>One policy per known scope: this scheme only, the scope claim required.</summary>
+    /// <summary>One policy per known scope: this scheme only, the scope claim required; and <see cref="AnyCredentialPolicy"/>.</summary>
     public static void AddPolicies(Microsoft.AspNetCore.Authorization.AuthorizationOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        options.AddPolicy(AnyCredentialPolicy, p => p.AddAuthenticationSchemes(SchemeName).RequireAuthenticatedUser());
         foreach (var scope in IntegrationScopes.All)
         {
             options.AddPolicy(Policy(scope), p => p.AddAuthenticationSchemes(SchemeName).RequireAuthenticatedUser().RequireClaim(ScopeClaim, scope));

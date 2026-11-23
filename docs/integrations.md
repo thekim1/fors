@@ -270,6 +270,10 @@ chatbot's model picker and the check on save.
 - `organisation_name` (feature `organisation-name`) is the organisation's name from the admin console's branding
   (*Settings*), so a platform can show it without keeping a copy; `null` when the name is empty. The gateway reads only
   that column with its catalogue (never the logo), and a change reaches it at once through the `Config` invalidation.
+- The feature `organisation-logo` says the admin console's **logo** can be read from the Integration API
+  (`GET /integration/v1/branding/logo`, below), so a platform can show it beside `organisation_name`. It is not in the
+  context itself: the gateway never loads the logo, and an image of up to 256 KB does not belong in an answer that
+  platforms read often.
 - With the same scope each department carries **`member_groups`** (feature `member-groups`): the values of the
   identity provider's group claim whose members belong to the department, set on *Organisation* in the gateway
   ([Department scope](identity-and-roles.md#department-scope)). A platform gives a signed-in user the department's
@@ -303,6 +307,7 @@ and set `FORS_INTEGRATION_API_URL=https://adminapi:8443/integration/v1`; otherwi
 |---|---|---|
 | `usage.read` | `GET /integration/v1/usage?from=&to=&granularity=day\|month&groupBy=key,model,step&keyId=&runId=` | Requests, successful requests, tokens and cost in USD of **this integration's keys only** (credential and assigned, revoked ones included) per Europe/Stockholm day or month; `from` and `to` inclusive dates, at most 366 days; `groupBy` any of `key` (default), `model`, `step`, comma-separated, empty for one row per period. As in the Data API, a month granularity adds the monthly totals for months before the oldest kept record (they have no step); days and `runId` cover kept records only. Another integration's `keyId` is 404 |
 | `usage.read` | `GET /integration/v1/budgets?keyId=` | The active budgets that apply to one of its keys, as the gateway applies them (the key's own and its rotation predecessors', its team's, its department's): scope, unit, limit, residency, period and its current window, `spent` in the budget's unit, `percentUsed`, `exhausted` |
+| none | `GET /integration/v1/branding/logo` | The admin console's logo as uploaded under *Settings > Branding* (PNG, JPEG, WebP or SVG, at most 256 KB; an SVG has no scripts, event handlers or embedded HTML), with its type and an `ETag` that changes with it: send `If-None-Match` to get `304`. `404` when no logo is set (the console shows its built-in icon). Any usable credential key of an active integration may read it, without a scope: the console shows it to every visitor (`/bff/branding/logo`). Served with a sandboxing Content-Security-Policy; a platform that shows it should serve it from its own origin the same way, in an `img` element |
 
 Not offered: creating or changing keys, setting budgets, other keys' usage. Keys and budgets are made in the gateway
 by the people responsible for the money.

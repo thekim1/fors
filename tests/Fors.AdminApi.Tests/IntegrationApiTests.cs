@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Fors.Domain;
 using Fors.Domain.Entities;
@@ -103,6 +104,52 @@ public sealed class IntegrationApiTests(AdminFixture fixture)
 
         (await admin.PostAsync($"/api/keys/{s.CredentialId}/revoke", null, Ct)).StatusCode.ShouldBe(HttpStatusCode.OK);
         (await (await KeyClientAsync(s.Credential)).GetAsync(path, Ct)).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Any_credential_key_reads_the_branding_logo_with_an_etag_and_no_scope()
+    {
+        var s = await SetupAsync();
+        using var admin = await fixture.ClientAsync();
+        using var plain = await admin.PostAsJsonAsync("/api/keys", Key((await fixture.OrganisationAsync(admin)).Team), Ct);
+        var ordinary = (await AdminFixture.ReadAsync(plain, HttpStatusCode.Created))["secret"]!.GetValue<string>();
+        using var client = await KeyClientAsync(s.OtherCredential); // a credential key without any scope
+        try
+        {
+            using (var none = await client.GetAsync("/integration/v1/branding/logo", Ct))
+            {
+                none.StatusCode.ShouldBe(HttpStatusCode.NotFound); // the built-in icon
+            }
+
+            var svg = Encoding.UTF8.GetBytes("""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#0a6"/></svg>""");
+            using (var uploaded = await admin.PutAsJsonAsync("/api/settings/branding/logo", new { data = Convert.ToBase64String(svg) }, Ct))
+            {
+                await AdminFixture.ReadAsync(uploaded);
+            }
+
+            using var logo = await client.GetAsync("/integration/v1/branding/logo", Ct);
+            logo.StatusCode.ShouldBe(HttpStatusCode.OK);
+            logo.Content.Headers.ContentType!.MediaType.ShouldBe("image/svg+xml");
+            (await logo.Content.ReadAsByteArrayAsync(Ct)).ShouldBe(svg);
+            logo.Headers.GetValues("Content-Security-Policy").Single().ShouldContain("sandbox");
+            var etag = logo.Headers.ETag!;
+
+            using (var again = new HttpRequestMessage(HttpMethod.Get, "/integration/v1/branding/logo"))
+            {
+                again.Headers.IfNoneMatch.Add(new EntityTagHeaderValue(etag.Tag, isWeak: true)); // a proxy's W/ still matches
+                using var unchanged = await client.SendAsync(again, Ct);
+                unchanged.StatusCode.ShouldBe(HttpStatusCode.NotModified);
+            }
+
+            (await (await KeyClientAsync(ordinary)).GetAsync("/integration/v1/branding/logo", Ct)).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+            (await (await KeyClientAsync(null)).GetAsync("/integration/v1/branding/logo", Ct)).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        }
+        finally
+        {
+            using var removed = await admin.DeleteAsync("/api/settings/branding/logo", Ct);
+        }
+
+        (await client.GetAsync("/integration/v1/branding/logo", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     /// <summary>Two integrations: the first with a credential key holding usage.read and a chatbot key, the second without the scope.</summary>
