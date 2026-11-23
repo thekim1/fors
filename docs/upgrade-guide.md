@@ -11,6 +11,22 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
+## 0.13.0: the organisation logo for integrations
+
+- **Rolling update: yes** from 0.12.2. No migration, no configuration change. From 0.12.0 or 0.12.1, upgrade straight
+  to 0.13.0 and follow the 0.12.2 steps below (its first update recreates `postgres` once). From 0.11, upgrade straight
+  to 0.13.0 and follow the 0.12.2 steps for an upgrade from 0.11.
+- **nginx in front of the admin console** (#125): coming back from the sign-in provider with an old session's cookies
+  in the browser, the callback's `Set-Cookie` headers outgrew nginx's default 4 KB buffer and nginx answered
+  `502 Bad Gateway` until the user cleared their cookies. `deploy/proxy/nginx.conf.example` now has the lines below. An
+  existing `proxy/nginx.conf` (from `init-deployment.sh --proxy`) or a proxy of your own: add `proxy_buffer_size 32k;
+  proxy_buffers 8 32k; proxy_busy_buffers_size 64k; large_client_header_buffers 4 32k;` at its `http` level and reload
+  it. Nginx Proxy Manager: the admin UI host's *Advanced* tab ([runbook](runbook.md)). Kubernetes with ingress-nginx:
+  the annotation `nginx.ingress.kubernetes.io/proxy-buffer-size: 32k`, as in `deploy/kubernetes/example/ingress.yaml`.
+- **Also in 0.13.0, nothing to do:** the Integration API serves the admin console's logo at
+  `GET /integration/v1/branding/logo` to any usable credential key, and `/v1/fors/context` announces the feature
+  `organisation-logo` (#126); the favicon is an "F".
+
 ## 0.12.2: the database roles renamed by the stack
 
 - **Rolling update: yes** from 0.12.0 and 0.12.1. No migration, no configuration change. From 0.11, upgrade straight to

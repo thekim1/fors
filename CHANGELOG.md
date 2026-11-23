@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.13.0 - 2026-11-23
+
+Minor release: integrations can show the admin console's logo (feature `organisation-logo`), and the nginx example no
+longer answers `502 Bad Gateway` after signing in. No migration, no configuration change. **Rolling update: yes** from
+0.12.2; from 0.12.0 and 0.12.1 as for 0.12.2 (the first update recreates `postgres` once). From 0.11, upgrade straight
+to 0.13.0 as for 0.12.2. A proxy of your own needs bigger header buffers
+([upgrade guide](docs/upgrade-guide.md#0130-the-organisation-logo-for-integrations)).
+
 - **Integrations can show the admin console's logo** (feature `organisation-logo`): Källa showed the organisation's name
   from `/v1/fors/context` but never its logo, because the logo was only on the admin console's own `/bff/branding/logo`.
   The Integration API now serves it at `GET /integration/v1/branding/logo` to any usable credential key of an active
