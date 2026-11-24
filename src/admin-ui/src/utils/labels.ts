@@ -17,6 +17,7 @@ import type {
   ProviderCapability,
   ProviderStatus,
   RequestOutcome,
+  Role,
   RoutingScope,
   SignInValueSource,
 } from '@/api/types'
@@ -142,6 +143,14 @@ export const PROVIDER_STORAGE_HINT =
 
 export const REQUIRE_MAX_RESIDENCY_HINT =
   'Every request must send the x-fors-max-residency header (OnPrem, Eu or External), or it is refused. The header can only narrow the residencies above.'
+
+/** The admin roles and what each gives (docs/identity-and-roles.md, *Access levels*). */
+export const ROLE: Record<Role, { label: string; description: string }> = {
+  'gateway-admin': { label: 'Gateway admin', description: 'Everything, in every department.' },
+  'department-admin': { label: 'Department admin', description: 'Manage teams, keys and budgets in your departments.' },
+  viewer: { label: 'Viewer', description: 'Read usage, PII incidents and the catalogue in your departments.' },
+  'team-admin': { label: 'Team admin', description: 'Create, change, rotate and revoke the keys of your teams.' },
+}
 
 /** A key's part in an integration (docs/integrations.md). */
 export const INTEGRATION_ROLE: Record<IntegrationRole, { label: string; description: string }> = {

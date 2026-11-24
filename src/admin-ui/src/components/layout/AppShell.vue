@@ -3,21 +3,18 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { isNavItemActive, navGroups, mobileTabs, type NavItem } from '@/router/nav'
 import { useAuthStore } from '@/stores/auth'
-import { useUiStore } from '@/stores/ui'
 import { useBudgetsStore } from '@/stores/budgets'
 import { useOpsStore } from '@/stores/ops'
 import { useBrandingStore } from '@/stores/branding'
 import AppIcon from '@/components/ui/AppIcon.vue'
-import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import ToastRegion from '@/components/ui/ToastRegion.vue'
 import CommandPalette from './CommandPalette.vue'
 import BrandMark from './BrandMark.vue'
 import MobileMenu from './MobileMenu.vue'
 import SessionExpiryDialog from './SessionExpiryDialog.vue'
-import { initials } from '@/utils/format'
+import UserMenu from './UserMenu.vue'
 
 const auth = useAuthStore()
-const ui = useUiStore()
 const budgets = useBudgetsStore()
 const ops = useOpsStore()
 const branding = useBrandingStore()
@@ -39,12 +36,6 @@ function badgeCount(item: NavItem): number {
   return 0
 }
 const updateAvailable = computed(() => ops.version?.updateAvailable === true)
-
-const themes = [
-  { value: 'light' as const, label: 'Light' },
-  { value: 'dark' as const, label: 'Dark' },
-  { value: 'lumen' as const, label: 'Lumen' },
-]
 
 const now = ref(Date.now())
 const clock = setInterval(() => (now.value = Date.now()), 30_000)
@@ -142,36 +133,7 @@ async function signOut(): Promise<void> {
         </section>
       </nav>
 
-      <div class="flex flex-col gap-3">
-        <div class="hidden lg:block">
-          <SegmentedControl
-            :model-value="ui.theme"
-            :options="themes"
-            label="Theme"
-            mode="radio"
-            full
-            @update:model-value="ui.setTheme($event)"
-          />
-        </div>
-        <div class="flex items-center gap-2.5 rounded-[12px] bg-surface p-2 shadow-1 max-lg:flex-col max-lg:px-1">
-          <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-caption font-semibold text-accent-ink" aria-hidden="true">
-            {{ initials(auth.user?.name ?? auth.user?.email ?? '?') }}
-          </span>
-          <span class="hidden min-w-0 flex-1 leading-4 lg:block">
-            <span class="block truncate text-[13px] font-medium text-fg" lang="sv">{{ auth.user?.name ?? auth.user?.email }}</span>
-            <span class="block truncate text-caption text-fg-3">{{ auth.roles[0] }}</span>
-          </span>
-          <button
-            type="button"
-            class="flex size-8 shrink-0 items-center justify-center rounded-[8px] text-fg-2 hover:bg-hover hover:text-fg"
-            :aria-disabled="signingOut"
-            @click="signOut"
-          >
-            <AppIcon name="logout" />
-            <span class="sr-only">Sign out</span>
-          </button>
-        </div>
-      </div>
+      <UserMenu :signing-out="signingOut" @sign-out="signOut" />
     </aside>
 
     <div class="flex min-w-0 flex-1 flex-col">
@@ -240,7 +202,6 @@ async function signOut(): Promise<void> {
     :groups="groups"
     :badge-count="badgeCount"
     :update-available="updateAvailable"
-    :themes="themes"
     :session-left="sessionLeft"
     :signing-out="signingOut"
     @search="paletteOpen = true"

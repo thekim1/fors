@@ -3,25 +3,21 @@ import { watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { isNavItemActive, type NavGroup, type NavItem } from '@/router/nav'
 import { useAuthStore } from '@/stores/auth'
-import { useUiStore, type Theme } from '@/stores/ui'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import ModalDialog from '@/components/ui/ModalDialog.vue'
-import SegmentedControl from '@/components/ui/SegmentedControl.vue'
-import { initials } from '@/utils/format'
+import UserMenu from './UserMenu.vue'
 
 const props = defineProps<{
   open: boolean
   groups: NavGroup[]
   badgeCount: (item: NavItem) => number
   updateAvailable: boolean
-  themes: { value: Theme; label: string }[]
   sessionLeft: string | null
   signingOut: boolean
 }>()
 const emit = defineEmits<{ (e: 'update:open', v: boolean): void; (e: 'search'): void; (e: 'sign-out'): void }>()
 
 const auth = useAuthStore()
-const ui = useUiStore()
 const route = useRoute()
 
 // Close once a link has been followed, also when it points at the page already open.
@@ -42,7 +38,7 @@ function search(): void {
   >
     <header class="flex items-center justify-between gap-3 px-5 pb-2 pt-4">
       <h2 :id="titleId" class="text-title-3">Menu</h2>
-      <p :id="descriptionId" class="sr-only">All pages, theme and your account.</p>
+      <p :id="descriptionId" class="sr-only">All pages and your account.</p>
       <button type="button" aria-label="Close menu" class="grid size-10 place-items-center rounded-control text-fg-2 hover:bg-hover" @click="emit('update:open', false)">
         <AppIcon name="close" />
       </button>
@@ -86,7 +82,6 @@ function search(): void {
       </nav>
 
       <div class="mt-6 flex flex-col gap-3 border-t border-border px-2 pt-4">
-        <SegmentedControl :model-value="ui.theme" :options="themes" label="Theme" mode="radio" full @update:model-value="ui.setTheme($event)" />
         <div class="flex items-center gap-2 text-caption">
           <span
             class="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-[13px] px-2.5 font-medium"
@@ -94,23 +89,7 @@ function search(): void {
           ><span class="size-1.5 rounded-full" :class="auth.isDevelopment ? 'bg-warn' : 'bg-ok'" aria-hidden="true"></span>{{ auth.isDevelopment ? 'Development' : 'Production' }}</span>
           <span v-if="sessionLeft" class="tabular text-fg-3">Session: {{ sessionLeft }}</span>
         </div>
-        <div class="flex items-center gap-3 rounded-[12px] bg-surface p-2.5 shadow-1">
-          <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-caption font-semibold text-accent-ink" aria-hidden="true">
-            {{ initials(auth.user?.name ?? auth.user?.email ?? '?') }}
-          </span>
-          <span class="min-w-0 flex-1 leading-5">
-            <span class="block truncate text-body font-medium text-fg" lang="sv">{{ auth.user?.name ?? auth.user?.email }}</span>
-            <span class="block truncate text-caption text-fg-3">{{ auth.roles[0] }}</span>
-          </span>
-          <button
-            type="button"
-            class="flex h-ctl-lg shrink-0 items-center gap-1.5 rounded-control px-3 text-small font-medium text-fg-2 hover:bg-hover hover:text-fg"
-            :aria-disabled="signingOut"
-            @click="emit('sign-out')"
-          >
-            <AppIcon name="logout" /> Sign out
-          </button>
-        </div>
+        <UserMenu place="sheet" :signing-out="signingOut" @sign-out="emit('sign-out')" />
       </div>
     </div>
   </ModalDialog>

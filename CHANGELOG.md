@@ -26,6 +26,12 @@
     wrapping card headers and tabs at phone width, `CheckField hideLabel`, `DataTable rowTo`, `ConfirmDialog confirmName`.
   - **Checks:** the accessibility spec scans every page at 390 px in the three themes and the new menus, sheet, chips and
     save bar while open; the target-size check skips visually hidden controls.
+- **A user menu from the side menu's user card** (#127): the card with your name now opens a menu with the theme switch
+  (Light, Dark, Lumen; it was above the card, and missing on medium-wide screens), **Your access** (the roles,
+  departments and teams of your sign-in, and whether each department came from the department claim or a member group)
+  and **Sign out**. It is an APG menu button (arrow keys, Home, End, Esc returns focus to the card); on a phone, in the
+  bottom menu, it opens as a sheet with a Close button. The shared `MenuButton` gains groups of choices
+  (`menuitemradio`), `align="start"` and a button of its own content, which Källa's shell can follow. The theme's storage key (`fors-theme`) and the three themes are unchanged.
 
 ## 0.13.0 - 2026-11-23
 
