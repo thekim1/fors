@@ -31,12 +31,10 @@ What breaks the rules on more than one page.
 | 9 One rhythm | Settings cards are 680, 768 or 576 px wide; status pages start with lists, not tiles | Settings, Health & operations, PII incidents | One width for every Settings card; up to four `SummaryTile`s on top of Health & operations and PII incidents |
 | 10 Phone | The primary action keeps its own width on its own row and secondary actions sit beside it; segmented controls wrap to a second row; tiles are one per row; list and detail pages stack the whole list above the detail | Every page with a header action; Keys, Routing rules, Usage › Dashboard (segmented); Overview, PII incidents (tiles); Organisation, Routes, Routing rules (list and detail) | The primary action across the width beside a ⋯ that holds the secondary actions (`MenuButton` `phoneOnly`); filters as chips; tiles two by two; see [Q1](#q1-list-and-detail-pages) |
 
-Two things that are not layout, found on the way (to check before the layout work):
-
-- **Usage › Dashboard shows nothing below its filters** when there is no usage, in every theme and at both widths: no
-  cards and no empty state. The cards render only `v-if="data && totals"` (`UsageDashboard.vue`).
-- **Settings › Model prices, Sign-in and Version** showed only their titles on the test stack. Each renders its body
-  `v-if` its data, so an empty answer leaves an empty card. Check what the admin API answers there.
+One thing that is not layout, found on the way: **sections showed nothing while loading.** Usage › Dashboard, the
+Usage summary and request list, the Overview, Budgets & alerts and every Settings card passed `empty="false"` to
+`AsyncState`, which then never says *Loading…*: until the data arrived they were an empty space (or "No open alerts"),
+which in the screenshots (taken 400 ms after navigation) looked like empty pages. Fixed in #134 (step 0).
 
 ## Page by page
 
@@ -47,7 +45,7 @@ the table on every load (rule 5): behind a *Details* disclosure or the column he
 **Usage › Dashboard.** Rule 2: a segmented period (24 hours, 7 days, 30 days, 90 days, Custom with two date fields and
 *Apply*) and seven labelled selects, not in the address; the Requests tab beside it already has chips. Fix: the same
 chips as the Requests tab, kept in the address under the same names, so switching tabs keeps the filters
-([Q3](#q3-one-period-picker)). Rule 10: the segmented period wraps at 390 px. Plus the empty-dashboard bug above.
+([Q3](#q3-one-period-picker)). Rule 10: the segmented period wraps at 390 px.
 
 **Usage › Requests and costs.** Done in #131. Left: the *Group by* select is full size with its label above, at the
 summary's heading (rule 3: a compact select, label beside it), and *Look up a request* sits at the end of the page
@@ -118,8 +116,7 @@ filter in the admin API ([Q5](#q5-audit-log-filters)).
 
 **Settings.** Save bar done on three cards (#131). Rule 9: cards are 680, 768 or 576 px wide; one width (680 px).
 Rule 3: *Proxy addresses* is a text area with one address per line; Källa uses a chip input for lists of hosts. Rule
-4 and 10: seven cards on one page, about 2 300 px at 1 440 and longer on a phone ([Q6](#q6-settings-structure)). Plus
-the empty cards above.
+4 and 10: seven cards on one page, about 2 300 px at 1 440 and longer on a phone ([Q6](#q6-settings-structure)).
 
 **No access, Page not found, Setup.** No findings.
 
@@ -207,7 +204,8 @@ Recommendation: **A**, as Källa did (*Enabled* "Yes" shown only when it is *Off
 Smallest first; each a pull request of its own, with its unit tests, the browser specs it touches run locally
 (`scripts/Start-E2E.ps1`), and the docs and CHANGELOG.
 
-0. **The two bugs:** the Usage dashboard's empty state, and the Settings cards that stay empty.
+0. **Loading states** (done in #134): sections say *Loading…* instead of showing nothing, and the accessibility spec
+   scans them with their content.
 1. **Quiet zeros and badges** (rule 8, [Q7](#q7-status-badges-for-the-normal-state)), **field widths** (rule 3, every
    drawer and dialog), **one Settings card width** (rule 9), and the duplicate *Back to operations* (rule 5). About a
    day.
