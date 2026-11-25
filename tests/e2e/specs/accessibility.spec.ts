@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import axe from 'axe-core'
 import { expect, test, type Page } from '@playwright/test'
-import { chooseMenuItem, login, mutate, openRow, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls } from '../helpers'
+import { chooseMenuItem, login, mutate, openRow, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls, userMenu } from '../helpers'
 
 // The design target is WCAG 2.2 AA. AAA rules (7:1 contrast and so on) are not part of the gate: the old
 // high-contrast themes that met them are gone (the target is WCAG 2.2 AA, see docs/accessibility-statement.md).
@@ -86,6 +86,66 @@ for (const theme of themes) {
   })
 }
 
+for (const theme of themes) {
+  // Layout rules 10 and 11: every page at phone width, in each theme.
+  test(`every routed page passes the WCAG A/AA axe rules at 390 px in ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await login(page)
+    await useTheme(page, theme)
+    for (const path of pages) {
+      await ready(page, path)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await scan(page, `${theme}, 390 px: ${path}`)
+    }
+  })
+
+  // The shared components in their open states: the ⋯ menu and its phone sheet, the user menu and Your access, filter
+  // chips with a custom period, and the save bar.
+  test(`menus, filter chips and the save bar pass axe while open in ${theme}`, async ({ page }) => {
+    await login(page)
+    await useTheme(page, theme)
+
+    await ready(page, '/')
+    await userMenu(page).click()
+    await expect(page.getByRole('menu')).toBeVisible()
+    await scan(page, `${theme}: user menu`)
+    await page.getByRole('menuitem', { name: 'Your access' }).click()
+    await expect(page.getByRole('dialog', { name: 'Your access' })).toBeVisible()
+    await scan(page, `${theme}: your access`)
+    await page.keyboard.press('Escape')
+
+    await ready(page, '/organisation')
+    await page.getByRole('main').getByRole('button', { name: /^More actions for / }).first().click()
+    await expect(page.getByRole('menu')).toBeVisible()
+    await scan(page, `${theme}: ⋯ menu`)
+    await page.keyboard.press('Escape')
+
+    await ready(page, '/pii-incidents?period=custom&category=Email')
+    await expect(page.getByLabel('From')).toBeVisible()
+    await scan(page, `${theme}: filter chips with a custom period`)
+
+    await ready(page, '/settings')
+    const name = page.getByLabel('Organisation name')
+    await name.fill(`${await name.inputValue()} (a11y)`)
+    const bar = page.getByRole('region', { name: 'Unsaved changes' })
+    await expect(bar).toBeVisible()
+    await scan(page, `${theme}: save bar`)
+    await bar.getByRole('button', { name: 'Discard' }).click()
+    await page.getByRole('dialog', { name: /^Discard / }).getByRole('button', { name: 'Discard' }).click()
+    await expect(bar).toBeHidden()
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await ready(page, '/organisation')
+    await page.getByRole('main').getByRole('button', { name: /^More actions for / }).first().click()
+    const sheet = page.getByRole('dialog', { name: /^More actions for / })
+    await expect(sheet).toBeVisible()
+    await scan(page, `${theme}, 390 px: ⋯ menu sheet`)
+    await sheet.getByRole('button', { name: 'Close' }).last().click()
+    await ready(page, '/usage?tab=requests&outcome=errors')
+    await scan(page, `${theme}, 390 px: filter chips`)
+  })
+}
+
 test('all pages reflow at 320px and at 200 percent text size', async ({ page }) => {
   await login(page)
   for (const width of [320, 640]) {
@@ -109,13 +169,23 @@ test('keyboard: landmarks on desktop, skip link on small screens, page heading f
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Keys' }).click()
   await expect(page.locator('#page-title')).toBeFocused()
 
-  // The roving radio group changes the theme with the arrow keys.
-  const group = page.getByRole('radiogroup', { name: 'Theme' })
-  await group.getByRole('radio', { checked: true }).focus()
+  // The user menu (an APG menu button) changes the theme by keyboard and returns focus to its button.
+  const account = userMenu(page)
+  await account.focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('menu')).toBeVisible()
+  await expect(page.getByRole('menuitemradio').first()).toBeFocused()
   const before = await page.locator('html').getAttribute('data-theme')
-  await page.keyboard.press('ArrowRight')
+  const next = page.getByRole('menuitemradio', { checked: false }).first()
+  const nextName = await next.textContent()
+  while (!(await next.evaluate(el => el === document.activeElement))) await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
   await expect(page.locator('html')).not.toHaveAttribute('data-theme', before!)
-  await expect(group.getByRole('radio', { checked: true })).toBeFocused()
+  await expect(account).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('menuitemradio', { name: nextName!, checked: true })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(account).toBeFocused()
 
   // The skip link is part of the mobile layout.
   await page.setViewportSize({ width: 390, height: 800 })

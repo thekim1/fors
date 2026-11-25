@@ -182,4 +182,31 @@ describe('MenuButton (layout rule 1)', () => {
     expect(openMenu().find('[data-test=menu-compare]').exists()).toBe(false)
     wrapper.unmount()
   })
+
+  it('shows a choice as a checked menuitemradio, opens from the button\'s left edge and takes its own button content', async () => {
+    phone(false)
+    const choices: MenuItem[] = [
+      { key: 'light', label: 'Theme: Light', checked: true },
+      { key: 'dark', label: 'Theme: Dark', checked: false },
+      { key: 'out', label: 'Sign out', separated: true },
+    ]
+    const wrapper = mount(MenuButton, {
+      props: { label: 'Account menu for Anna', items: choices, align: 'start', buttonClass: 'card' },
+      slots: { default: () => h('span', { 'data-test': 'avatar' }, 'AA') },
+      attachTo: document.body,
+    })
+    const button = wrapper.get('[data-test=menu-button]')
+    expect(button.classes()).toEqual(['card'])
+    expect(button.find('[data-test=avatar]').exists()).toBe(true)
+    await button.trigger('click')
+    await flushPromises()
+    const menu = openMenu()
+    expect(menu.attributes('style')).toContain('left:')
+    const radios = menu.findAll('[role=menuitemradio]')
+    expect(radios.map((r) => r.attributes('aria-checked'))).toEqual(['true', 'false'])
+    expect(menu.findAll('[role=menuitem]')).toHaveLength(1)
+    expect(menu.findAll('li').at(-1)!.classes()).toContain('border-t')
+    await radios[1]!.trigger('click')
+    expect(wrapper.emitted('select')).toEqual([['dark']])
+  })
 })

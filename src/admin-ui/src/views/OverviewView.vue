@@ -13,7 +13,8 @@ import { requestsLink } from '@/utils/requestsLink'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import AttentionCard from '@/components/ui/AttentionCard.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
-import MetricTile from '@/components/ui/MetricTile.vue'
+import UiMeter from '@/components/ui/UiMeter.vue'
+import SummaryTile from '@/components/ui/SummaryTile.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiCard from '@/components/ui/UiCard.vue'
@@ -73,6 +74,12 @@ const failedLast24h = computed(() => requestsLink({ from: toIsoDate(new Date(Dat
 const errorRate = computed(() => {
   const total = last24h.value?.totalRequests ?? 0
   return total > 0 ? ((last24h.value?.totalErrors ?? 0) / total) * 100 : null
+})
+/** Rule 8: only a tile that needs action says so, in text as well as by its border. */
+const budgetAttention = computed(() => {
+  const used = budgetPercent.value
+  if (used === null || used < 80) return null
+  return used >= 100 ? 'Department budgets are used up' : 'Over 80 % of department budgets used'
 })
 const p95 = computed(() => {
   const values = (ops.health?.providers ?? []).map((p) => p.p95FirstTokenMs).filter((v): v is number => v !== null)
@@ -142,34 +149,33 @@ const providerRows = computed(() => ops.health?.providers.filter((p) => p.isEnab
     <section aria-labelledby="figures-h" class="mb-8">
       <h2 id="figures-h" class="sr-only">Key figures</h2>
       <div class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
-        <MetricTile
-          label="Spend this month"
+        <SummaryTile
+          title="Spend this month"
           :value="formatUsdCost(month?.totalCostUsd)"
-          :meter="budgetPercent"
-          meter-label="Share of department budgets used"
-          :context="budgetPercent === null ? 'Estimate, not an invoice' : `${formatPercent(budgetPercent)} of department budgets`"
-        />
-        <MetricTile label="Requests, 24 h" :value="formatNumber(last24h?.totalRequests)">
-          <template #context>
-            <router-link v-if="(last24h?.totalErrors ?? 0) > 0" :to="failedLast24h" class="font-medium text-accent-ink underline">
-              {{ formatNumber(last24h?.totalErrors) }} errors<span class="sr-only">: show the failed requests</span>
-            </router-link>
-            <template v-else>{{ formatNumber(last24h?.totalErrors) }} errors</template>
-          </template>
-        </MetricTile>
-        <MetricTile label="Error rate, 24 h" :value="formatPercent(errorRate)">
-          <template #context>
-            <template v-if="errorRate === null">No traffic in 24 h</template>
-            <template v-else>
-              Failed requests of all requests<template v-if="(last24h?.totalErrors ?? 0) > 0">.
-                <router-link :to="failedLast24h" class="font-medium text-accent-ink underline">Show them</router-link></template>
-            </template>
-          </template>
-        </MetricTile>
-        <MetricTile
-          label="Provider first token p95"
+          :detail="budgetPercent === null ? 'Estimate, not an invoice' : `${formatPercent(budgetPercent)} of department budgets`"
+          :attention="budgetAttention"
+        >
+          <UiMeter v-if="budgetPercent !== null" :value="budgetPercent" label="Share of department budgets used" thin />
+        </SummaryTile>
+        <SummaryTile title="Requests, 24 h" :value="formatNumber(last24h?.totalRequests)" :quiet="!last24h?.totalRequests">
+          <router-link v-if="(last24h?.totalErrors ?? 0) > 0" :to="failedLast24h" class="font-medium text-accent-ink underline">
+            {{ formatNumber(last24h?.totalErrors) }} errors<span class="sr-only">: show the failed requests</span>
+          </router-link>
+          <span v-else class="text-fg-3">No errors</span>
+        </SummaryTile>
+        <SummaryTile
+          title="Error rate, 24 h"
+          :value="formatPercent(errorRate)"
+          :quiet="!errorRate"
+          :detail="errorRate === null ? 'No traffic in 24 h' : 'Failed requests of all requests'"
+        >
+          <router-link v-if="(last24h?.totalErrors ?? 0) > 0" :to="failedLast24h" class="font-medium text-accent-ink underline">Show them</router-link>
+        </SummaryTile>
+        <SummaryTile
+          title="Provider first token p95"
           :value="formatMs(p95)"
-          :context="auth.isGatewayAdmin ? (p95 === null ? 'No streamed answers in 24 h' : 'Slowest provider, streamed answers, 24 h') : 'Visible to gateway admins'"
+          :quiet="p95 === null"
+          :detail="auth.isGatewayAdmin ? (p95 === null ? 'No streamed answers in 24 h' : 'Slowest provider, streamed answers, 24 h') : 'Visible to gateway admins'"
         />
       </div>
     </section>
