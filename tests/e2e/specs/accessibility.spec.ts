@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import axe from 'axe-core'
 import { expect, test, type Page } from '@playwright/test'
-import { chooseMenuItem, login, mutate, openRow, openUserMenu, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls, userMenuButton } from '../helpers'
+import { chooseMenuItem, login, mutate, openRow, openUserMenu, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls, userMenuButton, watchCsp } from '../helpers'
 
 // The design target is WCAG 2.2 AA. AAA rules (7:1 contrast and so on) are not part of the gate: the old
 // high-contrast themes that met them are gone (the target is WCAG 2.2 AA, see docs/accessibility-statement.md).
@@ -24,6 +24,7 @@ async function useTheme(page: Page, theme: string): Promise<void> {
 
 for (const theme of themes) {
   test(`every routed page passes the WCAG A/AA axe rules in ${theme}`, async ({ page }) => {
+    const csp = watchCsp(page)
     await login(page)
     await useTheme(page, theme)
     for (const path of pages) {
@@ -31,6 +32,7 @@ for (const theme of themes) {
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
       await scan(page, `${theme}: ${path}`)
     }
+    expect(csp, 'Content-Security-Policy violations').toEqual([])
   })
 
   test(`drawers and dialogs pass axe in ${theme}`, async ({ page }) => {
@@ -96,12 +98,14 @@ for (const theme of themes) {
   test(`every routed page passes the WCAG A/AA axe rules at 390 px in ${theme}`, async ({ page }) => {
     await login(page)
     await useTheme(page, theme)
+    const csp = watchCsp(page)
     await page.setViewportSize({ width: 390, height: 844 })
     for (const path of pages) {
       await ready(page, path)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
       await scan(page, `${theme}, 390 px: ${path}`)
     }
+    expect(csp, 'Content-Security-Policy violations').toEqual([])
   })
 
   // The shared components in their open states: the ⋯ menu and its phone sheet, filter chips with a custom period, and
@@ -142,18 +146,19 @@ for (const theme of themes) {
   })
 }
 
-test('all pages reflow at 320px and at 200 percent text size', async ({ page }) => {
-  await login(page)
-  for (const width of [320, 640]) {
+// One test per width: every page waits for its content, and twenty pages twice do not fit one test's time.
+for (const [width, label] of [[320, 'at 320px'], [640, 'at 200 percent text size']] as const) {
+  test(`all pages reflow ${label}`, async ({ page }) => {
+    await login(page)
     await page.setViewportSize({ width, height: 900 })
     for (const path of pages) {
       await ready(page, path)
       if (width === 640) await page.evaluate(() => { document.documentElement.style.fontSize = '200%' })
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
-      expect(overflow, `${width}px: ${path}`).toBe(false)
+      expect.soft(overflow, `${width}px: ${path}`).toBe(false)
     }
-  }
-})
+  })
+}
 
 test('keyboard: landmarks on desktop, skip link on small screens, page heading focus, the user menu', async ({ page }) => {
   await login(page)

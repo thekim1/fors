@@ -223,9 +223,10 @@ Set-Location ..\..
 The test stack uses the same ports as the dev stack, so stop the dev stack first. The tests cover sign-in, keys
 (show-once secret, rotation, revocation), organisation, usage, audit, budgets, the demo scenario, routing
 rules (create, validate, test, reorder, disable, delete, team and department deletion and reassignment, key rotation, `budget_used`/`tokens_used`, with real gateway
-requests) and accessibility (axe at WCAG 2.2 AA in the three themes at 1 280 and 390 px, drawers and dialogs, the
-⋯ menus and their phone sheet, filter chips and the save bar while open, reflow, keyboard, forced
-colours, target size). They do not save screenshots, videos, traces or storage state.
+requests) and accessibility (axe at WCAG 2.2 AA on every page and tab in the three themes at 1 280 and 390 px, with no
+Content-Security-Policy violation; drawers and dialogs, the ⋯ menus and their phone sheet, filter chips and the save bar
+while open; reflow, keyboard, forced colours, target size). The pages are `pages` in `tests/e2e/helpers.ts`; the admin
+UI's `router/a11yPages.spec.ts` fails when a routed page is missing from it. They do not save screenshots, videos, traces or storage state.
 No manual screen reader testing is planned; open follow-ups are listed in [HANDOVER.md](../HANDOVER.md).
 
 To regenerate the routing screenshots in `docs/images` after a UI change, run

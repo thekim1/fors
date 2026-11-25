@@ -190,8 +190,23 @@ export async function openUserMenu(page: Page): Promise<Locator> {
 }
 
 /** Every page in src/admin-ui/src/router/index.ts, plus the 404 page. Keep in sync with the router. */
-export const pages = ['/', '/usage', '/usage?tab=requests', '/pii-incidents', '/operations', '/keys', '/organisation', '/catalog',
-  '/routes', '/routing-rules', '/providers', '/budgets', '/audit', '/settings', '/forbidden', '/no-such-page']
+/**
+ * Every page of the admin UI's router (src/admin-ui/src/router/index.ts), with the tabs and views that show other
+ * content (?tab=, ?show=), plus the 403 and 404 pages, as Källa's accessibility spec scans them. Setup is public and has
+ * its own spec (setup.spec.ts). Keep it in step with the router: src/admin-ui/src/router/a11yPages.spec.ts checks it.
+ */
+export const pages = ['/', '/usage', '/usage?tab=requests', '/operations', '/operations/stability', '/pii-incidents', '/keys',
+  '/organisation', '/integrations', '/data-access', '/catalog', '/routes', '/routing-rules', '/providers', '/providers?show=models',
+  '/budgets', '/audit', '/settings', '/forbidden', '/no-such-page']
+
+/** Content-Security-Policy violations the browser reports on the console while the test runs, as Källa's spec checks. */
+export function watchCsp(page: Page): string[] {
+  const violations: string[] = []
+  page.on('console', message => {
+    if (/Content Security Policy|Content-Security-Policy/i.test(message.text())) violations.push(message.text())
+  })
+  return violations
+}
 
 export async function ready(page: Page, path: string): Promise<void> {
   await page.goto(path)
