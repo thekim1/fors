@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **The accessibility spec scans every page** (thekim1/fors#130 part D, as Källa's spec does): Integrations, Data API
+  access, Provider stability and *Providers & models › Models* were not in its list. Every page is scanned with axe in the
+  three themes at 1 280 and 390 px and checked for reflow at 320 px and 200 % text; the scans fail on a
+  Content-Security-Policy violation; the reflow check reports every page that scrolls sideways, not only the first. A
+  unit test (`router/a11yPages.spec.ts`) fails when a page is added to the router but not to the list. Källa's
+  target-size fix (visually hidden controls are not targets, thekim1/kalla#1089) was taken in #131.
 - **Pages say they are loading.** Usage (the dashboard, the summary and the request list), the Overview, Budgets &
   alerts and every Settings card showed an empty space, or "No open alerts", until their data arrived, which on a busy
   or slow connection looked like an empty page. They now show *Loading…* on their first load and keep what they show
