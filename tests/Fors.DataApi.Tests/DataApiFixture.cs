@@ -57,14 +57,22 @@ public sealed class DataApiFixture : IAsyncLifetime
             // Revocation in the tests takes effect at once; production caches keys for DataApi:KeyCacheSeconds.
             builder.UseSetting("DataApi:KeyCacheSeconds", "0");
             builder.ConfigureLogging(logging => logging.AddProvider(Logs));
-            builder.ConfigureTestServices(services => services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, o =>
+            builder.ConfigureTestServices(services =>
             {
-                // No metadata download: the issuer and key are given directly.
-                o.Configuration = new OpenIdConnectConfiguration { Issuer = Issuer };
-                o.Configuration.SigningKeys.Add(_signingKey);
-                o.TokenValidationParameters.ValidIssuer = Issuer;
-                o.TokenValidationParameters.IssuerSigningKey = _signingKey;
-            }));
+                // With DataApi:SettleSeconds 0 the feeds' cutoff is the host's "now", and a row just written got its
+                // RecordedAt from the database's clock: a few milliseconds of skew between the two (Docker Desktop)
+                // left it unsettled and the feed empty. The API's clock runs a few seconds ahead instead, so a row
+                // written by the test has always settled; the tests' own times are minutes apart.
+                services.AddSingleton<TimeProvider>(new AheadTimeProvider(TimeSpan.FromSeconds(5)));
+                services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, o =>
+                {
+                    // No metadata download: the issuer and key are given directly.
+                    o.Configuration = new OpenIdConnectConfiguration { Issuer = Issuer };
+                    o.Configuration.SigningKeys.Add(_signingKey);
+                    o.TokenValidationParameters.ValidIssuer = Issuer;
+                    o.TokenValidationParameters.IssuerSigningKey = _signingKey;
+                });
+            });
         });
     }
 
@@ -160,4 +168,10 @@ public sealed class DataApiFixture : IAsyncLifetime
 
         await _postgres.DisposeAsync();
     }
+}
+
+/// <summary>The system clock, <paramref name="ahead"/> later (see the fixture's test services).</summary>
+internal sealed class AheadTimeProvider(TimeSpan ahead) : TimeProvider
+{
+    public override DateTimeOffset GetUtcNow() => System.GetUtcNow() + ahead;
 }
