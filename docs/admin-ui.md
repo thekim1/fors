@@ -25,8 +25,22 @@ team*) that is in the team admins' `teamCodes` claim; see [Identity provider and
 Edit department › Member groups*, one per line). Users in one of them see the department after their next sign-in,
 without a department code on each account; see [Department scope](identity-and-roles.md#department-scope).
 
+**Your account.** The card with your name at the bottom of the side menu opens a menu with the theme (*Light*, *Dark*,
+*Lumen*), **Your access** (your roles, departments and teams, and whether a department came from your sign-in's
+department claim or from one of its member groups) and **Sign out**.
+
+**Saving.** A form with fields saves through a bar at its bottom: *n unsaved changes · Discard · Save changes*, with what
+saving does. *Discard* asks once. Leaving the page, or closing a drawer by ×, Esc or *Cancel*, with unsaved changes asks
+first. **Rare and destructive actions** (*Delete…*, *Revoke…*, *Change owners*) are on a **⋯** menu beside the page's
+or the row's buttons, *Delete* last and red, each behind its confirmation.
+
+**Filters** on *Usage › Requests and costs* and *PII incidents* are one row of chips: a period (*Last 7 days*, *Last 30
+days*, *This month*, *Custom…*) and one chip per filter, coloured with an × of its own when set, and *Clear filters*
+while any is. They apply as they change, and the address keeps them (`/pii-incidents?period=7d&category=Email`), so a
+filtered view can be bookmarked or sent, and survives a reload.
+
 **On a phone** the bar at the bottom has Overview, Alerts, Keys and Health, plus **Menu**. Menu opens every page (same groups
-as the side menu), search, the theme switch, your session and **Sign out**. Close it with ×, Esc, a tap outside, or by
+as the side menu), search, the theme switch, your session, **Your access** and **Sign out**. Close it with ×, Esc, a tap outside, or by
 choosing a page. Search opens full screen with the field at the top, so the keyboard never covers the results; **Cancel**
 closes it.
 
@@ -149,9 +163,9 @@ or pick one outcome (provider error, over budget, rate limited, PII blocked, rej
 under each outcome. In the summary table each **Errors** count is a link that lists that row's failed requests (its
 department, team, key, model, provider or day); *Show the failed requests* under the summary lists all of them. Model,
 provider and outcome only filter the request list, not the summary. On **Overview**, the error count and error rate of
-the last 24 hours link to the failed requests of yesterday and today. Other pages can link to the list with
-`/usage?tab=requests&outcome=errors&from=yyyy-mm-dd&to=yyyy-mm-dd` (also `departmentId`, `teamId`, `keyId`, `model`,
-`provider`); the filters are applied once and dropped from the address.
+the last 24 hours link to the failed requests of yesterday and today. The address keeps the filters, so other pages
+link to the list with them: `/usage?tab=requests&outcome=errors&period=custom&from=yyyy-mm-dd&to=yyyy-mm-dd` (also
+`departmentId`, `teamId`, `keyId`, `model`, `provider`, and `group` for the summary's grouping).
 
 ## Routing rules page
 
@@ -204,3 +218,45 @@ models.dev)*; the **Price** filter shows one kind. A model that follows models.d
 **Price from models.dev** in the model drawer, or **Prices from models.dev** in the provider drawer for all its models, to
 set your own. The price history has a **Source** column: the models.dev entry a price came from, or *Admin*. A model's
 **Description** is shown in the catalogue. See [List prices](providers-and-models.md#list-prices).
+
+## Layout rules
+
+Every page is built, and every new page reviewed, against these rules. They are Källa's (its admin design §5.12,
+from its UX pass of 2026-11-23); both admin UIs follow them so they look and behave alike. They change no token, font,
+radius, colour or icon set.
+
+1. **One primary action per view.** A filled button only for the one thing the page is for. Other frequent actions are
+   outlined; rare and destructive ones go on a ⋯ menu (`MenuButton`), *Delete* last and red, behind its confirmation.
+2. **Data first, controls second.** A list shows on the first screen. Filters are one row of chips (`FilterChip`,
+   `FilterTextChip`, `PeriodPicker`) kept in the address (`useQueryFilters`): a set filter is coloured, an unset one quiet.
+3. **A field is as wide as its answer.** Numbers 8 to 12 characters (`TextField short`), names and selects about 320 to
+   400 px (`max-w-sm`), free text up to the form's width. A form column is at most 680 px.
+4. **Group by the question people ask** ("Is it working?", "What does it cost?"), not by the data model.
+5. **Say it once.** Text that repeats on every row goes into a summary or onto the row's menu.
+6. **At most six tabs**, each a noun people recognise; the tab is in the address (`?tab=`, `useTabQuery`), the first tab
+   left out.
+7. **One way to save:** the save bar (`SaveBar` with `useDirty`) and a leave guard (`useUnsavedGuard`; a drawer's
+   `unsaved`).
+8. **Colour only for what needs attention.** Zeros, "none", "never" and "not yet" are grey text (`text-fg-3`). Green is
+   for a state someone waits for; amber and red for something to do.
+9. **One rhythm.** Lists use the full width, forms one column; a page's figures are up to four summary tiles
+   (`SummaryTile`), and the one that needs action says so in text besides its border.
+10. **As good on a phone.** One column below 760 px with no sideways scrolling down to 320 px; menus become bottom
+    sheets; touch targets are at least 44 × 44 px on a phone (`max-md:h-11`).
+11. **Accessible by construction:** WCAG 2.2 AA in the three themes and at phone width. Fors checks this automatically
+    (`tests/e2e/specs/accessibility.spec.ts`: axe on every page and on the menus, sheets, filter chips and save bar while
+    open, at 1 280 and 390 px; reflow at 320 px; target size; keyboard and focus), and does not plan a manual
+    screen-reader pass (see the [accessibility statement](accessibility-statement.md)).
+
+Also: a page under another has a breadcrumb above its title (`PageBreadcrumb`) and the menu keeps its parent lit; a
+section's title is inside the card it titles; a radio card shows its choice with `has-checked:bg-accent-soft
+has-checked:shadow-inset-selected`, not only by its dot.
+
+### Shared with Källa
+
+Källa's admin UI copies Fors's design system: the files in its `src/admin-ui/design-system.lock` (the Tailwind config,
+`styles/`, the icon fonts, `components/ui/`, the shell in `components/layout/`) and the components and composables of
+the layout rules above. **A change to one of them is offered to Källa too** (an issue in thekim1/kalla), and a change
+Källa makes to one comes back here, so the two stay alike. The shared components read their texts from the shared label
+groups at the end of `src/utils/labels.ts` (`COMMON`, `SHELL`, `UNSAVED`, `FILTERS`, `MENU`), with the same names and
+keys in both repositories, so the files copy unchanged.

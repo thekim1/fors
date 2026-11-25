@@ -11,9 +11,10 @@ baslinjen enligt DOS-lagen och EN 301 549. AAA var det ursprungliga målet men g
 längre; AAA-regler kontrolleras inte. Vi **påstår inte WCAG-certifiering eller full
 överensstämmelse**. Automatiska kontroller kan inte avgöra alla kriterier.
 
-Verifierat automatiskt (Playwright mot en körande stack, 34 tester): axe-regler för WCAG
-2.2 A/AA på alla routade sidor och på formulärpaneler och dialoger (inklusive Routingregler)
-i de tre temana ljus, mörk och Lumen; målstorlek enligt 2.5.8; omflöde vid 320 px och 200 %
+Verifierat automatiskt (Playwright mot en körande stack, 40 tester): axe-regler för WCAG
+2.2 A/AA på alla routade sidor, i skrivbordsbredd och i mobilbredd (390 px), och på
+formulärpaneler och dialoger (inklusive Routingregler), öppna menyer, menyernas bottenark,
+filterchips och sparfältet, i de tre temana ljus, mörk och Lumen; målstorlek enligt 2.5.8; omflöde vid 320 px och 200 %
 text; tangentbord, skipplänk och fokus (fokus till detaljrubrik, tillbaka till utlösaren och
 till första ogiltiga fält; rubriknivåer hoppar inte; alla kontroller har namn); forced-colors
 och reduced-motion. Därtill komponent-axe och kontrasttester för tokenpar, samt verkliga

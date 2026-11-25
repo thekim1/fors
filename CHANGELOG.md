@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- **The admin UI follows Källa's layout rules** (thekim1/fors#127, #128, #130; [layout rules](docs/admin-ui.md#layout-rules)),
+  so the two consoles look and behave alike. No API, migration or configuration change.
+  - **One way to save:** Trusted proxies, Data retention and the organisation name save through a save bar (*n unsaved
+    changes · Discard · Save changes*); leaving Settings, or closing any form drawer, with unsaved changes asks first. A
+    retention run being followed and a logo upload no longer overwrite what is being typed.
+  - **Rare and destructive actions on a ⋯ menu:** a routing rule's *Change owners* and *Delete*, a department's and a
+    team's *Delete*, a route's *Delete*, an integration's *Delete*, a Data API key's *Revoke* or *Delete*.
+  - **Filters as chips kept in the address** on *Usage › Requests and costs* and *PII incidents*: a period chip (last 7
+    or 30 days, this month, custom) instead of two date fields, filters that apply as they change, *Clear filters*, the
+    count at the end of the row. A link to the request list now carries `period=custom` with its dates, and the filters
+    stay in the address (bookmarks of the old form still open, as the last 30 days when they have no `period`).
+  - **A user menu** on the side menu's user card: the theme, **Your access** (roles, departments and where each came
+    from, teams) and *Sign out*; the theme switch above the card is gone.
+  - The Overview's figures are summary tiles, and the spend tile says in text when department budgets are over 80 %;
+    *Provider stability* has a breadcrumb back to *Health & operations*; Settings cards are at most 680 px wide.
+  - From Källa's copies of the shared components: `TextField short`, no password-manager autofill on config fields,
+    wrapping card headers and tabs at phone width, `CheckField hideLabel`, `DataTable rowTo`, `ConfirmDialog confirmName`.
+  - **Checks:** the accessibility spec scans every page at 390 px in the three themes and the new menus, sheet, chips and
+    save bar while open; the target-size check skips visually hidden controls.
+
 ## 0.13.0 - 2026-11-23
 
 Minor release: integrations can show the admin console's logo (feature `organisation-logo`), and the nginx example no
