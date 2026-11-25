@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import type { Integration, IntegrationImportResult } from '@/api/types'
 import { useIntegrationsStore } from '@/stores/integrations'
 import { useUiStore } from '@/stores/ui'
-import { plural } from '@/utils/labels'
+import { MENU, plural } from '@/utils/labels'
 import { formatDate } from '@/utils/format'
 import IntegrationFormDrawer from '@/components/integrations/IntegrationFormDrawer.vue'
 import IntegrationImportDrawer from '@/components/integrations/IntegrationImportDrawer.vue'
@@ -12,6 +12,7 @@ import AppIcon from '@/components/ui/AppIcon.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
+import MenuButton from '@/components/ui/MenuButton.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -126,7 +127,7 @@ onMounted(() => {
       <template #cell-actions="{ row }">
         <span class="flex flex-wrap justify-end gap-2">
           <UiButton size="sm" icon="edit" @click="openEdit(row)">Edit<span class="sr-only"> {{ row.name }}</span></UiButton>
-          <UiButton size="sm" variant="danger" icon="delete" @click="confirmDelete(row)">Delete<span class="sr-only"> {{ row.name }}</span></UiButton>
+          <MenuButton size="sm" :label="MENU.more(row.name)" :items="[{ key: 'delete', label: MENU.delete, icon: 'delete', danger: true }]" @select="confirmDelete(row)" />
         </span>
       </template>
     </DataTable>

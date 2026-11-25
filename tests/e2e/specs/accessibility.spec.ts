@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import axe from 'axe-core'
 import { expect, test, type Page } from '@playwright/test'
-import { login, mutate, openRow, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls } from '../helpers'
+import { chooseMenuItem, login, mutate, openRow, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls } from '../helpers'
 
 // The design target is WCAG 2.2 AA. AAA rules (7:1 contrast and so on) are not part of the gate: the old
 // high-contrast themes that met them are gone (the target is WCAG 2.2 AA, see docs/accessibility-statement.md).
@@ -66,14 +66,14 @@ for (const theme of themes) {
       await open('new rule drawer', () => page.getByRole('button', { name: 'New rule' }).click(), 'New rule')
       await open('test a request dialog', () => page.getByRole('button', { name: 'Test a request' }).click(), 'Test a request')
       await page.getByRole('navigation', { name: 'Routing rules' }).getByRole('button', { name: ruleName }).click()
-      await open('change owner dialog', () => page.getByRole('button', { name: 'Change owners' }).click(), 'Change owners')
-      await open('delete rule dialog', () => page.getByRole('button', { name: 'Delete', exact: true }).click(), 'Delete rule?')
+      await open('change owner dialog', () => chooseMenuItem(page, 'Change owners'), 'Change owners')
+      await open('delete rule dialog', () => chooseMenuItem(page, 'Delete…'), 'Delete rule?')
 
       await ready(page, '/organisation')
       await page.getByRole('navigation', { name: 'Departments' }).getByRole('button', { name: new RegExp(departmentName) }).click()
       const row = page.getByRole('row').filter({ hasText: teamName })
-      await open('delete team dialog', () => row.getByRole('button', { name: 'Delete' }).click(), 'Delete team?')
-      await row.getByRole('button', { name: 'Delete' }).click()
+      await open('delete team dialog', () => chooseMenuItem(page, 'Delete team…', row), 'Delete team?')
+      await chooseMenuItem(page, 'Delete team…', row)
       await page.getByRole('dialog', { name: 'Delete team?' }).getByRole('button', { name: 'Delete team' }).click()
       const scoped = page.getByRole('dialog', { name: /belongs? to this team/ })
       await expect(scoped).toBeVisible()

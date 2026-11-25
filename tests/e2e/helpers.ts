@@ -233,3 +233,12 @@ export async function undersizedControls(page: Page, minimum = 24) {
     return failures
   }, minimum)
 }
+
+/**
+ * Opens a ⋯ menu ("More actions for …") and chooses an item. `within` narrows the search for the menu button (a table
+ * row, say); the open menu is teleported to the body, so the item is looked up on the page.
+ */
+export async function chooseMenuItem(page: Page, item: string | RegExp, within?: Locator): Promise<void> {
+  await (within ?? page.getByRole('main')).getByRole('button', { name: /^More actions for / }).first().click()
+  await page.getByRole('menuitem', { name: item }).click()
+}

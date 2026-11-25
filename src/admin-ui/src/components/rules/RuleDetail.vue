@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { RoutingRule } from '@/api/types'
-import { ROUTING_SCOPE_HEADING, ROUTING_SCOPE_LABEL, ROUTING_SCOPE_PLURAL } from '@/utils/labels'
+import { MENU, ROUTING_SCOPE_HEADING, ROUTING_SCOPE_LABEL, ROUTING_SCOPE_PLURAL } from '@/utils/labels'
 import { targetShares } from '@/utils/routingRules'
 import CodeBlock from '../keys/CodeBlock.vue'
 import AppIcon from '../ui/AppIcon.vue'
 import InlineError from '../ui/InlineError.vue'
+import MenuButton, { type MenuItem } from '../ui/MenuButton.vue'
 import UiBadge from '../ui/UiBadge.vue'
 import UiButton from '../ui/UiButton.vue'
 
@@ -33,6 +34,16 @@ const liveOwners = computed(() => props.rule.owners.filter((o) => o.name !== nul
 const removedOwners = computed(() => props.rule.owners.length - liveOwners.value.length)
 const owner = computed(() => (props.rule.scope === 'Global' ? 'every request' : `its ${ROUTING_SCOPE_PLURAL[props.rule.scope].toLowerCase()}`))
 const canMove = computed(() => props.count > 1)
+
+// Layout rule 1: Edit and Enable/Disable stay buttons; the rare and destructive actions are on the ⋯ menu, Delete last.
+const menuItems = computed<MenuItem[]>(() => [
+  { key: 'reassign', label: props.rule.scope === 'Global' ? 'Change scope' : 'Change owners', icon: 'account_tree' },
+  { key: 'delete', label: MENU.delete, icon: 'delete', danger: true },
+])
+function onMenu(key: string): void {
+  if (key === 'reassign') emit('reassign')
+  else if (key === 'delete') emit('delete')
+}
 </script>
 
 <template>
@@ -60,8 +71,7 @@ const canMove = computed(() => props.count > 1)
             :aria-describedby="!rule.isEnabled && rule.isOrphaned ? 'rule-enable-reason' : undefined"
             @click="emit('toggle')"
           >{{ rule.isEnabled ? 'Disable' : 'Enable' }}</UiButton>
-          <UiButton icon="account_tree" @click="emit('reassign')">{{ rule.scope === 'Global' ? 'Change scope' : 'Change owners' }}</UiButton>
-          <UiButton variant="danger" icon="delete" @click="emit('delete')">Delete</UiButton>
+          <MenuButton :label="MENU.more(rule.name)" :items="menuItems" @select="onMenu" />
         </div>
       </div>
       <p v-if="!rule.isEnabled && rule.isOrphaned" id="rule-enable-reason" class="-mt-3 text-small text-fg-3">Can’t enable a rule without an owner. Change its owner first.</p>

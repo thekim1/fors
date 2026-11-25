@@ -2,8 +2,9 @@
 import { computed, ref } from 'vue'
 import type { Budget, Department, Team } from '@/api/types'
 import { budgetSpentOf } from '@/utils/budgets'
-import { PERIOD_LABEL, plural } from '@/utils/labels'
+import { MENU, PERIOD_LABEL, plural } from '@/utils/labels'
 import DataTable, { type Column } from '../ui/DataTable.vue'
+import MenuButton, { type MenuItem } from '../ui/MenuButton.vue'
 import UiBadge from '../ui/UiBadge.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiMeter from '../ui/UiMeter.vue'
@@ -37,6 +38,10 @@ const columns = computed<Column[]>(() => [
 ])
 
 const deleteBlocked = computed(() => props.department.teamCount > 0)
+// Layout rule 1: Edit stays a button; deleting is on the ⋯ menu (and on each team row's), behind its confirmation.
+const departmentMenu = computed<MenuItem[]>(() => [{ key: 'delete', label: 'Delete department…', icon: 'delete', danger: true, disabled: deleteBlocked.value }])
+const teamMenu = (team: Team): MenuItem[] => [{ key: 'delete', label: 'Delete team…', icon: 'delete', danger: true, disabled: team.keyCount > 0 }]
+
 const summary = computed(() => `${plural(props.department.teamCount, 'team')} · ${plural(props.teams.reduce((n, t) => n + t.keyCount, 0), 'key')}`)
 </script>
 
@@ -54,13 +59,7 @@ const summary = computed(() => `${plural(props.department.teamCount, 'team')} ·
         </div>
         <div v-if="canEditDepartment" class="flex flex-wrap items-center gap-2">
           <UiButton icon="edit" @click="emit('edit')">Edit</UiButton>
-          <UiButton
-            variant="danger"
-            icon="delete"
-            :disabled="deleteBlocked"
-            :aria-describedby="deleteBlocked ? 'dept-delete-reason' : undefined"
-            @click="emit('delete')"
-          >Delete department</UiButton>
+          <MenuButton :label="MENU.more(department.name)" :items="departmentMenu" @select="emit('delete')" />
         </div>
       </div>
       <p v-if="canEditDepartment && deleteBlocked" id="dept-delete-reason" class="-mt-3 text-small text-fg-3">
@@ -118,14 +117,7 @@ const summary = computed(() => `${plural(props.department.teamCount, 'team')} ·
           <div class="flex flex-col items-end gap-1">
             <div class="flex items-center justify-end gap-1">
               <UiButton size="sm" variant="quiet" @click="emit('view-keys', row)">Keys</UiButton>
-              <UiButton
-                v-if="canManageTeams"
-                size="sm"
-                variant="danger"
-                :disabled="row.keyCount > 0"
-                :aria-describedby="row.keyCount > 0 ? `team-reason-${row.id}` : undefined"
-                @click="emit('delete-team', row)"
-              >Delete</UiButton>
+              <MenuButton v-if="canManageTeams" size="sm" :label="MENU.more(row.name)" :items="teamMenu(row)" @select="emit('delete-team', row)" />
             </div>
             <span v-if="canManageTeams && row.keyCount > 0" :id="`team-reason-${row.id}`" class="text-caption text-fg-3">Has {{ plural(row.keyCount, 'key') }}</span>
           </div>
