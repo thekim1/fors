@@ -28,13 +28,13 @@ function remove(): void {
 
 <template>
   <span
-    class="inline-flex h-ctl items-center rounded-full text-small max-md:h-11"
+    class="inline-flex h-ctl min-w-0 max-w-full items-center rounded-full text-small max-md:h-11"
     :class="set ? 'bg-accent-soft text-accent-ink shadow-inset-selected' : 'bg-surface text-fg shadow-inset-input'"
     :data-test="`chip-${label}`"
   >
-    <label :for="id" class="cursor-pointer pl-3 font-medium">{{ label }}:</label>
+    <label :for="id" class="shrink-0 cursor-pointer pl-3 font-medium">{{ label }}:</label>
     <select
-      :id="id" ref="select" :value="modelValue" class="h-full cursor-pointer appearance-none rounded-full bg-transparent py-0 pl-1 text-small"
+      :id="id" ref="select" :value="modelValue" class="h-full min-w-0 cursor-pointer appearance-none truncate rounded-full bg-transparent py-0 pl-1 text-small"
       :class="set ? 'pr-1' : 'pr-3'" data-test="chip-select"
       @change="emit('update:modelValue', ($event.target as HTMLSelectElement).value)"
     >
@@ -42,7 +42,7 @@ function remove(): void {
       <option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option>
     </select>
     <button
-      v-if="set" type="button" class="mr-1 grid size-7 place-items-center rounded-full hover:bg-hover max-md:size-11"
+      v-if="set" type="button" class="mr-1 grid size-7 shrink-0 place-items-center rounded-full hover:bg-hover max-md:size-11"
       :aria-label="FILTERS.remove(label)" data-test="chip-remove" @click="remove"
     >
       <span aria-hidden="true">×</span>

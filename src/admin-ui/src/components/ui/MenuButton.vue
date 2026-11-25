@@ -14,10 +14,6 @@ export interface MenuItem {
   disabled?: boolean
   /** Only in the phone's sheet: an action that is a header button on a wider screen (layout rule 10). */
   phoneOnly?: boolean
-  /** One of a set of choices (a theme, say): a `menuitemradio` that shows whether it is the chosen one. */
-  checked?: boolean
-  /** A line above this item, between groups. */
-  separated?: boolean
 }
 
 /**
@@ -32,14 +28,7 @@ export interface MenuItem {
  * Choosing an item focuses the ⋯ button before `select` is emitted, so a dialog the parent opens takes the button as
  * its opener and returns focus there when it closes. Disabled items stay focusable, as APG keeps them.
  */
-/**
- * `align: 'start'` lines the menu up with the button's left edge (a button at the left of the window, such as the side
- * menu's user card). The default slot replaces the ⋯ icon, and `buttonClass` the button's look, for such a button.
- */
-const props = withDefaults(
-  defineProps<{ label: string; items: MenuItem[]; size?: 'sm' | 'md'; align?: 'start' | 'end'; buttonClass?: string }>(),
-  { size: 'md', align: 'end', buttonClass: undefined },
-)
+const props = withDefaults(defineProps<{ label: string; items: MenuItem[]; size?: 'sm' | 'md' }>(), { size: 'md' })
 const emit = defineEmits<{ (e: 'select', key: string): void }>()
 
 const open = ref(false)
@@ -55,7 +44,7 @@ const onQuery = (e: MediaQueryListEvent) => (phone.value = e.matches)
 const desktopItems = computed(() => props.items.filter((i) => !i.phoneOnly))
 
 function menuItems(): HTMLElement[] {
-  return [...(menu.value?.querySelectorAll<HTMLElement>('[role=menuitem], [role=menuitemradio]') ?? [])]
+  return [...(menu.value?.querySelectorAll<HTMLElement>('[role=menuitem]') ?? [])]
 }
 
 /** Below the button, right-aligned to it; above it when the menu would run past the bottom of the window. */
@@ -66,7 +55,7 @@ function place(): void {
   const gap = 4
   const below = b.bottom + gap + height <= window.innerHeight || b.top - gap - height < 0
   position.value = {
-    ...(props.align === 'start' ? { left: `${Math.max(0, b.left)}px` } : { right: `${Math.max(0, document.documentElement.clientWidth - b.right)}px` }),
+    right: `${Math.max(0, document.documentElement.clientWidth - b.right)}px`,
     ...(below ? { top: `${b.bottom + gap}px` } : { bottom: `${window.innerHeight - b.top + gap}px` }),
   }
 }
@@ -151,7 +140,8 @@ onBeforeUnmount(() => {
     <button
       ref="button"
       type="button"
-      :class="buttonClass ?? ['btn bg-surface text-fg shadow-inset-strong hover:bg-surface-2 max-md:h-11 max-md:min-w-11', size === 'sm' ? 'h-ctl-sm px-2' : 'h-ctl px-2.5']"
+      class="btn bg-surface text-fg shadow-inset-strong hover:bg-surface-2 max-md:h-11 max-md:min-w-11"
+      :class="size === 'sm' ? 'h-ctl-sm px-2' : 'h-ctl px-2.5'"
       aria-haspopup="menu"
       :aria-expanded="open ? 'true' : 'false'"
       :aria-controls="open && !phone ? menuId : undefined"
@@ -160,7 +150,7 @@ onBeforeUnmount(() => {
       @click="open ? close(false) : show()"
       @keydown="onButtonKey"
     >
-      <slot><AppIcon name="more_horiz" :size="20" /></slot>
+      <AppIcon name="more_horiz" :size="20" />
     </button>
     <Teleport to="body">
       <ul
@@ -175,36 +165,34 @@ onBeforeUnmount(() => {
         data-test="menu"
         @keydown="onMenuKey"
       >
-        <li v-for="item in desktopItems" :key="item.key" role="none" :class="{ 'mt-1 border-t border-border pt-1': item.separated }">
+        <li v-for="item in desktopItems" :key="item.key" role="none">
           <button
             type="button"
-            :role="item.checked === undefined ? 'menuitem' : 'menuitemradio'"
+            role="menuitem"
             tabindex="-1"
-            :aria-checked="item.checked"
             :aria-disabled="item.disabled ? 'true' : undefined"
             class="flex w-full items-center gap-2 rounded-control px-3 py-2 text-left hover:bg-hover focus-visible:bg-hover aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
             :class="item.danger ? 'text-danger' : 'text-fg'"
             :data-test="`menu-${item.key}`"
             @click="choose(item)"
           >
-            <AppIcon v-if="item.icon" :name="item.icon" :size="18" />{{ item.label }}<AppIcon v-if="item.checked" name="check" :size="18" class="ml-auto" />
+            <AppIcon v-if="item.icon" :name="item.icon" :size="18" />{{ item.label }}
           </button>
         </li>
       </ul>
     </Teleport>
     <UiDialog v-if="phone" :open="open" :title="label" @update:open="close(true)">
       <ul class="grid gap-1" data-test="menu-sheet">
-        <li v-for="item in items" :key="item.key" :class="{ 'mt-1 border-t border-border pt-1': item.separated }">
+        <li v-for="item in items" :key="item.key">
           <button
             type="button"
-            :aria-pressed="item.checked"
             :aria-disabled="item.disabled ? 'true' : undefined"
             class="flex min-h-11 w-full items-center gap-2 rounded-control px-3 text-left hover:bg-hover aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
             :class="item.danger ? 'text-danger' : 'text-fg'"
             :data-test="`menu-${item.key}`"
             @click="choose(item)"
           >
-            <AppIcon v-if="item.icon" :name="item.icon" :size="20" />{{ item.label }}<AppIcon v-if="item.checked" name="check" :size="20" class="ml-auto" />
+            <AppIcon v-if="item.icon" :name="item.icon" :size="20" />{{ item.label }}
           </button>
         </li>
       </ul>

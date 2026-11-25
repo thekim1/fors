@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import axe from 'axe-core'
 import { expect, test, type Page } from '@playwright/test'
-import { chooseMenuItem, login, mutate, openRow, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls, userMenu } from '../helpers'
+import { chooseMenuItem, login, mutate, openRow, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls } from '../helpers'
 
 // The design target is WCAG 2.2 AA. AAA rules (7:1 contrast and so on) are not part of the gate: the old
 // high-contrast themes that met them are gone (the target is WCAG 2.2 AA, see docs/accessibility-statement.md).
@@ -87,11 +87,12 @@ for (const theme of themes) {
 }
 
 for (const theme of themes) {
-  // Layout rules 10 and 11: every page at phone width, in each theme.
+  // Layout rules 10 and 11: every page at phone width, in each theme. Signing in needs the side menu, so the window
+  // narrows after it.
   test(`every routed page passes the WCAG A/AA axe rules at 390 px in ${theme}`, async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 })
     await login(page)
     await useTheme(page, theme)
+    await page.setViewportSize({ width: 390, height: 844 })
     for (const path of pages) {
       await ready(page, path)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
@@ -99,20 +100,11 @@ for (const theme of themes) {
     }
   })
 
-  // The shared components in their open states: the ⋯ menu and its phone sheet, the user menu and Your access, filter
-  // chips with a custom period, and the save bar.
+  // The shared components in their open states: the ⋯ menu and its phone sheet, filter chips with a custom period, and
+  // the save bar.
   test(`menus, filter chips and the save bar pass axe while open in ${theme}`, async ({ page }) => {
     await login(page)
     await useTheme(page, theme)
-
-    await ready(page, '/')
-    await userMenu(page).click()
-    await expect(page.getByRole('menu')).toBeVisible()
-    await scan(page, `${theme}: user menu`)
-    await page.getByRole('menuitem', { name: 'Your access' }).click()
-    await expect(page.getByRole('dialog', { name: 'Your access' })).toBeVisible()
-    await scan(page, `${theme}: your access`)
-    await page.keyboard.press('Escape')
 
     await ready(page, '/organisation')
     await page.getByRole('main').getByRole('button', { name: /^More actions for / }).first().click()
@@ -169,23 +161,13 @@ test('keyboard: landmarks on desktop, skip link on small screens, page heading f
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Keys' }).click()
   await expect(page.locator('#page-title')).toBeFocused()
 
-  // The user menu (an APG menu button) changes the theme by keyboard and returns focus to its button.
-  const account = userMenu(page)
-  await account.focus()
-  await page.keyboard.press('ArrowDown')
-  await expect(page.getByRole('menu')).toBeVisible()
-  await expect(page.getByRole('menuitemradio').first()).toBeFocused()
+  // The roving radio group changes the theme with the arrow keys.
+  const group = page.getByRole('radiogroup', { name: 'Theme' })
+  await group.getByRole('radio', { checked: true }).focus()
   const before = await page.locator('html').getAttribute('data-theme')
-  const next = page.getByRole('menuitemradio', { checked: false }).first()
-  const nextName = await next.textContent()
-  while (!(await next.evaluate(el => el === document.activeElement))) await page.keyboard.press('ArrowDown')
-  await page.keyboard.press('Enter')
+  await page.keyboard.press('ArrowRight')
   await expect(page.locator('html')).not.toHaveAttribute('data-theme', before!)
-  await expect(account).toBeFocused()
-  await page.keyboard.press('ArrowDown')
-  await expect(page.getByRole('menuitemradio', { name: nextName!, checked: true })).toBeVisible()
-  await page.keyboard.press('Escape')
-  await expect(account).toBeFocused()
+  await expect(group.getByRole('radio', { checked: true })).toBeFocused()
 
   // The skip link is part of the mobile layout.
   await page.setViewportSize({ width: 390, height: 800 })

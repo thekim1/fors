@@ -18,7 +18,7 @@ const props = defineProps<{
   sessionLeft: string | null
   signingOut: boolean
 }>()
-const emit = defineEmits<{ (e: 'update:open', v: boolean): void; (e: 'search'): void; (e: 'sign-out'): void; (e: 'your-access'): void }>()
+const emit = defineEmits<{ (e: 'update:open', v: boolean): void; (e: 'search'): void; (e: 'sign-out'): void }>()
 
 const auth = useAuthStore()
 const ui = useUiStore()
@@ -93,13 +93,6 @@ function search(): void {
             :class="auth.isDevelopment ? 'bg-warn-soft text-warn' : 'bg-ok-soft text-ok'"
           ><span class="size-1.5 rounded-full" :class="auth.isDevelopment ? 'bg-warn' : 'bg-ok'" aria-hidden="true"></span>{{ auth.isDevelopment ? 'Development' : 'Production' }}</span>
           <span v-if="sessionLeft" class="tabular text-fg-3">Session: {{ sessionLeft }}</span>
-          <button
-            type="button"
-            class="ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-control px-3 text-small font-medium text-fg-2 hover:bg-hover hover:text-fg"
-            @click="emit('update:open', false); emit('your-access')"
-          >
-            <AppIcon name="badge" /> Your access
-          </button>
         </div>
         <div class="flex items-center gap-3 rounded-[12px] bg-surface p-2.5 shadow-1">
           <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-caption font-semibold text-accent-ink" aria-hidden="true">

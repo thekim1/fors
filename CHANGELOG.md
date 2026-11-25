@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **The admin UI follows Källa's layout rules** (thekim1/fors#127, #128, #130; [layout rules](docs/admin-ui.md#layout-rules)),
+- **The admin UI follows Källa's layout rules** (thekim1/fors#128, #130; [layout rules](docs/admin-ui.md#layout-rules)),
   so the two consoles look and behave alike. No API, migration or configuration change.
   - **One way to save:** Trusted proxies, Data retention and the organisation name save through a save bar (*n unsaved
     changes · Discard · Save changes*); leaving Settings, or closing any form drawer, with unsaved changes asks first. A
@@ -13,10 +13,9 @@
     or 30 days, this month, custom) instead of two date fields, filters that apply as they change, *Clear filters*, the
     count at the end of the row. A link to the request list now carries `period=custom` with its dates, and the filters
     stay in the address (bookmarks of the old form still open, as the last 30 days when they have no `period`).
-  - **A user menu** on the side menu's user card: the theme, **Your access** (roles, departments and where each came
-    from, teams) and *Sign out*; the theme switch above the card is gone.
   - The Overview's figures are summary tiles, and the spend tile says in text when department budgets are over 80 %;
-    *Provider stability* has a breadcrumb back to *Health & operations*; Settings cards are at most 680 px wide.
+    *Provider stability* has a breadcrumb back to *Health & operations*; Settings cards are at most 680 px wide;
+    sortable column headers are at least 24 px high.
   - From Källa's copies of the shared components: `TextField short`, no password-manager autofill on config fields,
     wrapping card headers and tabs at phone width, `CheckField hideLabel`, `DataTable rowTo`, `ConfirmDialog confirmName`.
   - **Checks:** the accessibility spec scans every page at 390 px in the three themes and the new menus, sheet, chips and

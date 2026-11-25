@@ -25,10 +25,6 @@ team*) that is in the team admins' `teamCodes` claim; see [Identity provider and
 Edit department › Member groups*, one per line). Users in one of them see the department after their next sign-in,
 without a department code on each account; see [Department scope](identity-and-roles.md#department-scope).
 
-**Your account.** The card with your name at the bottom of the side menu opens a menu with the theme (*Light*, *Dark*,
-*Lumen*), **Your access** (your roles, departments and teams, and whether a department came from your sign-in's
-department claim or from one of its member groups) and **Sign out**.
-
 **Saving.** A form with fields saves through a bar at its bottom: *n unsaved changes · Discard · Save changes*, with what
 saving does. *Discard* asks once. Leaving the page, or closing a drawer by ×, Esc or *Cancel*, with unsaved changes asks
 first. **Rare and destructive actions** (*Delete…*, *Revoke…*, *Change owners*) are on a **⋯** menu beside the page's
@@ -40,7 +36,7 @@ while any is. They apply as they change, and the address keeps them (`/pii-incid
 filtered view can be bookmarked or sent, and survives a reload.
 
 **On a phone** the bar at the bottom has Overview, Alerts, Keys and Health, plus **Menu**. Menu opens every page (same groups
-as the side menu), search, the theme switch, your session, **Your access** and **Sign out**. Close it with ×, Esc, a tap outside, or by
+as the side menu), search, the theme switch, your session and **Sign out**. Close it with ×, Esc, a tap outside, or by
 choosing a page. Search opens full screen with the field at the top, so the keyboard never covers the results; **Cancel**
 closes it.
 

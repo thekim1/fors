@@ -414,11 +414,6 @@ export const COMMON = {
 export const SHELL = {
   /** The breadcrumb above a detail page's title. */
   breadcrumb: 'Breadcrumb',
-  /** The user menu opened from the side menu's user card. */
-  userMenu: (name: string) => `Account menu for ${name}`,
-  theme: 'Theme',
-  yourAccess: 'Your access',
-  signOut: 'Sign out',
 } as const
 
 /** The save bar and the unsaved-changes guard (layout rule 7). */

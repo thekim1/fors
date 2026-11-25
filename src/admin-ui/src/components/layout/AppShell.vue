@@ -8,15 +8,13 @@ import { useBudgetsStore } from '@/stores/budgets'
 import { useOpsStore } from '@/stores/ops'
 import { useBrandingStore } from '@/stores/branding'
 import AppIcon from '@/components/ui/AppIcon.vue'
-import MenuButton, { type MenuItem } from '@/components/ui/MenuButton.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import ToastRegion from '@/components/ui/ToastRegion.vue'
 import CommandPalette from './CommandPalette.vue'
 import BrandMark from './BrandMark.vue'
 import MobileMenu from './MobileMenu.vue'
 import SessionExpiryDialog from './SessionExpiryDialog.vue'
-import YourAccessDrawer from './YourAccessDrawer.vue'
 import { initials } from '@/utils/format'
-import { SHELL } from '@/utils/labels'
 
 const auth = useAuthStore()
 const ui = useUiStore()
@@ -79,22 +77,6 @@ onMounted(() => {
   }
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
-
-// The user menu on the side menu's user card (#127): the theme, Your access and Sign out, in one place for what is
-// about the person.
-const accessOpen = ref(false)
-const userName = computed(() => auth.user?.name ?? auth.user?.email ?? '?')
-const userItems = computed<MenuItem[]>(() => [
-  ...themes.map((t) => ({ key: `theme-${t.value}`, label: `${SHELL.theme}: ${t.label}`, checked: ui.theme === t.value })),
-  { key: 'access', label: SHELL.yourAccess, icon: 'badge', separated: true },
-  { key: 'sign-out', label: SHELL.signOut, icon: 'logout', disabled: signingOut.value },
-])
-function onUserMenu(key: string): void {
-  const theme = themes.find((t) => key === `theme-${t.value}`)
-  if (theme) ui.setTheme(theme.value)
-  else if (key === 'access') accessOpen.value = true
-  else if (key === 'sign-out') void signOut()
-}
 
 const signingOut = ref(false)
 async function signOut(): Promise<void> {
@@ -160,24 +142,36 @@ async function signOut(): Promise<void> {
         </section>
       </nav>
 
-      <MenuButton
-        :label="SHELL.userMenu(userName)"
-        :items="userItems"
-        align="start"
-        button-class="flex w-full items-center gap-2.5 rounded-[12px] bg-surface p-2 text-left shadow-1 hover:bg-hover max-lg:flex-col max-lg:px-1"
-        class="w-full"
-        data-test="user-menu"
-        @select="onUserMenu"
-      >
-        <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-caption font-semibold text-accent-ink" aria-hidden="true">
-          {{ initials(userName) }}
-        </span>
-        <span class="hidden min-w-0 flex-1 leading-4 lg:block">
-          <span class="block truncate text-[13px] font-medium text-fg" lang="sv">{{ userName }}</span>
-          <span class="block truncate text-caption text-fg-3">{{ auth.roles[0] }}</span>
-        </span>
-        <AppIcon name="expand_more" class="hidden text-fg-3 lg:block" />
-      </MenuButton>
+      <div class="flex flex-col gap-3">
+        <div class="hidden lg:block">
+          <SegmentedControl
+            :model-value="ui.theme"
+            :options="themes"
+            label="Theme"
+            mode="radio"
+            full
+            @update:model-value="ui.setTheme($event)"
+          />
+        </div>
+        <div class="flex items-center gap-2.5 rounded-[12px] bg-surface p-2 shadow-1 max-lg:flex-col max-lg:px-1">
+          <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-caption font-semibold text-accent-ink" aria-hidden="true">
+            {{ initials(auth.user?.name ?? auth.user?.email ?? '?') }}
+          </span>
+          <span class="hidden min-w-0 flex-1 leading-4 lg:block">
+            <span class="block truncate text-[13px] font-medium text-fg" lang="sv">{{ auth.user?.name ?? auth.user?.email }}</span>
+            <span class="block truncate text-caption text-fg-3">{{ auth.roles[0] }}</span>
+          </span>
+          <button
+            type="button"
+            class="flex size-8 shrink-0 items-center justify-center rounded-[8px] text-fg-2 hover:bg-hover hover:text-fg"
+            :aria-disabled="signingOut"
+            @click="signOut"
+          >
+            <AppIcon name="logout" />
+            <span class="sr-only">Sign out</span>
+          </button>
+        </div>
+      </div>
     </aside>
 
     <div class="flex min-w-0 flex-1 flex-col">
@@ -251,9 +245,7 @@ async function signOut(): Promise<void> {
     :signing-out="signingOut"
     @search="paletteOpen = true"
     @sign-out="signOut"
-    @your-access="accessOpen = true"
   />
-  <YourAccessDrawer v-model:open="accessOpen" />
   <CommandPalette v-model:open="paletteOpen" />
   <SessionExpiryDialog />
   <ToastRegion />

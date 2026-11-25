@@ -242,8 +242,3 @@ export async function chooseMenuItem(page: Page, item: string | RegExp, within?:
   await (within ?? page.getByRole('main')).getByRole('button', { name: /^More actions for / }).first().click()
   await page.getByRole('menuitem', { name: item }).click()
 }
-
-/** The user menu on the side menu's user card: the theme, Your access and Sign out. */
-export function userMenu(page: Page): Locator {
-  return page.getByRole('button', { name: /^Account menu for / })
-}

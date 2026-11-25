@@ -69,7 +69,7 @@ function open(row: Row, event: MouseEvent): void {
             <button
               v-if="col.sortable"
               type="button"
-              class="-mx-1 inline-flex items-center gap-1 rounded-chip px-1 font-medium hover:text-fg"
+              class="-mx-1 inline-flex min-h-6 items-center gap-1 rounded-chip px-1 font-medium hover:text-fg"
               :class="{ 'text-fg': sortKey === col.key }"
               @click="emit('sort', col.key)"
             >
