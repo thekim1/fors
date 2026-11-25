@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Data;
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -325,24 +326,43 @@ public sealed partial class GatewayCatalog : IDisposable
     [LoggerMessage(Level = LogLevel.Warning, Message = "Rerank model '{Model}' of provider '{Provider}' has no request address (no publisher, or an address off the provider's resource) and is not routed; set it in the admin UI")]
     private static partial void LogRerankWithoutAddress(ILogger logger, string model, string provider);
 
+    /// <summary>The rows a snapshot is built from, read together (<see cref="ReadRowsAsync"/>).</summary>
+    internal sealed record CatalogRows(
+        List<ProviderAccount> Providers, List<RouteAlias> Routes, List<Budget> Budgets, List<RoutingRule> Rules,
+        Dictionary<Guid, Guid> Replacements, GatewaySettings Settings, string? OrganisationName, string? OidcAuthority);
+
     /// <summary>What tells two views of one provider apart.</summary>
     private readonly record struct ViewKey(ProviderType Type, string BaseUrl, ProviderAuthMode AuthMode, ProviderCapabilities Capabilities, DataResidency Residency);
+
+    /// <summary>
+    /// Every read of a snapshot in one REPEATABLE READ transaction, so Postgres answers them all from one database
+    /// snapshot. Without it, the split query's statements (providers, deployments, prices) could see a deployment
+    /// committed between them, and EF would stitch the prices onto the wrong deployments: the models after it lost their
+    /// prices (and cost 0) until the next reload.
+    /// </summary>
+    internal static Task<CatalogRows> ReadRowsAsync(GatewayDbContext db, CancellationToken cancellationToken) =>
+        db.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct);
+            var rows = new CatalogRows(
+                await db.ProviderAccounts.AsNoTracking().Include(p => p.Deployments).ThenInclude(d => d.Prices).AsSplitQuery().ToListAsync(ct),
+                await db.RouteAliases.AsNoTracking().Include(r => r.Targets).ToListAsync(ct),
+                await db.Budgets.AsNoTracking().Where(b => b.IsActive).ToListAsync(ct),
+                await db.RoutingRules.AsNoTracking().Include(r => r.Targets).ToListAsync(ct),
+                await db.KeyRotationMapAsync(ct),
+                await db.Settings.AsNoTracking().SingleOrDefaultAsync(ct) ?? new GatewaySettings(),
+                await db.Branding.AsNoTracking().Select(b => b.OrganisationName).FirstOrDefaultAsync(ct),
+                await db.SignInSettings.AsNoTracking().Select(s => s.Authority).FirstOrDefaultAsync(ct));
+            await transaction.CommitAsync(ct);
+            return rows;
+        }, cancellationToken);
 
     private async Task<CatalogSnapshot> LoadAsync(CancellationToken cancellationToken)
     {
         await using var scope = _scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
-        var providers = await db.ProviderAccounts.AsNoTracking()
-            .Include(p => p.Deployments).ThenInclude(d => d.Prices)
-            .AsSplitQuery()
-            .ToListAsync(cancellationToken);
-        var routes = await db.RouteAliases.AsNoTracking().Include(r => r.Targets).ToListAsync(cancellationToken);
-        var budgets = await db.Budgets.AsNoTracking().Where(b => b.IsActive).ToListAsync(cancellationToken);
-        var ruleEntities = await db.RoutingRules.AsNoTracking().Include(r => r.Targets).ToListAsync(cancellationToken);
-        var replacements = await db.KeyRotationMapAsync(cancellationToken);
-        var settings = await db.Settings.AsNoTracking().SingleOrDefaultAsync(cancellationToken) ?? new GatewaySettings();
-        var organisationName = await db.Branding.AsNoTracking().Select(b => b.OrganisationName).FirstOrDefaultAsync(cancellationToken);
-        var oidcAuthority = await db.SignInSettings.AsNoTracking().Select(s => s.Authority).FirstOrDefaultAsync(cancellationToken);
+        var (providers, routes, budgets, ruleEntities, replacements, settings, organisationName, oidcAuthority) =
+            await ReadRowsAsync(db, cancellationToken);
         var now = _time.GetUtcNow();
 
         // Wire navigation properties across the separately loaded graphs.

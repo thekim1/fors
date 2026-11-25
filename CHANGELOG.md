@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Fixed: a model could cost 0 until the gateway's next catalogue reload.** The gateway reads providers, models and
+  prices in separate statements. When a model was added on a provider while a reload was reading them, Entity Framework
+  put the prices on the wrong models, and the models after the new one had no price until the next reload: their
+  requests were recorded at cost 0 and not counted against USD budgets. The reload now reads everything in one
+  `REPEATABLE READ` transaction, so all its statements see the same state of the database. Found as a flaky
+  `AudioTests` test in CI; `CatalogConsistencyTests` reproduces it. Off the request path; no configuration change.
 - **The admin UI follows Källa's layout rules** (thekim1/fors#128, #130; [layout rules](docs/admin-ui.md#layout-rules)),
   so the two consoles look and behave alike. No API, migration or configuration change.
   - **One way to save:** Trusted proxies, Data retention and the organisation name save through a save bar (*n unsaved
