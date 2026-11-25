@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import axe from 'axe-core'
 import { expect, test, type Page } from '@playwright/test'
-import { chooseMenuItem, login, mutate, openRow, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls } from '../helpers'
+import { chooseMenuItem, login, mutate, openRow, openUserMenu, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls, userMenuButton } from '../helpers'
 
 // The design target is WCAG 2.2 AA. AAA rules (7:1 contrast and so on) are not part of the gate: the old
 // high-contrast themes that met them are gone (the target is WCAG 2.2 AA, see docs/accessibility-statement.md).
@@ -54,6 +54,10 @@ for (const theme of themes) {
     }
     try {
       await ready(page, '/keys')
+      await openUserMenu(page)
+      await scan(page, `${theme}: user menu`)
+      await open('your access dialog', () => page.getByRole('menuitem', { name: 'Your access' }).click(), 'Your access')
+      await expect(userMenuButton(page)).toBeFocused()
       await open('new key drawer', () => page.getByRole('button', { name: 'New key' }).click(), 'New key')
       await page.getByRole('searchbox', { name: 'Search keys' }).fill(record.name)
       await open('key detail drawer', () => openRow(page, record.name), record.name)
@@ -151,7 +155,7 @@ test('all pages reflow at 320px and at 200 percent text size', async ({ page }) 
   }
 })
 
-test('keyboard: landmarks on desktop, skip link on small screens, page heading focus, themes by arrow keys', async ({ page }) => {
+test('keyboard: landmarks on desktop, skip link on small screens, page heading focus, the user menu', async ({ page }) => {
   await login(page)
   await ready(page, '/')
   await expect(page.getByRole('main')).toHaveCount(1)
@@ -161,13 +165,32 @@ test('keyboard: landmarks on desktop, skip link on small screens, page heading f
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Keys' }).click()
   await expect(page.locator('#page-title')).toBeFocused()
 
-  // The roving radio group changes the theme with the arrow keys.
-  const group = page.getByRole('radiogroup', { name: 'Theme' })
-  await group.getByRole('radio', { checked: true }).focus()
+  // The user menu (thekim1/fors#127): an APG menu button. Enter opens it on the first item, the arrows move,
+  // Enter chooses a theme and focus returns to the card; Esc closes it and returns focus too.
+  const card = userMenuButton(page)
+  await expect(card).toHaveAttribute('aria-haspopup', 'menu')
+  await card.focus()
+  await page.keyboard.press('Enter')
+  const menu = page.getByRole('menu', { name: 'Your account' })
+  await expect(menu).toBeVisible()
+  await expect(card).toHaveAttribute('aria-expanded', 'true')
+  await expect(menu.getByRole('menuitemradio', { name: 'Light' })).toBeFocused()
   const before = await page.locator('html').getAttribute('data-theme')
-  await page.keyboard.press('ArrowRight')
-  await expect(page.locator('html')).not.toHaveAttribute('data-theme', before!)
-  await expect(group.getByRole('radio', { checked: true })).toBeFocused()
+  const next = before === 'dark' ? 'Lumen' : 'Dark'
+  await page.keyboard.press('ArrowDown')
+  if (next === 'Lumen') await page.keyboard.press('ArrowDown')
+  await expect(menu.getByRole('menuitemradio', { name: next })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(menu).toBeHidden()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', next.toLowerCase())
+  await expect(card).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(menu.getByRole('menuitemradio', { name: next })).toHaveAttribute('aria-checked', 'true')
+  await page.keyboard.press('End')
+  await expect(menu.getByRole('menuitem', { name: 'Sign out' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(menu).toBeHidden()
+  await expect(card).toBeFocused()
 
   // The skip link is part of the mobile layout.
   await page.setViewportSize({ width: 390, height: 800 })

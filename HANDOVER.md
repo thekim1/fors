@@ -28,7 +28,7 @@ The project is not a production approval, legal attestation or WCAG certificatio
    automated form only: there are no resources for manual testing with NVDA or VoiceOver. The automated axe (three themes, 1 280 and 390 px, open
    menus, sheets, chips and save bar), focus, heading and name checks remain the evidence. `docs/accessibility-statement.md` keeps saying that no screen reader has been run; an adopter
    who needs that evidence (for example before public use) has to arrange it. Untested areas most likely to need it: `<datalist>` model-name inputs, the
-   live regions, focus after drawers and dialogs, the segmented controls, the `<details>` disclosures and `aria-disabled` move buttons.
+   live regions, focus after drawers and dialogs, the user menu (a menu button), the segmented controls, the `<details>` disclosures and `aria-disabled` move buttons.
 2. **Decide:** a duplicate rule name (409) is shown as a form-level message, not on the *Name* field.
 3. **Decide:** the "Skip to main content" link is hidden from 768 px (`md:hidden`); the sidebar has about 15 tab stops before `main`. Landmarks are sufficient, but a skip link is cheap.
 4. **Test gap:** `DiscoverModelsDialog.vue` has UI tests only for adding and updating Foundry models (`DiscoverModelsDialog.spec.ts`); filters, sorting and price editing are untested (the backend `ModelDiscovery` is covered by `ModelDiscoveryTests`).

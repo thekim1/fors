@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { login, mutate, ready } from '../helpers'
+import { login, mutate, openUserMenu, ready } from '../helpers'
 
 test.afterEach(async ({ page }) => { await page.close() })
 
@@ -44,9 +44,8 @@ test('final synthetic demo: fallback, PII on-prem, budget block, live writer and
       return health.usageWriter?.queueDepth === 0 && health.usageWriter?.inFlightRecords === 0 && health.usageWriter?.lastWriteAt !== null
     }).toBe(true)
     await ready(page, '/')
-    const themeGroup = page.getByRole('radiogroup', { name: 'Theme' })
     for (const [label, theme] of [['Dark', 'dark'], ['Lumen', 'lumen'], ['Light', 'light']]) {
-      await themeGroup.getByRole('radio', { name: label }).click()
+      await (await openUserMenu(page)).getByRole('menuitemradio', { name: label }).click()
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
     }
   } finally {

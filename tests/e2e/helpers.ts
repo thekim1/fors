@@ -176,6 +176,19 @@ export async function appliedRule(page: Page, secret: string, marker: string): P
 export const themes = ['light', 'dark', 'lumen'] as const
 export const themeStorageKey = 'fors-theme'
 
+/** The user card at the bottom of the side menu: the button that opens the user menu (theme, Your access, Sign out). */
+export function userMenuButton(page: Page): Locator {
+  return page.getByRole('complementary').getByRole('button', { name: /account menu$/ })
+}
+
+/** Opens the user menu from the side menu's user card and returns it. */
+export async function openUserMenu(page: Page): Promise<Locator> {
+  await userMenuButton(page).click()
+  const menu = page.getByRole('menu', { name: 'Your account' })
+  await expect(menu).toBeVisible()
+  return menu
+}
+
 /** Every page in src/admin-ui/src/router/index.ts, plus the 404 page. Keep in sync with the router. */
 export const pages = ['/', '/usage', '/pii-incidents', '/operations', '/keys', '/organisation', '/catalog',
   '/routes', '/routing-rules', '/providers', '/budgets', '/audit', '/settings', '/forbidden', '/no-such-page']

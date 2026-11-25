@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { confirmDialog, login, mutate, openRow, ready, takeSecret, testKey } from '../helpers'
+import { confirmDialog, login, mutate, openRow, openUserMenu, ready, takeSecret, testKey } from '../helpers'
 
 // Close before fixture artifact collection so failed secret flows cannot produce DOM snapshots.
 test.afterEach(async ({ page }) => { await page.close() })
@@ -116,7 +116,7 @@ test('portal copy, explicit session renewal, operations and OIDC logout', async 
   expect(health.usageWriter.queueDepth).toBeGreaterThanOrEqual(0)
   expect(health.usageWriter.consecutiveFailures).toBe(0)
   await expect(page.getByRole('heading', { name: 'Usage writer' })).toBeVisible()
-  await page.getByRole('button', { name: 'Sign out' }).click()
+  await (await openUserMenu(page)).getByRole('menuitem', { name: 'Sign out' }).click()
   await page.waitForURL(/\/protocol\/openid-connect\/logout/)
   await page.locator('#kc-logout').click()
   await expect.poll(() => new URL(page.url()).pathname).toBe('/')

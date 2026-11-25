@@ -14,12 +14,12 @@ export function buttonByLabel(wrapper: VueWrapper, label: string) {
 }
 
 /**
- * The open ⋯ menu (MenuButton teleports it to the body, out of the wrapper's reach): the last one opened, since a
+ * The open menu of a MenuButton (teleported to the body, out of the wrapper's reach): the last one opened, since a
  * spec that leaves its wrapper mounted can leave an earlier menu open.
  */
 export function openMenu(): DOMWrapper<Element> {
   const el = [...document.body.querySelectorAll('[data-test=menu]')].at(-1)
-  if (!el) throw new Error('No ⋯ menu is open')
+  if (!el) throw new Error('No menu is open')
   return new DOMWrapper(el)
 }
 
