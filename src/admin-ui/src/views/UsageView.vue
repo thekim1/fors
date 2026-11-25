@@ -283,7 +283,7 @@ onMounted(() => {
         <h2 id="summary-h" class="text-heading">Summary by {{ GROUP_LABEL[group].toLowerCase() }}</h2>
         <SelectField v-model="view.group" label="Group by" :options="groupOptions" class="w-48" />
       </div>
-      <AsyncState :loading="usage.summaryLoading" :error="usage.summaryError" :empty="false" @retry="load">
+      <AsyncState :loading="usage.summaryLoading" :error="usage.summaryError" :empty="!usage.summary" @retry="load">
         <p v-if="usage.summary" class="mb-3 text-fg-2">
           {{ formatUsdCost(usage.summary.totalCostUsd) }} across {{ formatNumber(usage.summary.totalRequests) }} requests and
           {{ formatNumber(usage.summary.totalInputTokens + usage.summary.totalOutputTokens) }} tokens<template v-if="usage.summary.totalErrors > 0">,
@@ -312,7 +312,7 @@ onMounted(() => {
 
     <section aria-labelledby="requests-h" class="mb-8">
       <h2 id="requests-h" class="mb-3 scroll-mt-4 text-heading">{{ showingErrors ? 'Failed requests' : 'Requests' }}</h2>
-      <AsyncState :loading="usage.requestsLoading" :error="usage.requestsError" :empty="false" @retry="load">
+      <AsyncState :loading="usage.requestsLoading" :error="usage.requestsError" :empty="!usage.requestsLoaded" @retry="load">
         <DataTable
           :columns="requestColumns"
           :rows="usage.requests.items"

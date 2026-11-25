@@ -52,6 +52,27 @@ async function mountDashboard() {
 beforeEach(() => metrics.mockReset())
 
 describe('UsageDashboard', () => {
+  it('says it is loading until the first answer, then keeps the cards while a filter reloads them', async () => {
+    let answer!: (value: UsageMetrics) => void
+    metrics.mockReturnValue(new Promise<UsageMetrics>((resolve) => (answer = resolve)))
+    const wrapper = await mountDashboard()
+    expect(wrapper.find('[role=status]').text()).toContain('Loading')
+
+    answer(data())
+    await flushPromises()
+    expect(wrapper.find('[role=status]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Cost')
+
+    let reload!: (value: UsageMetrics) => void
+    metrics.mockReturnValue(new Promise<UsageMetrics>((resolve) => (reload = resolve))) // a reload that has not answered yet
+    await button(wrapper, '30 days').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role=status]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Cost')
+    reload(data())
+    await flushPromises()
+  })
+
   it('loads the last seven days and shows the headline of every card', async () => {
     metrics.mockResolvedValue(data())
     const wrapper = await mountDashboard()

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Pages say they are loading.** Usage (the dashboard, the summary and the request list), the Overview, Budgets &
+  alerts and every Settings card showed an empty space, or "No open alerts", until their data arrived, which on a busy
+  or slow connection looked like an empty page. They now show *Loading…* on their first load and keep what they show
+  while a filter reloads it. The accessibility spec's scans of these pages now wait for their content, and also scan
+  *Usage › Requests and costs*.
+- Two things those scans then found: a filter with a long option (Usage dashboard, *Provider*) made the page scroll
+  sideways at 320 px (`FilterSelect` now shrinks and cuts the text short), and the Settings disclosures (*Before you
+  change this*) were 18 px high next to another control, under the 24 px target size (WCAG 2.5.8).
 - **Fixed: a model could cost 0 until the gateway's next catalogue reload.** The gateway reads providers, models and
   prices in separate statements. When a model was added on a provider while a reload was reading them, Entity Framework
   put the prices on the wrong models, and the models after the new one had no price until the next reload: their

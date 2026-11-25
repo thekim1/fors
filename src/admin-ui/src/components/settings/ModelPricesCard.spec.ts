@@ -37,6 +37,20 @@ beforeEach(() => {
 })
 
 describe('ModelPricesCard', () => {
+  it('says it is loading until the status arrives, not an empty card', async () => {
+    setActivePinia(createPinia())
+    let answer!: (value: ModelPriceSync) => void
+    modelPrices.mockReturnValue(new Promise<ModelPriceSync>((resolve) => (answer = resolve)))
+    const wrapper = mount(ModelPricesCard)
+    await flushPromises()
+    expect(wrapper.find('[role=status]').text()).toContain('Loading')
+
+    answer(status())
+    await flushPromises()
+    expect(wrapper.find('[role=status]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('12 models follow the list')
+  })
+
   it('shows the last check', async () => {
     const wrapper = await mountCard(status())
     expect(wrapper.text()).toContain('12 models follow the list, 2 prices updated')

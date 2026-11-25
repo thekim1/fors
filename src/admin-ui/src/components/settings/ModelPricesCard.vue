@@ -69,7 +69,7 @@ onBeforeUnmount(() => clearTimeout(poll))
 
 <template>
   <UiCard title="Model prices" meta="Checked daily" heading-id="model-prices-h" class="max-w-3xl">
-    <AsyncState :loading="loading" :error="loadError" :empty="false" @retry="load">
+    <AsyncState :loading="loading" :error="loadError" :empty="!status" @retry="load">
       <div v-if="status" class="flex flex-col items-start gap-3 text-fg-2">
         <p class="m-0">
           Once a day the admin API reads the

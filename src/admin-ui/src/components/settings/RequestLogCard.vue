@@ -66,7 +66,7 @@ onMounted(load)
 
 <template>
   <UiCard title="Request logging" meta="Gateway log" heading-id="request-log-h" class="max-w-3xl">
-    <AsyncState :loading="loading" :error="loadError" :empty="false" @retry="load">
+    <AsyncState :loading="loading" :error="loadError" :empty="!settings" @retry="load">
       <div class="flex flex-col gap-3 text-fg-2">
         <div><UiBadge :tone="status.tone" :label="status.label" /></div>
         <p class="m-0">
@@ -84,7 +84,7 @@ onMounted(load)
       </div>
 
       <details class="mt-4 text-small text-fg-2">
-        <summary class="cursor-pointer text-accent-ink">What it costs</summary>
+        <summary class="cursor-pointer py-1 text-accent-ink">What it costs</summary>
         <ul class="mt-2 flex list-disc flex-col gap-1.5 pl-5">
           <li>Each request is formatted and written to the console and to OpenTelemetry. In our load tests peak throughput fell by about 6–14 % and the gateway’s CPU per request rose by about 10 %. At ordinary traffic the added time per request is a few microseconds.</li>
           <li>The log grows by one line per request: about 200 bytes in the console log (some 200 MB per million requests), more as an OpenTelemetry record, before your log system’s own overhead and retention.</li>

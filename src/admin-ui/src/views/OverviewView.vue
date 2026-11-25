@@ -113,7 +113,7 @@ const providerRows = computed(() => ops.health?.providers.filter((p) => p.isEnab
 <template>
   <PageHeader title="Overview" description="Spend, traffic and anything that needs a decision." />
 
-  <AsyncState :loading="loading && !month" :error="error" :empty="false" @retry="load">
+  <AsyncState :loading="loading" :error="error" :empty="!month" @retry="load">
     <section v-if="attentionCount > 0" aria-labelledby="attention-h" class="mb-8">
       <h2 id="attention-h" class="mb-3 text-heading">Needs attention</h2>
       <div class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
@@ -185,7 +185,7 @@ const providerRows = computed(() => ops.health?.providers.filter((p) => p.isEnab
         <DailySpendChart :points="points" />
       </UiCard>
       <UiCard v-if="auth.isGatewayAdmin" title="Providers" meta="First token p95, 24 h" heading-id="providers-h">
-        <AsyncState :loading="!ops.health" :error="ops.healthError" :empty="false" @retry="ops.loadHealth">
+        <AsyncState :loading="!ops.health && !ops.healthError" :error="ops.healthError" :empty="!ops.health" @retry="ops.loadHealth">
           <DataTable
             :columns="providerColumns"
             :rows="providerRows"

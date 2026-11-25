@@ -134,7 +134,7 @@ onBeforeUnmount(() => clearTimeout(poll))
 
 <template>
   <UiCard title="Data retention" meta="Removed nightly" heading-id="retention-h" class="max-w-[680px]">
-    <AsyncState :loading="loading" :error="loadError" :empty="false" @retry="load">
+    <AsyncState :loading="loading" :error="loadError" :empty="!settings" @retry="load">
       <div class="flex flex-col gap-3 text-fg-2">
         <p class="m-0">
           Old request data is removed every night so the database does not keep growing. Before a month’s usage records are removed, the gateway saves
@@ -169,7 +169,7 @@ onBeforeUnmount(() => clearTimeout(poll))
         </div>
 
         <details class="w-full text-small text-fg-2">
-          <summary class="cursor-pointer text-accent-ink">What is kept and what is removed</summary>
+          <summary class="cursor-pointer py-1 text-accent-ink">What is kept and what is removed</summary>
           <ul class="mt-2 flex list-disc flex-col gap-1.5 pl-5">
             <li><strong>Removed:</strong> each request’s details (time, key, model, tokens, cost, status, PII categories found), refused-key records, and budget alerts of periods that ended over a year ago.</li>
             <li><strong>Kept as monthly totals:</strong> requests, errors, fallbacks, tokens, audio seconds and cost per month, key, team, department, model, provider and endpoint. Budgets and the usage summary, CSV export and Data API monthly figures use them, so yearly budgets stay exact.</li>

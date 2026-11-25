@@ -124,7 +124,7 @@ onMounted(load)
 
 <template>
   <UiCard title="Branding" meta="Admin console" heading-id="branding-h" class="max-w-[680px]">
-    <AsyncState :loading="loading" :error="loadError" :empty="false" @retry="load">
+    <AsyncState :loading="loading" :error="loadError" :empty="!store.branding" @retry="load">
       <p class="m-0 text-fg-2">
         The logo and organisation name shown at the top of the menu and on the sign-in page, for everyone who opens the console. Changes show
         at once for you and within 30 seconds for others.
