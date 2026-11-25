@@ -85,7 +85,7 @@ onMounted(load)
 
 <template>
   <UiCard title="Trusted proxies" meta="Client addresses" heading-id="proxies-h" class="max-w-[680px]">
-    <AsyncState :loading="loading" :error="loadError" :empty="false" @retry="load">
+    <AsyncState :loading="loading" :error="loadError" :empty="!settings" @retry="load">
       <div class="flex flex-col gap-3 text-fg-2">
         <p class="m-0">
           Behind a reverse proxy or load balancer, every request reaches the gateway from the proxy’s address. List the proxies here and the
@@ -123,7 +123,7 @@ onMounted(load)
           />
         </div>
         <details class="w-full text-small text-fg-2">
-          <summary class="cursor-pointer text-accent-ink">Before you change this</summary>
+          <summary class="cursor-pointer py-1 text-accent-ink">Before you change this</summary>
           <ul class="mt-2 flex list-disc flex-col gap-1.5 pl-5">
             <li>List only the addresses of proxies you operate. A trusted address can claim to be any client, so anyone who can connect from it can get past key address restrictions.</li>
             <li>Do not trust a network that also contains clients, for example a whole office network. A wide network such as 10.0.0.0/8 is only safe if nothing but proxies uses it.</li>

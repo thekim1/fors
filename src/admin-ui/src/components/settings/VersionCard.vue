@@ -18,7 +18,7 @@ onMounted(() => {
 
 <template>
   <UiCard title="Version" meta="Releases on GitHub" heading-id="version-h" class="max-w-xl">
-    <AsyncState :loading="ops.versionLoading && !ops.version" :error="ops.versionError" :empty="false" @retry="ops.loadVersion">
+    <AsyncState :loading="ops.versionLoading && !ops.version" :error="ops.versionError" :empty="!ops.version" @retry="ops.loadVersion">
       <template v-if="ops.version">
         <div
           v-if="ops.version.updateAvailable && ops.version.latest"

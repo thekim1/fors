@@ -45,6 +45,7 @@ export const useBudgetsStore = defineStore('budgets', () => {
     alerts: alerts.data,
     alertsLoading: alerts.loading,
     alertsError: alerts.error,
+    alertsLoaded: alerts.loaded,
     loadAlerts,
     acknowledge,
   }

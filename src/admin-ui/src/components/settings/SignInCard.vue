@@ -58,7 +58,7 @@ const secretText = computed(() => {
 
 <template>
   <UiCard title="Sign-in" meta="Identity provider" heading-id="sign-in-h" class="max-w-3xl">
-    <AsyncState :loading="loading && !settings" :error="loadError" :empty="false" @retry="load">
+    <AsyncState :loading="loading" :error="loadError" :empty="!settings" @retry="load">
       <template v-if="settings">
         <dl class="m-0" data-test="sign-in-values">
           <DetailRow v-for="r in rows" :key="r.key" :label="r.label">

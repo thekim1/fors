@@ -31,6 +31,7 @@ export const useUsageStore = defineStore('usage', () => {
     requests: requests.data,
     requestsLoading: requests.loading,
     requestsError: requests.error,
+    requestsLoaded: requests.loaded,
     piiIncidents: piiIncidents.data,
     piiIncidentsLoading: piiIncidents.loading,
     piiIncidentsError: piiIncidents.error,

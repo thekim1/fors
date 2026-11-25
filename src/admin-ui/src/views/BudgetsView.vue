@@ -225,7 +225,7 @@ async function remove(): Promise<void> {
 
   <section aria-labelledby="open-alerts-h" class="mb-8">
     <h2 id="open-alerts-h" tabindex="-1" class="mb-3 text-heading outline-none">Open alerts</h2>
-    <AsyncState :loading="budgets.alertsLoading && openAlerts.length === 0" :error="budgets.alertsError" :empty="false" @retry="load">
+    <AsyncState :loading="budgets.alertsLoading" :error="budgets.alertsError" :empty="!budgets.alertsLoaded" @retry="load">
       <InlineError v-if="ackError" :message="problemMessage(ackError)" class="mb-3" />
       <p v-if="openAlerts.length === 0" class="flex items-center gap-2 text-fg-2"><AppIcon name="check_circle" filled class="text-ok" />No open alerts.</p>
       <ul v-else class="m-0 flex list-none flex-col gap-2 p-0">
@@ -248,7 +248,7 @@ async function remove(): Promise<void> {
       <h2 id="budgets-h" class="text-heading">Budgets</h2>
       <SegmentedControl v-model="filter" :options="filterOptions" label="Filter by scope" />
     </div>
-    <AsyncState :loading="budgets.loading && !budgets.loaded" :error="budgets.error" :empty="false" @retry="load">
+    <AsyncState :loading="budgets.loading" :error="budgets.error" :empty="!budgets.loaded" @retry="load">
       <DataTable
         :columns="columns"
         :rows="filtered"

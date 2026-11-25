@@ -267,7 +267,7 @@ const percentiles = (s: { p95: number | null; p99?: number | null } | undefined)
       The charts start on {{ formatDate(data.recordsFrom) }}: older usage is only kept as monthly totals (data retention, see Settings), without timings.
     </p>
 
-    <AsyncState :loading="usage.metricsLoading && !data" :error="usage.metricsError" :empty="false" @retry="load">
+    <AsyncState :loading="usage.metricsLoading" :error="usage.metricsError" :empty="!data" @retry="load">
       <div v-if="data && totals" class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" :class="{ 'opacity-60 transition-opacity': usage.metricsLoading }" :aria-busy="usage.metricsLoading">
         <MetricChartCard
           title="Cost"
