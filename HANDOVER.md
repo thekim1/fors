@@ -44,6 +44,10 @@ The project is not a production approval, legal attestation or WCAG certificatio
    Department member groups read the token's group claim only (`DepartmentMembership`); a directory lookup for users
    with more groups than fit in a token, and refusing guests or other tenants at sign-in, are not built.
 
+9. **Admin UI layout:** the pages not yet following the [layout rules](docs/admin-ui.md#layout-rules) are listed, with the
+   fixes in order and seven questions for a decision, in [docs/admin-ui-layout-audit.md](docs/admin-ui-layout-audit.md)
+   (proposal of 2026-11-25; nothing built yet).
+
 8. **The rename to Fors (0.12.0):** the names from before it are accepted until 0.13 (the upgrade guide's 0.12.0 section).
    Remove them in 0.13: `VirtualKeyHasher`/`DataApiKeyHasher.LegacyKeyPrefix`, `GatewayHeaders.Legacy` (and its
    `Read`/`Write` second name, the `: ume-cost-usd=` comment), `GatewayEndpointInfo.LegacyClientPath`, the `ume` facts
