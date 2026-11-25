@@ -54,13 +54,17 @@ describe('TrustedProxiesCard', () => {
     await button(wrapper, 'Add 10.0.0.5').trigger('click')
     expect((textarea(wrapper).element as HTMLTextAreaElement).value).toBe('10.0.0.5')
 
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('1 unsaved change')
+
     updateNetwork.mockResolvedValue(settings({ trustedProxies: ['10.0.0.5'], updatedAt: '2026-10-12T08:00:00Z' }))
-    await wrapper.find('form').trigger('submit')
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('Only list proxies you operate')
     await button(wrapper, 'Save proxies').trigger('click')
     await flushPromises()
     expect(updateNetwork).toHaveBeenCalledWith(['10.0.0.5'])
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
+    expect(wrapper.emitted('dirty')).toEqual([[true], [false]])
   })
 
   it('warns that clearing the list ignores the proxy header', async () => {

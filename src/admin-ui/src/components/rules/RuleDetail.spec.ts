@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { rule } from '@/test/fixtures'
-import { button, buttonByLabel } from '@/test/helpers'
+import { button, buttonByLabel, chooseMenuItem, openMenu } from '@/test/helpers'
 import RuleDetail from './RuleDetail.vue'
 
 const mountDetail = (r: ReturnType<typeof rule>, props: { position?: number; count?: number; busy?: boolean } = {}) =>
@@ -51,8 +51,8 @@ describe('RuleDetail', () => {
     expect(wrapper.text()).toContain('Service desk')
     await button(wrapper, 'Edit').trigger('click')
     await button(wrapper, 'Disable').trigger('click')
-    await button(wrapper, 'Change owners').trigger('click')
-    await button(wrapper, 'Delete').trigger('click')
+    await chooseMenuItem(wrapper, 'More actions for Rule', 'Change owners')
+    await chooseMenuItem(wrapper, 'More actions for Rule', 'Delete…')
     await buttonByLabel(wrapper, 'Check earlier').trigger('click')
     await buttonByLabel(wrapper, 'Check later').trigger('click')
     expect(['edit', 'toggle', 'reassign', 'delete'].map((e) => wrapper.emitted(e)?.length)).toEqual([1, 1, 1, 1])
@@ -78,7 +78,11 @@ describe('RuleDetail', () => {
     expect(wrapper.emitted('copy')).toHaveLength(1)
   })
 
-  it('offers to change the scope of a global rule', () => {
-    expect(button(mountDetail(rule()), 'Change scope').exists()).toBe(true)
+  it('offers to change the scope of a global rule on the ⋯ menu, Delete last and in red', async () => {
+    const wrapper = mountDetail(rule())
+    await wrapper.get('[data-test=menu-button]').trigger('click')
+    const items = openMenu().findAll('[role=menuitem]')
+    expect(items.map((i) => i.text())).toEqual(['account_treeChange scope', 'deleteDelete…'])
+    expect(items.at(-1)!.classes()).toContain('text-danger')
   })
 })

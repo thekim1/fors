@@ -9,13 +9,14 @@ import RouteList from '@/components/routing/RouteList.vue'
 import { buildTiers } from '@/components/routing/tiers'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import MenuButton from '@/components/ui/MenuButton.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { useModelsStore } from '@/stores/models'
 import { useRoutesStore } from '@/stores/routes'
 import { useUiStore } from '@/stores/ui'
-import { KIND_LABEL } from '@/utils/labels'
+import { KIND_LABEL, MENU } from '@/utils/labels'
 
 const routes = useRoutesStore()
 const models = useModelsStore()
@@ -99,7 +100,7 @@ onMounted(async () => {
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <UiButton icon="edit" @click="edit">Edit route</UiButton>
-              <UiButton variant="danger" icon="delete" @click="deleting = true">Delete route</UiButton>
+              <MenuButton :label="MENU.more(selected.name)" :items="[{ key: 'delete', label: 'Delete route…', icon: 'delete', danger: true }]" @select="deleting = true" />
             </div>
           </div>
 

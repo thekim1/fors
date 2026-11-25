@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { confirmDialog, login, mutate, ready, remove, testTeam } from '../helpers'
+import { chooseMenuItem, confirmDialog, login, mutate, ready, remove, testTeam } from '../helpers'
 
 // Automated stand-ins for the screen reader checklist in HANDOVER.md. They cover what a script can
 // prove (focus, names, heading levels, language). They are NOT a screen reader pass: what is announced still has to be
@@ -47,7 +47,7 @@ test('focus moves to the detail heading, back to the trigger, to the first error
 
     // After deleting, focus is somewhere useful (not lost on the body).
     await page.getByRole('navigation', { name: 'Routing rules' }).getByRole('button', { name: `Browser focus rule ${s}` }).click()
-    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await chooseMenuItem(page, 'Delete…')
     await confirmDialog(page, 'Delete rule?', 'Delete rule')
     await expect.poll(() => page.evaluate(() => document.activeElement?.tagName ?? 'NONE')).not.toBe('BODY')
   } finally { await remove(page, `/api/routing-rules/${id}`) }

@@ -14,18 +14,19 @@ Everything in the original scope and the routing rules feature is implemented, t
 | Integrations (platforms such as Källa; ADR 020, 021) | Done: phases 1 to 3 (integrations, credential and assigned keys, `/v1/fors/context`, model facts, acting as an assigned key within the credential key's residencies, run metadata, stream cost, the Integration API, the scope `organisation.read`, department member groups; in 0.10.2 the organisation name and Integration API address in the context, and provisioning from a manifest by the migration service or from a preset in the admin console, ADR 022; in 0.11.0 the sign-in provider in the context, manifests without an owner and moving an integration with its credential keys). The contract is `docs/openapi/integrations.json`; `IntegrationContract` (test kit) holds the answers to it, so change both together. Webhooks not planned, see [docs/integrations.md](docs/integrations.md#phases) |
 | Setup mode (the admin console's sign-in set in a browser wizard; thekim1/fors#100) | Done in 0.11.0, see [docs/identity-and-roles.md](docs/identity-and-roles.md#setup-mode). A deployment that sets `Oidc:Authority` never sees it. Known gap: the Data API does not follow the wizard (`FORS_DATA_AUTHORITY`) |
 | The rename to Fors (gateway) and Källa (RAG platform), licence Apache-2.0 | Done in 0.12.0 (thekim1/fors#114); the old names are accepted until 0.13, see open item 8 |
-| Admin UI (`src/admin-ui`) | Done: Vue 3, Pinia, Reka UI, Tailwind v4, English, light/dark/Lumen |
+| Admin UI (`src/admin-ui`) | Done: Vue 3, Pinia, Reka UI, Tailwind v4, English, light/dark/Lumen. Follows Källa's [layout rules](docs/admin-ui.md#layout-rules); the design system and its shared components are copied by Källa (*Shared with Källa* there), so offer a change to them to Källa too |
 | Aspire AppHost, Compose publish with mandatory hardening, backup/restore | Done; `deploy/Test-Deployment.ps1` passes |
 | Data-plane performance | Benchmarked and optimised, see [docs/performance.md](docs/performance.md) (`benchmarks/Fors.Benchmarks`) |
-| Tests | Domain, gateway, admin API, integration (Testcontainers), UI (Vitest) and Playwright e2e (34 tests, own test database via `scripts/Start-E2E.ps1`) all pass |
+| Tests | Domain, gateway, admin API, integration (Testcontainers), UI (Vitest) and Playwright e2e (40 tests, own test database via `scripts/Start-E2E.ps1`) all pass |
 
 The project is not a production approval, legal attestation or WCAG certification (see the release gates in
 [docs/security-and-compliance.md](docs/security-and-compliance.md)).
 
 ## Open items
 
-1. **Screen reader pass: not planned.** Decided 2026-10-10: there are no resources for manual testing with NVDA or VoiceOver. The automated axe,
-   focus, heading and name checks remain the evidence. `docs/accessibility-statement.md` keeps saying that no screen reader has been run; an adopter
+1. **Screen reader pass: not planned.** Decided 2026-10-10, and again 2026-11-25 when Fors took Källa's layout rule 11 (WCAG 2.2 AA) in its
+   automated form only: there are no resources for manual testing with NVDA or VoiceOver. The automated axe (three themes, 1 280 and 390 px, open
+   menus, sheets, chips and save bar), focus, heading and name checks remain the evidence. `docs/accessibility-statement.md` keeps saying that no screen reader has been run; an adopter
    who needs that evidence (for example before public use) has to arrange it. Untested areas most likely to need it: `<datalist>` model-name inputs, the
    live regions, focus after drawers and dialogs, the segmented controls, the `<details>` disclosures and `aria-disabled` move buttons.
 2. **Decide:** a duplicate rule name (409) is shown as a form-level message, not on the *Name* field.

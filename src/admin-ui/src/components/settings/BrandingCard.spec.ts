@@ -108,4 +108,20 @@ describe('BrandingCard', () => {
     expect(removeLogo).toHaveBeenCalled()
     expect(wrapper.find('img').exists()).toBe(false)
   })
+
+  it('saves the name through the save bar and keeps a name being edited when a logo is uploaded', async () => {
+    const wrapper = await mountCard(value())
+    await wrapper.find('#branding-name').setValue('Example kommun')
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('1 unsaved change')
+    uploadLogo.mockResolvedValue(value({ logoUrl: '/api/branding/logo?v=1' }))
+    await choose(wrapper, new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }))
+    await flushPromises()
+    expect((wrapper.find('#branding-name').element as HTMLInputElement).value).toBe('Example kommun')
+
+    updateBranding.mockResolvedValue(value({ organisationName: 'Example kommun', logoUrl: '/api/branding/logo?v=1' }))
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
+    await flushPromises()
+    expect(updateBranding).toHaveBeenCalledWith('Example kommun')
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
+  })
 })

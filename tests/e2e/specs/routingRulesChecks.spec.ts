@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { appliedRule, confirmDialog, gatewayCall, login, mutate, ready, remove, testKey, testTeam } from '../helpers'
+import { appliedRule, chooseMenuItem, confirmDialog, gatewayCall, login, mutate, ready, remove, testKey, testTeam } from '../helpers'
 
 test.afterEach(async ({ page }) => { await page.close() })
 
@@ -64,7 +64,7 @@ test('edit a rule and change its scope', async ({ page }) => {
     await expect(drawer).toBeHidden()
     await expect(page.getByRole('heading', { level: 2, name: `Browser renamed ${s}`, exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Change scope' }).click()
+    await chooseMenuItem(page, 'Change scope')
     const dialog = page.getByRole('dialog', { name: 'Change owners' })
     await dialog.getByRole('radio', { name: 'Department' }).click()
     await dialog.getByRole('checkbox', { name: department.departmentName, exact: true }).check()
@@ -175,7 +175,7 @@ test('deleting a department with rules: delete them or keep them switched off, b
     for (const [department, choice, button] of [[remover, /Delete them/, /Delete department and 1 rule/], [keeper, /Deactivate them/, /Delete department, deactivate 1 rule/]] as const) {
       await ready(page, '/organisation')
       await page.getByRole('navigation', { name: 'Departments' }).getByRole('button', { name: new RegExp(department.name) }).click()
-      await page.getByRole('button', { name: 'Delete department' }).click()
+      await chooseMenuItem(page, 'Delete department…')
       await confirmDialog(page, 'Delete department?', 'Delete department')
       const question = page.getByRole('dialog', { name: /1 routing rule belongs to this department/ })
       await question.getByRole('radio', { name: choice }).check()

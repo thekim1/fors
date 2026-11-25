@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useDirty } from '@/composables/useDirty'
 import type { RoutingRule, RoutingScope } from '@/api/types'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { useModelOptions } from '@/composables/useModelOptions'
@@ -110,6 +111,12 @@ function moveFallback(index: number, delta: -1 | 1): void {
   ;[list[index], list[other]] = [list[other]!, list[index]!]
 }
 
+// Closing with unsaved changes asks first (UiDrawer's `unsaved`); the form's saved state is what it opened with.
+const { changes: unsaved, reset: markSaved } = useDirty(() => ({
+  name: name.value, description: description.value, scope: scope.value, scopeIds: scopeIds.value, isEnabled: isEnabled.value,
+  chain: chain.value, condition: condition.value, targets: targets.value.map((t) => ({ ...t, uid: 0 })), fallbacks: fallbacks.value.map((f) => f.model),
+}))
+
 watch(
   () => props.open,
   (open) => {
@@ -129,6 +136,7 @@ watch(
     if (!rule) addTarget()
     if (!rule && props.template) applyTemplate(props.template.id)
     void owners.load(scope.value)
+    void nextTick(markSaved)
   },
   { immediate: true },
 )
@@ -191,7 +199,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <UiDrawer wide :open="open" :title="rule ? 'Edit rule' : 'New rule'" @update:open="emit('update:open', $event)">
+  <UiDrawer :unsaved="unsaved" wide :open="open" :title="rule ? 'Edit rule' : 'New rule'" @update:open="emit('update:open', $event)">
     <form id="rule-form" class="flex flex-col gap-6" novalidate @submit.prevent="submit">
       <InlineError v-if="formError" :message="formError" />
       <SelectField
@@ -265,9 +273,9 @@ async function submit(): Promise<void> {
 
       <CheckField v-model="chain" label="Chain" description="After this rule, send the new model name through the rules again. Use it to rename a model before routing it." />
     </form>
-    <template #footer>
+    <template #footer="{ close }">
       <UiButton variant="primary" type="submit" form="rule-form" :loading="busy">{{ rule ? 'Save changes' : 'Create rule' }}</UiButton>
-      <UiButton @click="emit('update:open', false)">Cancel</UiButton>
+      <UiButton @click="close">Cancel</UiButton>
     </template>
   </UiDrawer>
 </template>

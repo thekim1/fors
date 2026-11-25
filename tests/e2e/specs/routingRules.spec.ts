@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { appliedRule, confirmDialog, login, mutate, ready, remove, testKey, testTeam } from '../helpers'
+import { appliedRule, chooseMenuItem, confirmDialog, login, mutate, ready, remove, testKey, testTeam } from '../helpers'
 
 test.afterEach(async ({ page }) => { await page.close() })
 
@@ -69,7 +69,7 @@ test('create, validate, test, reorder, disable and delete a rule, and see it app
     await expect.poll(() => appliedRule(page, key.secret, suffix)).toBe(ruleId)
 
     // Delete.
-    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await chooseMenuItem(page, 'Delete…')
     await confirmDialog(page, 'Delete rule?', 'Delete rule')
     await expect(page.getByRole('navigation', { name: 'Routing rules' }).getByRole('button', { name })).toHaveCount(0)
     await expect.poll(() => appliedRule(page, key.secret, suffix)).toBeNull()
@@ -100,7 +100,7 @@ test('deleting a team keeps its rules switched off until they are given a new ow
     // Delete the old team and choose "Deactivate".
     await ready(page, '/organisation')
     await page.getByRole('navigation', { name: 'Departments' }).getByRole('button', { name: new RegExp(oldTeam.departmentName) }).click()
-    await page.getByRole('row').filter({ hasText: oldTeam.teamName }).getByRole('button', { name: 'Delete' }).click()
+    await chooseMenuItem(page, 'Delete team…', page.getByRole('row').filter({ hasText: oldTeam.teamName }))
     await confirmDialog(page, 'Delete team?', 'Delete team')
     const choice = page.getByRole('dialog', { name: /1 routing rule belongs to this team/ })
     await expect(choice).toBeVisible()
@@ -117,7 +117,7 @@ test('deleting a team keeps its rules switched off until they are given a new ow
     expect(await appliedRule(page, key.secret, suffix)).toBeNull()
 
     // Give it to the other team: it is enabled and applies again.
-    await page.getByRole('button', { name: 'Change owners' }).click()
+    await chooseMenuItem(page, 'Change owners')
     const reassign = page.getByRole('dialog', { name: 'Assign a new owner' })
     await reassign.getByRole('radio', { name: 'Team' }).click()
     await reassign.getByRole('checkbox', { name: new RegExp(`^${newTeam.teamName} · `) }).check()

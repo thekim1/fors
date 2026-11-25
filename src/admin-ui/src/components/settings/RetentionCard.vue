@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { RetentionSettings } from '@/api/types'
+import { useDirty } from '@/composables/useDirty'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { useUiStore } from '@/stores/ui'
 import { formatDate, formatDateTime, formatNumber } from '@/utils/format'
@@ -12,6 +13,7 @@ import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import InlineError from '@/components/ui/InlineError.vue'
+import SaveBar from '@/components/ui/SaveBar.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
@@ -19,6 +21,7 @@ import UiCard from '@/components/ui/UiCard.vue'
 const MIN_DAYS = 90
 const MAX_DAYS = 3650
 
+const emit = defineEmits<{ (e: 'dirty', value: boolean): void }>()
 const ui = useUiStore()
 const ids = { usageRetentionDays: 'retention-usage', auditRetentionDays: 'retention-audit' } as const
 const { errors, validate } = useFormErrors(ids)
@@ -35,17 +38,34 @@ const runError = ref<unknown>(null)
 const starting = ref(false)
 let poll: ReturnType<typeof setTimeout> | undefined
 
+// Layout rule 7. Keeping the audit log for ever and its days are one answer, so they count as one change.
+const { changes, dirty, reset } = useDirty(() => ({ usage: usageDays.value.trim(), audit: auditForever.value ? 'forever' : auditDays.value.trim() }))
+watch(dirty, (value) => emit('dirty', value))
+
 const consequence = computed(() => {
   const { usage, audit } = pending.value
   const auditText = audit === null ? 'Audit entries are kept for ever.' : `Audit entries older than ${formatNumber(audit)} days are removed.`
   return `From the next run, usage records, refused keys and old budget alerts older than ${formatNumber(usage)} days (whole months) are removed; monthly usage totals are kept. ${auditText} Removed rows cannot be restored except from a backup.`
 })
 
+/** The saved settings into the form, as its saved state. */
 function fill(value: RetentionSettings): void {
   settings.value = value
   usageDays.value = String(value.usageRetentionDays)
   auditForever.value = value.auditRetentionDays === null
   auditDays.value = String(value.auditRetentionDays ?? 365)
+  reset()
+}
+
+/** A run's state only: the form keeps what is being edited. */
+function update(value: RetentionSettings): void {
+  if (dirty.value) settings.value = value
+  else fill(value)
+}
+
+function discard(): void {
+  if (settings.value) fill(settings.value)
+  validate({ usageRetentionDays: null, auditRetentionDays: null })
 }
 
 async function load(): Promise<void> {
@@ -86,7 +106,7 @@ function watchRun(): void {
   poll = setTimeout(async () => {
     try {
       const wasRunning = settings.value?.running
-      fill(await api.settings.retention())
+      update(await api.settings.retention())
       if (wasRunning && !settings.value?.running) ui.notify('Old data removed')
     } catch {
       // The next look at the page shows the state.
@@ -99,7 +119,7 @@ async function runNow(): Promise<void> {
   runError.value = null
   starting.value = true
   try {
-    fill({ ...(await api.settings.runRetention()), running: true })
+    update({ ...(await api.settings.runRetention()), running: true })
     watchRun()
   } catch (e) {
     runError.value = e
@@ -113,7 +133,7 @@ onBeforeUnmount(() => clearTimeout(poll))
 </script>
 
 <template>
-  <UiCard title="Data retention" meta="Removed nightly" heading-id="retention-h" class="max-w-3xl">
+  <UiCard title="Data retention" meta="Removed nightly" heading-id="retention-h" class="max-w-[680px]">
     <AsyncState :loading="loading" :error="loadError" :empty="false" @retry="load">
       <div class="flex flex-col gap-3 text-fg-2">
         <p class="m-0">
@@ -129,6 +149,7 @@ onBeforeUnmount(() => clearTimeout(poll))
             v-model="usageDays"
             label="Usage data, days"
             inputmode="numeric"
+            short
             :error="errors.usageRetentionDays"
             hint="Usage records, refused keys and budget alerts. Whole months are removed. 90 to 3 650 days."
           />
@@ -139,6 +160,7 @@ onBeforeUnmount(() => clearTimeout(poll))
               v-model="auditDays"
               label="Audit log, days"
               inputmode="numeric"
+              short
               :error="errors.auditRetentionDays"
               hint="Who changed what in the admin UI. 90 to 3 650 days."
             />
@@ -158,7 +180,7 @@ onBeforeUnmount(() => clearTimeout(poll))
           </ul>
         </details>
 
-        <UiButton type="submit" variant="primary">Review change</UiButton>
+        <SaveBar :changes="changes" consequence="You confirm the change first; it applies from the next run" @save="review" @discard="discard" />
       </form>
 
       <div v-if="settings" class="mt-6 flex flex-col gap-2 border-t border-border pt-4 text-small text-fg-2">

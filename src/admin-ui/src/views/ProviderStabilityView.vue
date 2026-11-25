@@ -5,6 +5,7 @@ import type { ProviderRank, ProviderStability } from '@/api/types'
 import { formatMs, formatNumber, formatRatio, formatShortDate, formatTime, TIME_ZONE } from '@/utils/format'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
+import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -106,6 +107,8 @@ const rankLabel = (p: ProviderRank) => (p.exists ? p.name : `${p.name} (deleted)
 </script>
 
 <template>
+  <!-- A page under Health & operations: the way back is above its title, and the menu keeps Health lit. -->
+  <PageBreadcrumb :items="[{ label: 'Health & operations', to: { name: 'ops' } }]" />
   <PageHeader title="Provider stability" description="How often each provider fails and how fast it answers, over time.">
     <UiButton icon="refresh" :loading="loading" @click="load">Refresh</UiButton>
   </PageHeader>

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CreateDataApiKeyResponse, DataApiKey, DataPermission } from '@/api/types'
 import { useDataAccessStore } from '@/stores/dataAccess'
 import { useUiStore } from '@/stores/ui'
-import { DATA_PERMISSION, plural } from '@/utils/labels'
+import { DATA_PERMISSION, MENU, plural } from '@/utils/labels'
 import { formatDate, formatRelative, startOfMonthIso, todayIso } from '@/utils/format'
 import DataApiKeyFormDrawer from '@/components/dataAccess/DataApiKeyFormDrawer.vue'
 import CodeBlock from '@/components/keys/CodeBlock.vue'
@@ -12,6 +12,7 @@ import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import KeyStatusBadge from '@/components/ui/KeyStatusBadge.vue'
+import MenuButton from '@/components/ui/MenuButton.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SecretDialog from '@/components/ui/SecretDialog.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
@@ -162,14 +163,13 @@ onBeforeUnmount(() => {
       <template #cell-lastUsed="{ row }"><span class="text-fg-2">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : 'Never used' }}</span></template>
       <template #cell-actions="{ row }">
         <span class="flex flex-wrap justify-end gap-2">
-          <template v-if="row.status === 'Active'">
-            <UiButton size="sm" icon="edit" @click="openEdit(row)">Edit<span class="sr-only"> {{ row.name }}</span></UiButton>
-            <UiButton size="sm" variant="danger" icon="block" @click="confirmRevoke(row)">Revoke<span class="sr-only"> {{ row.name }}</span></UiButton>
-          </template>
-          <template v-else>
-            <UiButton v-if="row.status === 'Expired'" size="sm" icon="edit" @click="openEdit(row)">Edit<span class="sr-only"> {{ row.name }}</span></UiButton>
-            <UiButton size="sm" variant="danger" icon="delete" @click="confirmDelete(row)">Delete<span class="sr-only"> {{ row.name }}</span></UiButton>
-          </template>
+          <UiButton v-if="row.status !== 'Revoked'" size="sm" icon="edit" @click="openEdit(row)">Edit<span class="sr-only"> {{ row.name }}</span></UiButton>
+          <!-- Layout rule 1: revoking and deleting are on the row's ⋯ menu, behind their confirmations. -->
+          <MenuButton
+            size="sm" :label="MENU.more(row.name)"
+            :items="[row.status === 'Active' ? { key: 'revoke', label: 'Revoke…', icon: 'block', danger: true } : { key: 'delete', label: MENU.delete, icon: 'delete', danger: true }]"
+            @select="$event === 'revoke' ? confirmRevoke(row) : confirmDelete(row)"
+          />
         </span>
       </template>
     </DataTable>

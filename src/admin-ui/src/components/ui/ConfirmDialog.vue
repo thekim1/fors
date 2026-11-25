@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Tone } from '@/utils/labels'
 import UiButton from './UiButton.vue'
 import UiDialog from './UiDialog.vue'
 import InlineError from './InlineError.vue'
+import TextField from './TextField.vue'
 import { problemMessage } from '@/utils/problem'
 
 const props = withDefaults(
@@ -19,6 +20,10 @@ const props = withDefaults(
     tone?: Tone
     /** Async action; the dialog closes when it resolves and shows the error inline when it rejects. */
     action?: () => Promise<unknown> | unknown
+    /** A name the user types before the button acts (a delete that cannot be undone). */
+    confirmName?: string
+    /** The field's label, naming what to type. */
+    confirmNameLabel?: string
   }>(),
   { cancelLabel: 'Cancel', danger: false },
 )
@@ -26,15 +31,21 @@ const emit = defineEmits<{ (e: 'update:open', value: boolean): void; (e: 'confir
 
 const busy = ref(false)
 const error = ref<unknown>(null)
+const typed = ref('')
+const nameMatches = computed(() => props.confirmName === undefined || typed.value.trim() === props.confirmName.trim())
 
 watch(
   () => props.open,
   (open) => {
-    if (open) error.value = null
+    if (open) {
+      error.value = null
+      typed.value = ''
+    }
   },
 )
 
 async function confirm(): Promise<void> {
+  if (!nameMatches.value) return
   busy.value = true
   error.value = null
   try {
@@ -58,10 +69,13 @@ async function confirm(): Promise<void> {
     @update:open="emit('update:open', $event)"
   >
     <template v-if="consequence || $slots.default" #description><slot>{{ consequence }}</slot></template>
+    <TextField
+      v-if="confirmName !== undefined" v-model="typed" :label="confirmNameLabel ?? confirmName" autocomplete="off" data-test="confirm-name"
+    />
     <InlineError v-if="error" :message="problemMessage(error)" />
     <template #actions>
       <UiButton @click="emit('update:open', false)">{{ cancelLabel }}</UiButton>
-      <UiButton :variant="danger ? 'danger-solid' : 'primary'" :loading="busy" @click="confirm">{{ confirmLabel }}</UiButton>
+      <UiButton :variant="danger ? 'danger-solid' : 'primary'" :loading="busy" :disabled="!nameMatches" data-test="confirm" @click="confirm">{{ confirmLabel }}</UiButton>
     </template>
   </UiDialog>
 </template>

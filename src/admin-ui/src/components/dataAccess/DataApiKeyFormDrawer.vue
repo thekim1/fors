@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { useDirty } from '@/composables/useDirty'
 import { DATA_PERMISSIONS, type CreateDataApiKeyResponse, type DataApiKey, type DataPermission } from '@/api/types'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { useDataAccessStore } from '@/stores/dataAccess'
@@ -33,6 +34,9 @@ const values = reactive({ name: '', description: '', permissions: [] as DataPerm
 const busy = ref(false)
 const isEdit = computed(() => !!props.existing)
 
+// Closing with unsaved changes asks first (UiDrawer's `unsaved`); the form's saved state is what it opened with.
+const { changes: unsaved, reset: markSaved } = useDirty(() => ({ ...values }))
+
 watch(
   () => props.open,
   (open) => {
@@ -43,6 +47,7 @@ watch(
     values.description = key?.description ?? ''
     values.permissions = [...(key?.permissions ?? [])]
     values.expiresAt = isoToDateInput(key?.expiresAt)
+    void nextTick(markSaved)
   },
   { immediate: true },
 )
@@ -91,7 +96,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <UiDrawer
+  <UiDrawer :unsaved="unsaved"
     :open="open"
     wide
     :title="isEdit ? `Edit ${existing?.name ?? 'Data API key'}` : 'New Data API key'"
@@ -133,9 +138,9 @@ async function submit(): Promise<void> {
         />
       </FieldGroup>
     </form>
-    <template #footer>
+    <template #footer="{ close }">
       <UiButton variant="primary" type="submit" form="data-key-form" :loading="busy">{{ isEdit ? 'Save key' : 'Create key' }}</UiButton>
-      <UiButton :disabled="busy" @click="emit('update:open', false)">Cancel</UiButton>
+      <UiButton :disabled="busy" @click="close">Cancel</UiButton>
     </template>
   </UiDrawer>
 </template>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { Branding } from '@/api/types'
+import { useDirty } from '@/composables/useDirty'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { useBrandingStore } from '@/stores/branding'
 import { useUiStore } from '@/stores/ui'
@@ -11,6 +12,7 @@ import BrandMark from '@/components/layout/BrandMark.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import InlineError from '@/components/ui/InlineError.vue'
+import SaveBar from '@/components/ui/SaveBar.vue'
 import TextField from '@/components/ui/TextField.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
@@ -20,6 +22,7 @@ const MAX_NAME = 80
 const MAX_LOGO_BYTES = 256 * 1024
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
 
+const emit = defineEmits<{ (e: 'dirty', value: boolean): void }>()
 const ui = useUiStore()
 const store = useBrandingStore()
 const ids = { organisationName: 'branding-name' } as const
@@ -34,9 +37,20 @@ const uploading = ref(false)
 const removeOpen = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 
+// Layout rule 7: the name saves through the save bar; the logo saves as soon as it is chosen.
+const { changes, dirty, reset } = useDirty(() => ({ organisationName: name.value.trim() }))
+watch(dirty, (value) => emit('dirty', value))
+
+/** The saved branding into the form, as its saved state. */
 function show(value: Branding): void {
   store.set(value)
   name.value = value.organisationName
+  reset()
+}
+
+function discard(): void {
+  name.value = store.branding?.organisationName ?? ''
+  validate({ organisationName: null })
 }
 
 async function load(): Promise<void> {
@@ -90,7 +104,7 @@ async function onFile(event: Event): Promise<void> {
   }
   uploading.value = true
   try {
-    show(await api.settings.uploadLogo(await base64Of(file)))
+    store.set(await api.settings.uploadLogo(await base64Of(file))) // a name being edited stays
     ui.notify('Logo saved')
   } catch (e) {
     logoError.value = problemMessage(e)
@@ -101,7 +115,7 @@ async function onFile(event: Event): Promise<void> {
 
 // A refusal from the server is shown in the confirmation dialog.
 async function removeLogo(): Promise<void> {
-  show(await api.settings.removeLogo())
+  store.set(await api.settings.removeLogo())
   ui.notify('Logo removed')
 }
 
@@ -109,7 +123,7 @@ onMounted(load)
 </script>
 
 <template>
-  <UiCard title="Branding" meta="Admin console" heading-id="branding-h" class="max-w-3xl">
+  <UiCard title="Branding" meta="Admin console" heading-id="branding-h" class="max-w-[680px]">
     <AsyncState :loading="loading" :error="loadError" :empty="false" @retry="load">
       <p class="m-0 text-fg-2">
         The logo and organisation name shown at the top of the menu and on the sign-in page, for everyone who opens the console. Changes show
@@ -128,7 +142,7 @@ onMounted(load)
           />
         </div>
         <InlineError v-if="formError" :message="formError" />
-        <UiButton type="submit" variant="primary" :loading="savingName">Save name</UiButton>
+        <SaveBar :changes="changes" :saving="savingName" consequence="Shows at once for you and within 30 seconds for others" @save="saveName" @discard="discard" />
       </form>
 
       <div class="mt-6 flex flex-col gap-3">

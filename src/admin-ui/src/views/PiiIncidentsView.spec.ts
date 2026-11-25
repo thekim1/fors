@@ -1,17 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import type { PiiIncident, PiiIncidentReport } from '@/api/types'
 import { button } from '@/test/helpers'
 import PiiIncidentsView from './PiiIncidentsView.vue'
 
+// Ids are Guids: the filters in the address take nothing else (vi.hoisted, since vi.mock runs before the module body).
+const { K1, T1, D1 } = vi.hoisted(() => ({
+  K1: '00000000-0000-4000-8000-0000000000a1',
+  T1: '00000000-0000-4000-8000-0000000000b1',
+  D1: '00000000-0000-4000-8000-0000000000c1',
+}))
 const piiIncidents = vi.fn()
 vi.mock('@/api', () => ({
   api: {
     usage: { piiIncidents: (...a: unknown[]) => piiIncidents(...a) },
-    departments: { list: () => Promise.resolve([{ id: 'd1', name: 'Socialtjänst' }]) },
-    teams: { list: () => Promise.resolve([{ id: 't1', name: 'Mottagning', departmentId: 'd1' }]) },
-    keys: { list: () => Promise.resolve([{ id: 'k1', name: 'Chat app', teamId: 't1', departmentId: 'd1' }]) },
+    departments: { list: () => Promise.resolve([{ id: D1, name: 'Socialtjänst' }]) },
+    teams: { list: () => Promise.resolve([{ id: T1, name: 'Mottagning', departmentId: D1 }]) },
+    keys: { list: () => Promise.resolve([{ id: K1, name: 'Chat app', teamId: T1, departmentId: D1 }]) },
   },
 }))
 
@@ -19,12 +26,12 @@ function incident(overrides: Partial<PiiIncident> = {}): PiiIncident {
   return {
     requestId: 'req_1',
     timestamp: '2026-10-11T08:00:00Z',
-    keyId: 'k1',
+    keyId: K1,
     keyPrefix: 'fors-sk-ab12',
     keyName: 'Chat app',
-    teamId: 't1',
+    teamId: T1,
     teamName: 'Mottagning',
-    departmentId: 'd1',
+    departmentId: D1,
     departmentName: 'Socialtjänst',
     endpoint: '/v1/chat/completions',
     requestedModel: 'fors/chat',
@@ -60,19 +67,24 @@ function report(items: PiiIncident[], overrides: Partial<PiiIncidentReport> = {}
   }
 }
 
-async function mountView() {
+async function mountView(address = '/pii') {
   setActivePinia(createPinia())
-  const wrapper = mount(PiiIncidentsView, { global: { stubs: { RouterLink: RouterLinkStub } } })
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/pii', component: { render: () => null } }] })
+  await router.push(address)
+  const wrapper = mount(PiiIncidentsView, { global: { plugins: [router], stubs: { RouterLink: RouterLinkStub } } })
   await flushPromises()
-  return wrapper
+  return { wrapper, router }
 }
+
+/** The select inside the filter chip named `label`. */
+const chip = (wrapper: ReturnType<typeof mount>, label: string) => wrapper.get(`[data-test="chip-${label}"] select`)
 
 beforeEach(() => piiIncidents.mockReset())
 
 describe('PiiIncidentsView', () => {
   it('shows tiles per category and action and links each incident to its request', async () => {
     piiIncidents.mockResolvedValue(report([incident(), incident({ requestId: 'req_2', action: 'Block', outcome: 'PiiBlocked', statusCode: 422 })]))
-    const wrapper = await mountView()
+    const { wrapper } = await mountView()
 
     expect(wrapper.find('h1').text()).toBe('PII incidents')
     const categories = wrapper.find('[data-testid="category-tiles"]').text()
@@ -90,22 +102,21 @@ describe('PiiIncidentsView', () => {
 
   it('sends the chosen filters and starts again on page one', async () => {
     piiIncidents.mockResolvedValue(report([incident()]))
-    const wrapper = await mountView()
+    const { wrapper } = await mountView()
     expect(piiIncidents).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, pageSize: 50 }))
 
-    const selects = wrapper.findAll('select')
-    await selects[2]!.setValue('k1')
-    await selects[3]!.setValue('Personnummer')
-    await selects[4]!.setValue('Block')
-    await wrapper.find('form').trigger('submit')
+    await chip(wrapper, 'Key').setValue(K1)
+    await chip(wrapper, 'Category').setValue('Personnummer')
+    await chip(wrapper, 'Action').setValue('Block')
     await flushPromises()
 
-    expect(piiIncidents).toHaveBeenLastCalledWith(expect.objectContaining({ keyId: 'k1', category: 'Personnummer', action: 'Block', page: 1 }))
+    expect(piiIncidents).toHaveBeenLastCalledWith(expect.objectContaining({ keyId: K1, category: 'Personnummer', action: 'Block', page: 1 }))
+    expect(wrapper.get('[data-test=filter-count]').text()).toBe('1 request with PII')
   })
 
   it('explains that scanning is per key when nothing was found', async () => {
     piiIncidents.mockResolvedValue(report([], { categories: [], actions: [] }))
-    const wrapper = await mountView()
+    const { wrapper } = await mountView()
 
     expect(wrapper.find('[data-testid="pii-explainer"]').text()).toContain('A key with PII policy Off is not scanned')
     expect(wrapper.text()).toContain('No PII found in this period.')
@@ -113,14 +124,26 @@ describe('PiiIncidentsView', () => {
 
   it('offers to clear the category and action filters when they hide everything', async () => {
     piiIncidents.mockResolvedValue(report([], { totalIncidents: 2 }))
-    const wrapper = await mountView()
-    await wrapper.findAll('select')[4]!.setValue('RerouteToOnPrem')
-    await wrapper.find('form').trigger('submit')
+    const { wrapper } = await mountView()
+    await chip(wrapper, 'Action').setValue('RerouteToOnPrem')
     await flushPromises()
     expect(wrapper.text()).toContain('No incidents match these filters.')
 
     await button(wrapper, 'Clear filters').trigger('click')
     await flushPromises()
     expect(piiIncidents).toHaveBeenLastCalledWith(expect.not.objectContaining({ action: expect.anything() }))
+  })
+
+  it('reads its filters from the address and keeps them there, without the defaults', async () => {
+    piiIncidents.mockResolvedValue(report([incident()]))
+    const { wrapper, router } = await mountView('/pii?period=custom&from=2026-10-01&to=2026-10-07&category=Email&action=Explode')
+    expect(piiIncidents).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'Email' }))
+    expect(piiIncidents.mock.lastCall![0]).not.toHaveProperty('action') // a value it does not know reads as unset
+    expect(new Date(piiIncidents.mock.lastCall![0].from).getDate()).toBe(1)
+    expect(wrapper.get('[data-test="chip-Category"]').classes()).toContain('bg-accent-soft')
+
+    await chip(wrapper, 'Period').setValue('7d')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({ period: '7d', category: 'Email' })
   })
 })

@@ -401,3 +401,45 @@ export const MODEL_FEATURES = ['tools', 'vision', 'thinking', 'image generation'
 export function featureLabel(feature: string): string {
   return feature.charAt(0).toUpperCase() + feature.slice(1)
 }
+
+// Shared with Källa's admin UI (docs/admin-ui.md, *Shared with Källa*): the components below read these groups, so they
+// copy between the two repositories unchanged. Keep the names and keys the same in both.
+
+/** Words more than one shared component uses. */
+export const COMMON = {
+  close: 'Close',
+} as const
+
+/** The shell's own names. */
+export const SHELL = {
+  /** The breadcrumb above a detail page's title. */
+  breadcrumb: 'Breadcrumb',
+} as const
+
+/** The save bar and the unsaved-changes guard (layout rule 7). */
+export const UNSAVED = {
+  region: 'Unsaved changes',
+  count: (n: number) => `${n} unsaved ${n === 1 ? 'change' : 'changes'}`,
+  save: 'Save changes',
+  discard: 'Discard',
+  discardTitle: (n: number) => `Discard ${n} unsaved ${n === 1 ? 'change' : 'changes'}?`,
+  discardConsequence: 'The form goes back to what is saved.',
+  leave: 'You have unsaved changes. Leave without saving them?',
+  closeDrawer: (n: number) => `Close without saving ${n} unsaved ${n === 1 ? 'change' : 'changes'}?`,
+} as const
+
+/** Filter chips and the period picker (layout rule 2). */
+export const FILTERS = {
+  period: 'Period',
+  periods: { '7d': 'Last 7 days', '30d': 'Last 30 days', month: 'This month', custom: 'Custom…' } as Record<string, string>,
+  from: 'From',
+  to: 'To',
+  remove: (filter: string) => `Remove the ${filter.toLowerCase()} filter`,
+  clear: 'Clear filters',
+} as const
+
+/** The ⋯ menu of a header or a row (layout rule 1); its name says whose actions they are. */
+export const MENU = {
+  more: (name: string) => `More actions for ${name}`,
+  delete: 'Delete…',
+} as const

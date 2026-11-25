@@ -5,7 +5,7 @@ import type { DataApiKey } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { useDataAccessStore } from '@/stores/dataAccess'
 import { inlineOverlay } from '@/test/fixtures'
-import { button } from '@/test/helpers'
+import { button, buttonByLabel, chooseMenuItem, openMenu } from '@/test/helpers'
 import DataAccessView from './DataAccessView.vue'
 
 const list = vi.fn()
@@ -64,12 +64,17 @@ describe('Data API access', () => {
     const rows = wrapper.findAll('tbody tr')
     expect(rows).toHaveLength(2)
     expect(rows[0]!.text()).toContain('Usage totals')
-    const buttons = (i: number) => rows[i]!.findAll('button').map((b) => b.text())
-    expect(buttons(0).join(' ')).toContain('Revoke')
+    const menu = async (name: string) => {
+      await buttonByLabel(wrapper, `More actions for ${name}`).trigger('click')
+      return openMenu().findAll('[role=menuitem]').map((b) => b.text()).join(' ')
+    }
+    expect(await menu('Power BI finance')).toContain('Revoke…')
     expect(rows[1]!.text()).toContain('Security data')
     expect(rows[1]!.text()).toContain('Catalogue')
-    expect(buttons(1).join(' ')).toContain('Delete')
-    expect(buttons(1).join(' ')).not.toContain('Revoke')
+    expect(rows[1]!.text()).not.toContain('Edit')
+    const revoked = await menu('SIEM')
+    expect(revoked).toContain('Delete…')
+    expect(revoked).not.toContain('Revoke')
     expect(wrapper.text()).toContain('https://data.example.se:10443')
   })
 
@@ -105,11 +110,11 @@ describe('Data API access', () => {
   it('revokes a key after confirmation', async () => {
     const wrapper = await mountView([key()])
     revoke.mockResolvedValue(key({ status: 'Revoked', revokedAt: '2026-10-11T08:00:00Z' }))
-    await button(wrapper, 'Revoke').trigger('click')
+    await chooseMenuItem(wrapper, 'More actions for Power BI finance', 'Revoke…')
     expect(wrapper.text()).toContain('Revoke Power BI finance?')
     await button(wrapper, 'Revoke key').trigger('click')
     await flushPromises()
     expect(revoke).toHaveBeenCalledWith('k1')
-    expect(wrapper.find('tbody tr').text()).toContain('Delete')
+    expect(wrapper.find('tbody tr').text()).not.toContain('Edit')
   })
 })

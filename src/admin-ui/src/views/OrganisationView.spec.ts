@@ -7,7 +7,7 @@ import type { Department, Team } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { inlineOverlay } from '@/test/fixtures'
-import { button } from '@/test/helpers'
+import { button, chooseMenuItem } from '@/test/helpers'
 import OrganisationView from './OrganisationView.vue'
 
 const departmentsList = vi.fn()
@@ -51,7 +51,8 @@ async function mountView(departments: Department[], teams: Team[]) {
   return wrapper
 }
 
-const teamDelete = (wrapper: Awaited<ReturnType<typeof mountView>>) => wrapper.find('table').findAll('button').find((b) => b.text() === 'Delete')!
+/** The team row's ⋯ menu: Delete team… opens the confirmation. */
+const deleteTeam = (wrapper: Awaited<ReturnType<typeof mountView>>) => chooseMenuItem(wrapper, 'More actions for Servicedesk', 'Delete team…')
 const toasts = () => useUiStore().toasts.map((t) => t.message)
 
 beforeEach(() => {
@@ -62,7 +63,7 @@ describe('deleting a team or department', () => {
   it('deletes a team without routing rules in one step', async () => {
     const wrapper = await mountView([department(1)], [team])
     teamsRemove.mockResolvedValue(undefined)
-    await teamDelete(wrapper).trigger('click')
+    await deleteTeam(wrapper)
     expect(wrapper.text()).toContain('Delete team?')
     await button(wrapper, 'Delete team').trigger('click')
     await flushPromises()
@@ -75,7 +76,7 @@ describe('deleting a team or department', () => {
   it('asks what to do with the team’s routing rules and repeats the delete with the answer (deactivate)', async () => {
     const wrapper = await mountView([department(1)], [team])
     teamsRemove.mockRejectedValueOnce(new ApiError(409, 'DELETE', rulesProblem)).mockResolvedValueOnce(undefined)
-    await teamDelete(wrapper).trigger('click')
+    await deleteTeam(wrapper)
     await button(wrapper, 'Delete team').trigger('click')
     await flushPromises()
 
@@ -97,7 +98,7 @@ describe('deleting a team or department', () => {
   it('can delete the rules together with the team', async () => {
     const wrapper = await mountView([department(1)], [team])
     teamsRemove.mockRejectedValueOnce(new ApiError(409, 'DELETE', rulesProblem)).mockResolvedValueOnce(undefined)
-    await teamDelete(wrapper).trigger('click')
+    await deleteTeam(wrapper)
     await button(wrapper, 'Delete team').trigger('click')
     await flushPromises()
     await wrapper.find('input[value="delete"]').setValue(true)
@@ -110,7 +111,7 @@ describe('deleting a team or department', () => {
   it('leaves the team alone when the user cancels the question', async () => {
     const wrapper = await mountView([department(1)], [team])
     teamsRemove.mockRejectedValueOnce(new ApiError(409, 'DELETE', rulesProblem))
-    await teamDelete(wrapper).trigger('click')
+    await deleteTeam(wrapper)
     await button(wrapper, 'Delete team').trigger('click')
     await flushPromises()
     await button(wrapper, 'Cancel').trigger('click')
@@ -123,7 +124,7 @@ describe('deleting a team or department', () => {
   it('shows an ordinary conflict (the team still has keys) inside the first dialog, without the rules question', async () => {
     const wrapper = await mountView([department(1)], [team])
     teamsRemove.mockRejectedValueOnce(new ApiError(409, 'DELETE', { detail: 'The team has keys and cannot be deleted.' }))
-    await teamDelete(wrapper).trigger('click')
+    await deleteTeam(wrapper)
     await button(wrapper, 'Delete team').trigger('click')
     await flushPromises()
     expect(wrapper.find('[role="alert"]').text()).toContain('The team has keys')
@@ -134,7 +135,7 @@ describe('deleting a team or department', () => {
   it('keeps the question open with the server’s message if the second delete fails', async () => {
     const wrapper = await mountView([department(1)], [team])
     teamsRemove.mockRejectedValueOnce(new ApiError(409, 'DELETE', rulesProblem)).mockRejectedValueOnce(new ApiError(409, 'DELETE', { detail: 'The team has keys and cannot be deleted.' }))
-    await teamDelete(wrapper).trigger('click')
+    await deleteTeam(wrapper)
     await button(wrapper, 'Delete team').trigger('click')
     await flushPromises()
     await button(wrapper, 'Delete team, deactivate 2 rules').trigger('click')
@@ -146,7 +147,7 @@ describe('deleting a team or department', () => {
   it('asks the same question when a department with routing rules is deleted', async () => {
     const wrapper = await mountView([department(0)], [])
     departmentsRemove.mockRejectedValueOnce(new ApiError(409, 'DELETE', { ...rulesProblem, rules: [rulesProblem.rules[0]!] })).mockResolvedValueOnce(undefined)
-    await button(wrapper, 'Delete department').trigger('click') // the page's button opens the confirmation
+    await chooseMenuItem(wrapper, 'More actions for', 'Delete department…') // the header's ⋯ menu opens the confirmation
     expect(wrapper.text()).toContain('Delete department?')
     const confirm = wrapper.findAll('button').filter((b) => b.text().includes('Delete department')).at(-1)!
     await confirm.trigger('click')

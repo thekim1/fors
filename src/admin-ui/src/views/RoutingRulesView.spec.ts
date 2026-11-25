@@ -5,7 +5,7 @@ import { ApiError } from '@/api/client'
 import type { RoutingRule } from '@/api/types'
 import { useUiStore } from '@/stores/ui'
 import { inlineOverlay, rule } from '@/test/fixtures'
-import { button, buttonByLabel } from '@/test/helpers'
+import { button, buttonByLabel, chooseMenuItem } from '@/test/helpers'
 import RoutingRulesView from './RoutingRulesView.vue'
 
 const list = vi.fn()
@@ -155,7 +155,7 @@ describe('RoutingRulesView', () => {
 
   it('deletes a rule after confirmation', async () => {
     const wrapper = await mountView([first, second])
-    await button(wrapper, 'Delete').trigger('click')
+    await chooseMenuItem(wrapper, 'More actions for', 'Delete…')
     expect(wrapper.text()).toContain('Delete rule?')
     remove.mockResolvedValue(undefined)
     await button(wrapper, 'Delete rule').trigger('click')

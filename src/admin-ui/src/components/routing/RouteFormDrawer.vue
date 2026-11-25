@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useDirty } from '@/composables/useDirty'
 import type { ModelKind, Route } from '@/api/types'
 import { MODEL_KINDS } from '@/api/types'
 import { useFormErrors } from '@/composables/useFormErrors'
@@ -54,6 +55,9 @@ function addTarget(): void {
   targets.value.push({ uid: nextUid++, modelId: '', priority: String(targets.value.length), weight: '1' })
 }
 
+// Closing with unsaved changes asks first (UiDrawer's `unsaved`); the form's saved state is what it opened with.
+const { changes: unsaved, reset: markSaved } = useDirty(() => ({ name: name.value, description: description.value, kind: kind.value, isEnabled: isEnabled.value, targets: targets.value.map((t) => ({ ...t, uid: 0 })) }))
+
 watch(
   () => props.open,
   (open) => {
@@ -65,6 +69,7 @@ watch(
     isEnabled.value = props.route?.isEnabled ?? true
     targets.value = (props.route?.targets ?? []).map((t) => ({ uid: nextUid++, modelId: t.modelId, priority: String(t.priority), weight: String(t.weight) }))
     if (!props.route) addTarget()
+    void nextTick(markSaved)
   },
   { immediate: true },
 )
@@ -115,7 +120,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <UiDrawer wide :open="open" :title="route ? 'Edit route' : 'New route'" @update:open="emit('update:open', $event)">
+  <UiDrawer :unsaved="unsaved" wide :open="open" :title="route ? 'Edit route' : 'New route'" @update:open="emit('update:open', $event)">
     <form id="route-form" class="flex flex-col gap-6" novalidate @submit.prevent="submit">
       <InlineError v-if="formError" :message="formError" />
       <TextField id="route-name" v-model="name" label="Name" mono :error="errors.name" hint="The model name clients put in their requests." />
@@ -138,9 +143,9 @@ async function submit(): Promise<void> {
         <div><UiButton icon="add" @click="addTarget">Add target</UiButton></div>
       </FieldGroup>
     </form>
-    <template #footer>
+    <template #footer="{ close }">
       <UiButton variant="primary" type="submit" form="route-form" :loading="busy">{{ route ? 'Save changes' : 'Create route' }}</UiButton>
-      <UiButton @click="emit('update:open', false)">Cancel</UiButton>
+      <UiButton @click="close">Cancel</UiButton>
     </template>
   </UiDrawer>
 </template>

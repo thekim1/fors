@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
+import { useDirty } from '@/composables/useDirty'
 import type { Department } from '@/api/types'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { useDepartmentsStore } from '@/stores/departments'
@@ -29,6 +30,9 @@ const isActive = ref(true)
 const memberGroups = ref('')
 const busy = ref(false)
 
+// Closing with unsaved changes asks first (UiDrawer's `unsaved`); the form's saved state is what it opened with.
+const { changes: unsaved, reset: markSaved } = useDirty(() => ({ name: name.value, costCenterCode: costCenterCode.value, isActive: isActive.value, memberGroups: memberGroups.value }))
+
 watch(
   () => props.open,
   (open) => {
@@ -38,6 +42,7 @@ watch(
     costCenterCode.value = props.department?.costCenterCode ?? ''
     isActive.value = props.department?.isActive ?? true
     memberGroups.value = (props.department?.memberGroups ?? []).join('\n')
+    void nextTick(markSaved)
   },
   { immediate: true },
 )
@@ -70,7 +75,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <UiDrawer :open="open" :title="department ? 'Edit department' : 'New department'" @update:open="emit('update:open', $event)">
+  <UiDrawer :unsaved="unsaved" :open="open" :title="department ? 'Edit department' : 'New department'" @update:open="emit('update:open', $event)">
     <form id="department-form" class="flex flex-col gap-5" novalidate @submit.prevent="submit">
       <InlineError v-if="formError" :message="formError" />
       <TextField id="dept-name" v-model="name" label="Name" :error="errors.name" hint="Use the official name of the department." />
@@ -85,9 +90,9 @@ async function submit(): Promise<void> {
       />
       <CheckField v-if="department" v-model="isActive" label="Active" description="Turn off to retire this department." />
     </form>
-    <template #footer>
+    <template #footer="{ close }">
       <UiButton variant="primary" type="submit" form="department-form" :loading="busy">{{ department ? 'Save changes' : 'Create department' }}</UiButton>
-      <UiButton @click="emit('update:open', false)">Cancel</UiButton>
+      <UiButton @click="close">Cancel</UiButton>
     </template>
   </UiDrawer>
 </template>
