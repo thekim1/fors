@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { useDirty } from '@/composables/useDirty'
 import type { Integration } from '@/api/types'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { useIntegrationsStore } from '@/stores/integrations'
@@ -38,6 +39,9 @@ const ownerHint = computed(() => {
   return `${owner} ${moved} with it to another team; usage so far stays with the previous team and department.`
 })
 
+// Closing with unsaved changes asks first (UiDrawer's `unsaved`); the form's saved state is what it opened with.
+const { changes: unsaved, reset: markSaved } = useDirty(() => ({ ...values }))
+
 watch(
   () => props.open,
   (open) => {
@@ -49,6 +53,7 @@ watch(
     values.ownerTeamId = i?.ownerTeamId ?? ''
     values.isActive = i?.isActive ?? true
     void teams.load()
+    void nextTick(markSaved)
   },
   { immediate: true },
 )
@@ -80,7 +85,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <UiDrawer
+  <UiDrawer :unsaved="unsaved"
     :open="open"
     :title="isEdit ? `Edit ${existing?.name ?? 'integration'}` : 'New integration'"
     description="Another system that uses gateway keys for the teams it serves, such as a RAG platform."
@@ -109,9 +114,9 @@ async function submit(): Promise<void> {
         </FieldGroup>
       </form>
     </AsyncState>
-    <template #footer>
+    <template #footer="{ close }">
       <UiButton variant="primary" type="submit" form="integration-form" :loading="busy">{{ isEdit ? 'Save integration' : 'Create integration' }}</UiButton>
-      <UiButton :disabled="busy" @click="emit('update:open', false)">Cancel</UiButton>
+      <UiButton :disabled="busy" @click="close">Cancel</UiButton>
     </template>
   </UiDrawer>
 </template>

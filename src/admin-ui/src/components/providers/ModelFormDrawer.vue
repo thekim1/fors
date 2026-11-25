@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useDirty } from '@/composables/useDirty'
 import type { DataResidency, Model, ModelKind, ParameterProfile, Price, Provider, ProviderAuthMode } from '@/api/types'
 import { DATA_RESIDENCIES, MODEL_KINDS, PARAMETER_PROFILES } from '@/api/types'
 import { useFormErrors } from '@/composables/useFormErrors'
@@ -140,6 +141,15 @@ async function loadPrices(): Promise<void> {
   }
 }
 
+// Closing with unsaved changes asks first (UiDrawer's `unsaved`); the form's saved state is what it opened with.
+const { changes: unsaved, reset: markSaved } = useDirty(() => ({
+  providerId: providerId.value, name: name.value, upstreamModel: upstreamModel.value, kind: kind.value, parameterProfile: parameterProfile.value,
+  contextWindow: contextWindow.value, maxOutputTokens: maxOutputTokens.value, isEnabled: isEnabled.value, autoUpdatePrice: autoUpdatePrice.value,
+  description: description.value, baseModel: baseModel.value, residency: residency.value, publisher: publisher.value,
+  requestBaseUrl: requestBaseUrl.value, requestAuthMode: requestAuthMode.value, features: features.value,
+  newPrice: addPrice.value ? JSON.stringify(priceDraft.value) : null,
+}))
+
 watch(
   () => props.open,
   (open) => {
@@ -166,6 +176,7 @@ watch(
     priceErrors.value = {}
     prices.value = []
     void loadPrices()
+    void nextTick(markSaved)
   },
   { immediate: true },
 )
@@ -248,7 +259,7 @@ async function priceAdded(): Promise<void> {
 </script>
 
 <template>
-  <UiDrawer wide :open="open" :title="model ? 'Edit model' : 'New model'" :subtitle="model?.name" @update:open="emit('update:open', $event)">
+  <UiDrawer :unsaved="unsaved" wide :open="open" :title="model ? 'Edit model' : 'New model'" :subtitle="model?.name" @update:open="emit('update:open', $event)">
     <template v-if="model" #badge>
       <UiBadge :tone="model.isEnabled ? 'ok' : 'neutral'" :label="model.isEnabled ? 'Enabled' : 'Disabled'" />
     </template>
@@ -349,9 +360,9 @@ async function priceAdded(): Promise<void> {
       </AsyncState>
     </section>
 
-    <template #footer>
+    <template #footer="{ close }">
       <UiButton variant="primary" type="submit" form="model-form" :loading="busy">{{ model ? 'Save changes' : 'Create model' }}</UiButton>
-      <UiButton @click="emit('update:open', false)">Cancel</UiButton>
+      <UiButton @click="close">Cancel</UiButton>
       <UiButton v-if="model" class="ml-auto" variant="danger" @click="confirmDelete = true">Delete</UiButton>
     </template>
 

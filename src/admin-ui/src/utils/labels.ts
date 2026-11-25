@@ -430,6 +430,7 @@ export const UNSAVED = {
   discardTitle: (n: number) => `Discard ${n} unsaved ${n === 1 ? 'change' : 'changes'}?`,
   discardConsequence: 'The form goes back to what is saved.',
   leave: 'You have unsaved changes. Leave without saving them?',
+  closeDrawer: (n: number) => `Close without saving ${n} unsaved ${n === 1 ? 'change' : 'changes'}?`,
 } as const
 
 /** Filter chips and the period picker (layout rule 2). */

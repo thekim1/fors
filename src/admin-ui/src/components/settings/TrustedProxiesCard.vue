@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
 import type { NetworkSettings } from '@/api/types'
+import { useDirty } from '@/composables/useDirty'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { useUiStore } from '@/stores/ui'
 import { addressListError, formatAddressList, parseAddressList } from '@/utils/addresses'
@@ -10,9 +11,11 @@ import AddressListField from '@/components/ui/AddressListField.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import SaveBar from '@/components/ui/SaveBar.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 
+const emit = defineEmits<{ (e: 'dirty', value: boolean): void }>()
 const ui = useUiStore()
 const ids = { trustedProxies: 'trusted-proxies' } as const
 const { errors, validate } = useFormErrors(ids)
@@ -23,6 +26,10 @@ const loadError = ref<unknown>(null)
 const text = ref('')
 const pending = ref<string[]>([])
 const confirmOpen = ref(false)
+
+// Layout rule 7: the save bar counts the unsaved change; saving still asks first, since a wrong list refuses keys.
+const { changes, dirty, reset } = useDirty(() => ({ trustedProxies: parseAddressList(text.value) }))
+watch(dirty, (value) => emit('dirty', value))
 
 const observed = computed(() => settings.value?.observed ?? null)
 const observedListed = computed(() => !!observed.value?.remoteAddress && parseAddressList(text.value).includes(observed.value.remoteAddress))
@@ -38,6 +45,7 @@ async function load(): Promise<void> {
   try {
     settings.value = await api.settings.network()
     text.value = formatAddressList(settings.value.trustedProxies)
+    reset()
   } catch (e) {
     loadError.value = e
   } finally {
@@ -63,14 +71,20 @@ function review(): void {
 async function save(): Promise<void> {
   settings.value = await api.settings.updateNetwork(pending.value)
   text.value = formatAddressList(settings.value.trustedProxies)
+  reset()
   ui.notify('Trusted proxies saved')
+}
+
+function discard(): void {
+  text.value = formatAddressList(settings.value?.trustedProxies ?? [])
+  validate({ trustedProxies: null })
 }
 
 onMounted(load)
 </script>
 
 <template>
-  <UiCard title="Trusted proxies" meta="Client addresses" heading-id="proxies-h" class="max-w-3xl">
+  <UiCard title="Trusted proxies" meta="Client addresses" heading-id="proxies-h" class="max-w-[680px]">
     <AsyncState :loading="loading" :error="loadError" :empty="false" @retry="load">
       <div class="flex flex-col gap-3 text-fg-2">
         <p class="m-0">
@@ -120,7 +134,7 @@ onMounted(load)
           </ul>
         </details>
         <p v-if="settings?.updatedAt" class="m-0 text-small text-fg-3">Last changed {{ formatDateTime(settings.updatedAt) }}. Changes are in the audit log.</p>
-        <UiButton type="submit" variant="primary">Review change</UiButton>
+        <SaveBar :changes="changes" consequence="You confirm the change first; it takes effect on the gateways within seconds" @save="review" @discard="discard" />
       </form>
     </AsyncState>
   </UiCard>

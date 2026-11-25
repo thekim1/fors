@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { useDirty } from '@/composables/useDirty'
 import { ATTACHMENT_POLICIES, CONTENT_GUARD_POLICIES, DATA_RESIDENCIES, PII_POLICIES, type AttachmentPolicy, type ContentGuardPolicy, type CreateKeyResponse, type DataResidency, type IntegrationRole, type PiiPolicy, type VirtualKey } from '@/api/types'
 import { useFormErrors } from '@/composables/useFormErrors'
 import { useModelOptions } from '@/composables/useModelOptions'
@@ -194,6 +195,9 @@ function reset(): void {
   values.integrationScopes = [...(key?.integrationScopes ?? [])]
 }
 
+// Closing with unsaved changes asks first (UiDrawer's `unsaved`); the form's saved state is what it opened with.
+const { changes: unsaved, reset: markSaved } = useDirty(() => ({ ...values, policy: policy.value }))
+
 watch(
   () => props.open,
   (open) => {
@@ -203,6 +207,7 @@ watch(
     void modelOptions.load()
     if (!integrations.loaded && !integrations.loading) void integrations.load()
     if (canPickProviders.value && !providers.loaded) void providers.load()
+    void nextTick(markSaved)
   },
   { immediate: true },
 )
@@ -291,7 +296,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <UiDrawer
+  <UiDrawer :unsaved="unsaved"
     :open="open"
     wide
     :title="isEdit ? `Edit ${existing?.name ?? 'key'}` : 'New key'"
@@ -506,9 +511,9 @@ async function submit(): Promise<void> {
         />
       </form>
     </AsyncState>
-    <template #footer>
+    <template #footer="{ close }">
       <UiButton variant="primary" type="submit" form="key-form" :loading="busy" :disabled="lockedCredential">{{ isEdit ? 'Save key' : 'Create key' }}</UiButton>
-      <UiButton :disabled="busy" @click="emit('update:open', false)">Cancel</UiButton>
+      <UiButton :disabled="busy" @click="close">Cancel</UiButton>
     </template>
   </UiDrawer>
 </template>

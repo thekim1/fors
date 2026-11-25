@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useDirty } from '@/composables/useDirty'
 import type { DataResidency, Provider, ProviderAuthMode, ProviderCapability, ProviderType } from '@/api/types'
 import { DATA_RESIDENCIES, PROVIDER_AUTH_MODES, PROVIDER_CAPABILITIES, PROVIDER_TYPES } from '@/api/types'
 import { useFormErrors } from '@/composables/useFormErrors'
@@ -95,6 +96,13 @@ const dirty = computed(() => {
   )
 })
 
+// Closing with unsaved changes asks first (UiDrawer's `unsaved`); the form's saved state is what it opened with.
+const { changes: unsaved, reset: markSaved } = useDirty(() => ({
+  name: name.value, displayName: displayName.value, type: type.value, baseUrl: baseUrl.value, authMode: authMode.value,
+  credential: credential.value, clearCredential: clearCredential.value, residency: residency.value, capabilities: capabilities.value,
+  timeoutSeconds: timeoutSeconds.value, isEnabled: isEnabled.value, autoUpdatePrices: autoUpdatePrices.value,
+}))
+
 watch(
   () => props.open,
   (open) => {
@@ -102,6 +110,7 @@ watch(
     clear()
     fill(props.provider)
     drainError.value = null
+    void nextTick(markSaved)
   },
   { immediate: true },
 )
@@ -221,7 +230,7 @@ async function remove(): Promise<void> {
 </script>
 
 <template>
-  <UiDrawer wide :open="open" :title="provider ? 'Edit provider' : 'New provider'" :subtitle="provider?.name" @update:open="emit('update:open', $event)">
+  <UiDrawer :unsaved="unsaved" wide :open="open" :title="provider ? 'Edit provider' : 'New provider'" :subtitle="provider?.name" @update:open="emit('update:open', $event)">
     <template v-if="provider" #badge>
       <span class="flex flex-wrap gap-1.5">
         <UiBadge :tone="provider.isEnabled ? 'ok' : 'neutral'" :label="provider.isEnabled ? 'Enabled' : 'Disabled'" />
@@ -299,9 +308,9 @@ async function remove(): Promise<void> {
       </div>
     </section>
 
-    <template #footer>
+    <template #footer="{ close }">
       <UiButton variant="primary" type="submit" form="provider-form" :loading="busy">{{ provider ? 'Save changes' : 'Create provider' }}</UiButton>
-      <UiButton @click="emit('update:open', false)">Cancel</UiButton>
+      <UiButton @click="close">Cancel</UiButton>
       <template v-if="provider">
         <UiButton class="ml-auto" variant="danger" @click="confirmDelete = true">Delete</UiButton>
       </template>

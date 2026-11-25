@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { useDirty } from '@/composables/useDirty'
 import { BUDGET_PERIODS, BUDGET_SCOPES, DATA_RESIDENCIES, type Budget, type BudgetPeriod, type BudgetScope, type BudgetUnit, type DataResidency } from '@/api/types'
 import { useBudgetsStore } from '@/stores/budgets'
 import { useDepartmentsStore } from '@/stores/departments'
@@ -138,6 +139,9 @@ function setScope(scope: BudgetScope): void {
   void loadOwners(scope)
 }
 
+// Closing the drawer with unsaved changes asks first (UiDrawer's `unsaved`).
+const { changes: unsaved, reset: markSaved } = useDirty(() => ({ ...form }))
+
 async function openForm(budget: Budget | null): Promise<void> {
   clear()
   editing.value = budget
@@ -149,6 +153,7 @@ async function openForm(budget: Budget | null): Promise<void> {
   form.period = budget?.period ?? 'Monthly'
   form.thresholds = budget ? budget.alertThresholds.join(', ') : '50, 80, 100'
   form.isActive = budget?.isActive ?? true
+  markSaved()
   drawerOpen.value = true
   await loadOwners(form.scope)
 }
@@ -273,7 +278,7 @@ async function remove(): Promise<void> {
     <p class="mt-3 text-small text-fg-3">Amounts are estimates from recorded usage, not invoices. Ticks on the meters mark the alert levels.</p>
   </section>
 
-  <UiDrawer v-model:open="drawerOpen" wide :title="editing ? 'Edit budget' : 'New budget'" :subtitle="editing?.scopeName" description="Set the owner, limit, period and alert levels for a budget.">
+  <UiDrawer v-model:open="drawerOpen" :unsaved="unsaved" wide :title="editing ? 'Edit budget' : 'New budget'" :subtitle="editing?.scopeName" description="Set the owner, limit, period and alert levels for a budget.">
     <template v-if="editing" #badge>
       <UiBadge :tone="editing.isActive ? 'ok' : 'neutral'" :label="editing.isActive ? 'Active' : 'Inactive'" />
     </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useDirty } from '@/composables/useDirty'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Department, Team } from '@/api/types'
@@ -56,6 +57,9 @@ const budgetError = ref<unknown>(null)
 const departmentOptions = computed(() => props.departments.map((d) => ({ value: d.id, label: d.name })))
 const title = computed(() => (step.value === 'done' ? 'Team created' : props.team ? 'Edit team' : 'Add team'))
 
+// Closing with unsaved changes asks first (UiDrawer's `unsaved`); the form's saved state is what it opened with.
+const { changes: unsaved, reset: markSaved } = useDirty(() => (step.value === 'done' ? {} : { departmentId: departmentId.value, name: name.value, description: description.value, code: code.value, isActive: isActive.value, budget: budget.value, policy: policy.value }))
+
 watch(
   () => props.open,
   (open) => {
@@ -73,6 +77,7 @@ watch(
     budget.value = ''
     policy.value = toPolicyDraft(props.team?.requestPolicy)
     policyErrors.value = {}
+    void nextTick(markSaved)
   },
   { immediate: true },
 )
@@ -131,7 +136,7 @@ function go(name: 'keys' | 'budgets'): void {
 </script>
 
 <template>
-  <UiDrawer :open="open" :title="title" @update:open="emit('update:open', $event)">
+  <UiDrawer :unsaved="unsaved" :open="open" :title="title" @update:open="emit('update:open', $event)">
     <form v-if="step === 'form'" id="team-form" class="flex flex-col gap-5" novalidate @submit.prevent="submit">
       <InlineError v-if="formError" :message="formError" />
       <SelectField
@@ -183,10 +188,10 @@ function go(name: 'keys' | 'budgets'): void {
       </InlineError>
       <p class="text-fg-2">The team needs a key before it can send requests.</p>
     </div>
-    <template #footer>
+    <template #footer="{ close }">
       <template v-if="step === 'form'">
         <UiButton variant="primary" type="submit" form="team-form" :loading="busy">{{ team ? 'Save changes' : 'Create team' }}</UiButton>
-        <UiButton @click="emit('update:open', false)">Cancel</UiButton>
+        <UiButton @click="close">Cancel</UiButton>
       </template>
       <template v-else>
         <UiButton icon="key" @click="go('keys')">Create key</UiButton>

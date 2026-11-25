@@ -105,4 +105,49 @@ describe('RetentionCard', () => {
     const wrapper = await mountCard(settings({ lastRunAt: '2026-10-12T01:00:00Z', lastRunError: 'PostgresException (SQL state 42501)' }))
     expect(wrapper.text()).toContain('failed (PostgresException (SQL state 42501))')
   })
+
+  it('counts unsaved changes in the save bar, asks through it and puts the saved values back on Discard', async () => {
+    const wrapper = await mountCard(settings())
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
+    await wrapper.find('#retention-usage').setValue('180')
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('1 unsaved change')
+    // Keeping the audit log for ever replaces its days: one answer, one change.
+    await wrapper.findAll('label').find((l) => l.text().startsWith('Keep the audit log for ever'))!.find('input').setValue(true)
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('2 unsaved changes')
+    expect(wrapper.emitted('dirty')).toEqual([[true]])
+
+    await wrapper.get('[data-test=save-bar-save]').trigger('click')
+    expect(wrapper.text()).toContain('Change data retention?')
+    await button(wrapper, 'Cancel').trigger('click')
+
+    await wrapper.get('[data-test=save-bar-discard]').trigger('click')
+    expect(wrapper.text()).toContain('Discard 2 unsaved changes?')
+    await wrapper.findAll('[data-test=confirm]').at(-1)!.trigger('click')
+    await flushPromises()
+    expect((wrapper.find('#retention-usage').element as HTMLInputElement).value).toBe('365')
+    expect(wrapper.find('#retention-audit').exists()).toBe(true)
+    expect(wrapper.find('[data-test=save-bar]').exists()).toBe(false)
+    expect(wrapper.emitted('dirty')).toEqual([[true], [false]])
+    expect(updateRetention).not.toHaveBeenCalled()
+  })
+
+  it('keeps what is being edited while a run is followed', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = await mountCard(settings())
+      runRetention.mockResolvedValue(settings())
+      await button(wrapper, 'Run now').trigger('click')
+      await flushPromises()
+      expect(wrapper.text()).toContain('Running now')
+      await wrapper.find('#retention-usage').setValue('200')
+      retention.mockResolvedValue(settings({ running: false, lastRunAt: '2026-10-12T01:00:00Z', lastRunDeleted: 3 }))
+      await vi.advanceTimersByTimeAsync(3000)
+      await flushPromises()
+      expect(wrapper.text()).toContain('3 rows removed')
+      expect((wrapper.find('#retention-usage').element as HTMLInputElement).value).toBe('200')
+      expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('1 unsaved change')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
