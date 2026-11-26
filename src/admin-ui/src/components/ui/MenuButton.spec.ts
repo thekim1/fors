@@ -271,4 +271,15 @@ describe('MenuButton (APG menu button)', () => {
     expect(openMenu().find('[data-test=menu-phone-only]').exists()).toBe(false)
     wrapper.unmount()
   })
+
+  it('opens inside the modal dialog it is in (a drawer), not behind it in the body', async () => {
+    phone(false)
+    const dialog = document.createElement('dialog')
+    document.body.append(dialog)
+    const wrapper = mount(MenuButton, { props: { label: 'More actions for a key', items }, attachTo: dialog })
+    await wrapper.get('[data-test=menu-button]').trigger('click')
+    await flushPromises()
+    expect(openMenu().element.parentElement).toBe(dialog)
+    wrapper.unmount()
+  })
 })

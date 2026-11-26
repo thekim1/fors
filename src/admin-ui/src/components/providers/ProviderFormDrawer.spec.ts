@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { ApiError } from '@/api/client'
 import type { Provider } from '@/api/types'
 import { inlineOverlay } from '@/test/fixtures'
+import { chooseMenuItem } from '@/test/helpers'
 import ProviderFormDrawer from './ProviderFormDrawer.vue'
 
 const update = vi.fn()
@@ -177,7 +178,7 @@ describe('ProviderFormDrawer delete', () => {
 
   it('deletes a provider without models on its own', async () => {
     const wrapper = mountForm()
-    await button(wrapper, 'Delete').trigger('click')
+    await chooseMenuItem(wrapper, 'More actions for', 'Delete provider…')
     await button(wrapper, 'Delete provider').trigger('click')
     await flushPromises()
 
@@ -187,8 +188,7 @@ describe('ProviderFormDrawer delete', () => {
 
   it('deletes a provider together with its models and reloads the models', async () => {
     const wrapper = mountForm({ ...saved, deploymentCount: 3 })
-    expect(button(wrapper, 'Delete').attributes('disabled')).toBeUndefined()
-    await button(wrapper, 'Delete').trigger('click')
+    await chooseMenuItem(wrapper, 'More actions for', 'Delete provider…')
     expect(wrapper.text()).toContain('and its 3 models are removed for good')
 
     await button(wrapper, 'Delete provider and 3 models').trigger('click')
@@ -204,7 +204,7 @@ describe('ProviderFormDrawer delete', () => {
       throw new ApiError(409, 'DELETE', { detail: "The provider's models are used in the routes fors/chat. Remove them from the routes first." })
     })
     const wrapper = mountForm({ ...saved, deploymentCount: 2 })
-    await button(wrapper, 'Delete').trigger('click')
+    await chooseMenuItem(wrapper, 'More actions for', 'Delete provider…')
     await button(wrapper, 'Delete provider and 2 models').trigger('click')
     await flushPromises()
 

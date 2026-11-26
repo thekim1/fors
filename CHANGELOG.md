@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Rare and destructive actions in drawers and rows are on a ⋯ menu** (layout audit step 2, rule 1): *Delete provider…*,
+  *Delete model…* and *Delete budget…* in their drawers, *Revoke…* in a key's drawer, and *Open circuit…* / *Close
+  circuit…* on each provider row of Health & operations, each behind its confirmation. `MenuButton` now opens inside the
+  modal dialog it is in (a drawer), where a menu in the page would sit behind the dialog.
+- **A long drawer scrolls by keyboard**: a drawer's body can take focus (with the focus ring), so a key's details, which
+  have nothing focusable in them, can be scrolled with the arrow keys (WCAG 2.1.1). The accessibility spec's new scan of
+  a drawer's ⋯ menu found it.
 - **Colour only for what needs attention, and fields as wide as their answer** (layout audit step 1; rules 3, 5, 8 and
   9 in [docs/admin-ui.md](docs/admin-ui.md#layout-rules)):
   - The normal state is plain text, not a green badge: *Active* keys, teams and integrations, *Enabled* providers and

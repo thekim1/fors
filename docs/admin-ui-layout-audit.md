@@ -3,7 +3,7 @@
 **Status:** accepted, 2026-11-26: the work goes ahead with the recommendation of each [question](#questions) (the user:
 "continue"); a step that turns on one of them says so in its pull request, so it can still be changed there. The work
 is in [Order](#order), smallest first, one pull request per step; done so far: step 0 (#134), the accessibility
-checks of #130 part D (#135) and step 1, with [Q7](#q7-status-badges-for-the-normal-state) A.
+checks of #130 part D (#135) step 1, with [Q7](#q7-status-badges-for-the-normal-state) A, and step 2.
 
 Every page in `src/admin-ui/src/views/` was checked against the eleven [layout rules](admin-ui.md#layout-rules) (Källa's
 admin design §5.12, from its UX pass of 2026-11-23, and the mockups in Källa's
@@ -25,7 +25,7 @@ What breaks the rules on more than one page.
 
 | Rule | What breaks it | Pages | Fix |
 |---|---|---|---|
-| 1 One primary action | Destructive or rare actions are red buttons in drawer footers and in table rows | Health & operations (*Open circuit* on every provider row), the budget, provider and model drawers (*Delete*), the key drawer (*Revoke*), the provider drawer (*Drain provider*) | A row ⋯ for *Open circuit*; *Delete…*, *Revoke…* and *Drain…* on a ⋯ in the drawer's footer, last and red, behind their confirmations |
+| 1 One primary action | Destructive or rare actions are red buttons in drawer footers and in table rows | Health & operations (*Open circuit* on every provider row), the budget, provider and model drawers (*Delete*), the key drawer (*Revoke*) | A row ⋯ for *Open circuit*; *Delete…* and *Revoke…* on a ⋯ in the drawer's footer, last and red, behind their confirmations (*Drain provider* stays: it has a section of its own in the provider drawer, with its explanation) |
 | 2 Filters as chips | Lists filter with labelled selects or segmented controls that are not in the address | Usage › Dashboard, Keys, Providers & models (both views), Budgets & alerts, Routing rules, Audit log, Provider stability | `FilterChip`/`FilterTextChip`/`PeriodPicker` with `useQueryFilters`; the search box keeps its `aria-label` and goes into the address as `q` |
 | 3 Field widths | Number fields span the drawer (about 470 px) for 3 to 6 digits | Key drawer (requests and tokens per minute, requests at once), provider drawer (timeout), team drawer (monthly budget), price fields (`PriceFields`, `DiscoverModelsDialog`), request policy (max output tokens), budget drawer (limit, alert levels) | `TextField short`; the unit stays in the label |
 | 5 Say it once | Text repeated on every row, or said twice | Health & operations (*OK* under every healthy component; *Open circuit* on every row), Catalogue (the same capability list on every alias), Provider stability (*Back to operations* beside the breadcrumb) | Into the summary, the row ⋯, or gone |

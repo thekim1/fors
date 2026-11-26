@@ -7,13 +7,14 @@ import { useFormErrors } from '@/composables/useFormErrors'
 import { useModelsStore } from '@/stores/models'
 import { useUiStore } from '@/stores/ui'
 import { formatDateTime, formatUsd } from '@/utils/format'
-import { AUTH_MODE_LABEL, KIND_LABEL, MODEL_FEATURES, PARAMETER_PROFILE_LABEL, RESIDENCY, featureLabel } from '@/utils/labels'
+import { AUTH_MODE_LABEL, KIND_LABEL, MENU, MODEL_FEATURES, PARAMETER_PROFILE_LABEL, RESIDENCY, featureLabel } from '@/utils/labels'
 import AsyncState from '../ui/AsyncState.vue'
 import CheckField from '../ui/CheckField.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '../ui/DataTable.vue'
 import FieldGroup from '../ui/FieldGroup.vue'
 import InlineError from '../ui/InlineError.vue'
+import MenuButton from '../ui/MenuButton.vue'
 import SelectField from '../ui/SelectField.vue'
 import TextAreaField from '../ui/TextAreaField.vue'
 import TextField from '../ui/TextField.vue'
@@ -364,7 +365,10 @@ async function priceAdded(): Promise<void> {
     <template #footer="{ close }">
       <UiButton variant="primary" type="submit" form="model-form" :loading="busy">{{ model ? 'Save changes' : 'Create model' }}</UiButton>
       <UiButton @click="close">Cancel</UiButton>
-      <UiButton v-if="model" class="ml-auto" variant="danger" @click="confirmDelete = true">Delete</UiButton>
+      <MenuButton
+        v-if="model" class="ml-auto" :label="MENU.more(model.name)"
+        :items="[{ key: 'delete', label: 'Delete model…', icon: 'delete', danger: true }]" @select="confirmDelete = true"
+      />
     </template>
 
     <AddPriceDialog v-model:open="addPrice" :model="model" @saved="priceAdded" />
