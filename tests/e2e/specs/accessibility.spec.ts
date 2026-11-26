@@ -175,6 +175,27 @@ for (const theme of themes) {
   })
 }
 
+// Layout rule 10: on a phone the primary action spans the header beside a ⋯ that holds the secondary actions.
+test('phone headers: the primary action across the width, the secondary ones in a ⋯', async ({ page }) => {
+  await login(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  for (const [path, primary, secondary, dialog] of [
+    ['/routing-rules', 'New rule', 'Test a request', 'Test a request'],
+    ['/integrations', 'New integration', 'Add from manifest', /manifest/i],
+  ] as const) {
+    await ready(page, path)
+    const actions = page.locator('[data-test="page-actions"]')
+    const header = (await actions.boundingBox())!
+    const button = (await actions.getByRole('button', { name: primary }).boundingBox())!
+    expect.soft(button.width, `${path}: ${primary} spans the header beside the ⋯`).toBeGreaterThan(header.width - 60)
+    await expect(actions.getByRole('button', { name: secondary })).toBeHidden()
+    await actions.getByRole('button', { name: 'More actions' }).click()
+    await page.locator('[data-test="menu-sheet"]').getByRole('button', { name: secondary }).click()
+    await expect(page.getByRole('dialog', { name: dialog })).toBeVisible()
+    await page.keyboard.press('Escape')
+  }
+})
+
 // Layout rule 10: a page's summary tiles are two by two on a phone, not one per row.
 test('summary tiles are two by two at 390 px', async ({ page }) => {
   await login(page)

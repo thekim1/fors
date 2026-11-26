@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Phone headers** (layout audit step 7, rule 10): on a phone a page's primary action spans the header and its
+  secondary actions sit in a ⋯ beside it (*Test a request* on Routing rules, *Add from manifest* on Integrations);
+  segmented controls scroll in one row instead of wrapping.
 - **Summary tiles on Health & operations and PII incidents** (layout audit step 6, rules 8 to 10, Q4 A). *Health &
   operations* starts with four tiles (components, usage writer, providers degraded or down, version), each saying in
   text what needs attention; the component list folds under *Details* while all are healthy and otherwise lists only

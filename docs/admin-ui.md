@@ -253,7 +253,9 @@ radius, colour or icon set.
    & operations* the component list folds under *Details* while every component is healthy and lists only the ones
    that are not otherwise.
 10. **As good on a phone.** One column below 760 px with no sideways scrolling down to 320 px; menus become bottom
-    sheets; touch targets are at least 44 × 44 px on a phone (`max-md:h-11`); summary tiles are two by two.
+    sheets; touch targets are at least 44 × 44 px on a phone (`max-md:h-11`); summary tiles are two by two. A page's
+    primary action spans the header, beside a ⋯ that holds its secondary actions (`MenuButton` with `phoneOnly` items:
+    *Test a request* on Routing rules, *Add from manifest* on Integrations); a segmented control scrolls in one row.
 11. **Accessible by construction:** WCAG 2.2 AA in the three themes and at phone width. Fors checks this automatically
     (`tests/e2e/specs/accessibility.spec.ts`: axe on every page and on the menus, sheets, filter chips and save bar while
     open, at 1 280 and 390 px; reflow at 320 px; target size; keyboard and focus), and does not plan a manual

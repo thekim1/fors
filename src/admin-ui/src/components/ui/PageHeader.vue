@@ -1,4 +1,9 @@
 <script setup lang="ts">
+/**
+ * A page's title, description and actions. Layout rule 10: on a phone the actions take the full width and the primary
+ * one stretches; a page puts its secondary actions in a ⋯ there (a `MenuButton` with `phoneOnly` items, its desktop
+ * buttons `max-md:hidden`), which keeps its own width (`flex-none`).
+ */
 defineProps<{ title: string; description?: string }>()
 </script>
 
@@ -8,6 +13,6 @@ defineProps<{ title: string; description?: string }>()
       <h1 id="page-title" tabindex="-1" class="text-title-1 outline-none max-md:text-title-2">{{ title }}</h1>
       <p v-if="description || $slots.description" class="mt-1 text-fg-2"><slot name="description">{{ description }}</slot></p>
     </div>
-    <div v-if="$slots.default" class="flex flex-wrap items-center gap-2"><slot /></div>
+    <div v-if="$slots.default" class="flex flex-wrap items-center gap-2 max-md:w-full max-md:*:flex-1 max-md:[&>.flex-none]:flex-none" data-test="page-actions"><slot /></div>
   </header>
 </template>

@@ -210,7 +210,7 @@ onMounted(load)
 
 <template>
   <PageHeader title="Providers & models" description="Providers are the services that run models. Routes send requests to their models.">
-    <span v-if="segment === 'models' && noProviders" id="new-model-reason" class="text-small text-fg-3">Add a provider first.</span>
+    <span v-if="segment === 'models' && noProviders" id="new-model-reason" class="text-small text-fg-3 max-md:basis-full">Add a provider first.</span>
     <UiButton
       variant="primary"
       icon="add"
