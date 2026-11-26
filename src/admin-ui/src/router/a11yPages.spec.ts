@@ -33,6 +33,6 @@ describe('the pages the accessibility spec scans', () => {
 
   it('include the tabs and views that show other content', () => {
     const scanned = scannedPages()
-    for (const page of ['/usage?tab=requests', '/providers?show=models']) expect(scanned).toContain(page)
+    for (const page of ['/usage?tab=requests', '/providers?tab=models']) expect(scanned).toContain(page)
   })
 })

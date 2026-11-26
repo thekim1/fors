@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Providers & models: tabs and chips in the address** (layout audit step 4, rules 2 and 6): *Providers* and *Models*
+  are tabs (`?tab=models`; an older `?show=models` link still opens Models), and each tab's search and filters are
+  chips kept in the address (`/providers?tab=models&kind=Chat&q=gpt`) instead of labelled selects. The search and the
+  status stay when you change tabs; the other filters belong to one tab.
 - **The audit log filters by who** (layout audit step 3, Q5 A): *Type* and *Who* chips, kept in the address
   (`/audit?type=Team&actor=anna`), replace the *Entity type* select. *Who* matches part of the name or e-mail recorded
   with an entry, or its sign-in subject, ignoring case, and applies once the typing stops. `GET /api/audit` takes the

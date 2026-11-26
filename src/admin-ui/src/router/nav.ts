@@ -141,7 +141,7 @@ export const navGroups: NavGroup[] = [
         keywords: ['openai', 'azure', 'foundry', 'ollama', 'vllm', 'endpoint', 'price', 'drain', 'discover'],
         sections: [
           { label: 'Providers', to: { name: 'providers' } },
-          { label: 'Models', to: { name: 'providers', query: { show: 'models' } }, keywords: ['model prices', 'context window'] },
+          { label: 'Models', to: { name: 'providers', query: { tab: 'models' } }, keywords: ['model prices', 'context window'] },
         ],
         roles: GATEWAY_ADMIN,
       },
