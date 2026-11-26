@@ -186,7 +186,7 @@ onBeforeUnmount(() => {
           <span v-else class="flex flex-wrap gap-x-2"><ResidencyLabel v-for="r in row.allowedResidencies" :key="r" :residency="r" /></span>
         </span>
       </template>
-      <template #cell-lastUsed="{ row }"><span class="text-fg-2">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : 'Never used' }}</span></template>
+      <template #cell-lastUsed="{ row }"><span :class="row.lastUsedAt ? 'text-fg-2' : 'text-fg-3'">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : 'Never used' }}</span></template>
     </DataTable>
     <p v-if="filtering && filtered.length > 0" class="mt-3 text-small text-fg-3">Showing {{ filtered.length }} of {{ keys.items.length }}.</p>
   </AsyncState>

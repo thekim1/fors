@@ -265,7 +265,7 @@ onMounted(load)
         <template #cell-residency="{ row }"><ResidencyLabel :residency="row.residency" /></template>
         <template #cell-status="{ row }">
           <span class="flex flex-wrap gap-1.5">
-            <UiBadge :tone="row.isEnabled ? 'ok' : 'neutral'" :label="row.isEnabled ? 'Enabled' : 'Disabled'" />
+            <span v-if="row.isEnabled" class="text-small text-fg-2">Enabled</span><UiBadge v-else tone="neutral" label="Disabled" />
             <UiBadge v-if="row.isDrained" tone="neutral" label="Drained" />
           </span>
         </template>
@@ -315,7 +315,7 @@ onMounted(load)
           <span v-else class="text-fg-3">No price</span>
           <span class="block text-caption text-fg-3">{{ PRICE_MODE_LABEL[row.priceMode] }}</span>
         </template>
-        <template #cell-status="{ row }"><UiBadge :tone="row.isEnabled ? 'ok' : 'neutral'" :label="row.isEnabled ? 'Enabled' : 'Disabled'" /></template>
+        <template #cell-status="{ row }"><span v-if="row.isEnabled" class="text-small text-fg-2">Enabled</span><UiBadge v-else tone="neutral" label="Disabled" /></template>
       </DataTable>
 
       <Pagination

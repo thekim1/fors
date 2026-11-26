@@ -301,10 +301,11 @@ async function priceAdded(): Promise<void> {
       <SelectField id="model-profile" v-model="parameterProfile" label="Parameter profile" :options="profileOptions" :error="errors.parameterProfile" />
       <TextAreaField id="model-description" v-model="description" label="Description" :rows="2" hint="Optional. Shown in the catalogue. Filled from models.dev when empty." />
       <div class="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-        <TextField id="model-context" v-model="contextWindow" label="Context window (tokens)" type="number" min="1" inputmode="numeric" hint="Optional." :error="errors.contextWindow" />
+        <TextField id="model-context" v-model="contextWindow" short label="Context window (tokens)" type="number" min="1" inputmode="numeric" hint="Optional." :error="errors.contextWindow" />
         <TextField
           id="model-max-output"
           v-model="maxOutputTokens"
+          short
           label="Output limit (tokens)"
           type="number"
           min="1"

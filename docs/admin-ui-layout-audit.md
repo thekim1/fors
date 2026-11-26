@@ -2,8 +2,8 @@
 
 **Status:** accepted, 2026-11-26: the work goes ahead with the recommendation of each [question](#questions) (the user:
 "continue"); a step that turns on one of them says so in its pull request, so it can still be changed there. The work
-is in [Order](#order), smallest first, one pull request per step; done so far: step 0 (#134) and the accessibility
-checks of #130 part D (#135).
+is in [Order](#order), smallest first, one pull request per step; done so far: step 0 (#134), the accessibility
+checks of #130 part D (#135) and step 1, with [Q7](#q7-status-badges-for-the-normal-state) A.
 
 Every page in `src/admin-ui/src/views/` was checked against the eleven [layout rules](admin-ui.md#layout-rules) (Källa's
 admin design §5.12, from its UX pass of 2026-11-23, and the mockups in Källa's

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatUsdCost, lastDaysIso } from './format'
+import { formatUsdCost, lastDaysIso, quietZero } from './format'
 
 describe('formatUsdCost', () => {
   it('keeps up to four decimals under one dollar, so small costs are visible', () => {
@@ -15,5 +15,12 @@ describe('lastDaysIso', () => {
     expect(lastDaysIso(3, new Date('2026-11-01T10:00:00Z'))).toEqual(['2026-10-30', '2026-10-31', '2026-11-01'])
     expect(lastDaysIso(2, new Date('2026-03-30T00:30:00+02:00'))).toEqual(['2026-03-29', '2026-03-30'])
     expect(lastDaysIso(30, new Date('2026-10-24T12:00:00Z'))).toHaveLength(30)
+  })
+})
+
+describe('quietZero', () => {
+  it('greys a zero or a missing count and leaves the rest alone', () => {
+    expect([0, null, undefined].map(quietZero)).toEqual(['text-fg-3', 'text-fg-3', 'text-fg-3'])
+    expect(quietZero(3)).toBeUndefined()
   })
 })

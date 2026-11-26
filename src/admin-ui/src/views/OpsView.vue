@@ -62,9 +62,10 @@ onMounted(() => {
           <li v-for="component in health.components" :key="component.name" class="flex flex-wrap items-center justify-between gap-3 border-b border-border py-2.5 last:border-b-0">
             <div class="min-w-0">
               <p class="font-medium">{{ component.name }}</p>
-              <p v-if="component.description" class="text-small text-fg-2">{{ component.description }}</p>
+              <p v-if="component.description && component.status !== 'Healthy'" class="text-small text-fg-2">{{ component.description }}</p>
             </div>
-            <UiBadge :tone="HEALTH_STATUS[component.status].tone">{{ HEALTH_STATUS[component.status].label }}</UiBadge>
+            <span v-if="component.status === 'Healthy'" class="text-small text-fg-2">{{ HEALTH_STATUS[component.status].label }}</span>
+            <UiBadge v-else :tone="HEALTH_STATUS[component.status].tone">{{ HEALTH_STATUS[component.status].label }}</UiBadge>
           </li>
         </ul>
         <dl class="mt-4 m-0">
@@ -80,7 +81,8 @@ onMounted(() => {
           <DetailRow label="In flight">{{ formatNumber(writer.inFlightRecords) }} records</DetailRow>
           <DetailRow label="Last write">{{ writer.lastWriteAt ? formatDateTime(writer.lastWriteAt, true) : 'No writes yet' }}</DetailRow>
           <DetailRow label="Consecutive failures">
-            <UiBadge :tone="writer.consecutiveFailures > 0 ? 'danger' : 'ok'">{{ formatNumber(writer.consecutiveFailures) }}</UiBadge>
+            <UiBadge v-if="writer.consecutiveFailures > 0" tone="danger">{{ formatNumber(writer.consecutiveFailures) }}</UiBadge>
+            <span v-else class="text-fg-3">0</span>
           </DetailRow>
         </dl>
         <p v-else class="text-fg-2">Usage writer status is unavailable.</p>

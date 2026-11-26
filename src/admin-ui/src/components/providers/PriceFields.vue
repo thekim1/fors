@@ -15,10 +15,10 @@ function set(key: keyof PriceDraft, value: string): void {
 
 <template>
   <div class="flex flex-col gap-4">
-    <TextField :id="`${idPrefix}-input`" :model-value="draft.input" label="Input (USD per 1M tokens)" inputmode="decimal" :error="errors.input" @update:model-value="set('input', $event)" />
-    <TextField :id="`${idPrefix}-cached`" :model-value="draft.cached" label="Cached input (USD per 1M tokens)" inputmode="decimal" :error="errors.cached" @update:model-value="set('cached', $event)" />
-    <TextField
-      :id="`${idPrefix}-cache-write`"
+    <TextField :id="`${idPrefix}-input`" short :model-value="draft.input" label="Input (USD per 1M tokens)" inputmode="decimal" :error="errors.input" @update:model-value="set('input', $event)" />
+    <TextField :id="`${idPrefix}-cached`" short :model-value="draft.cached" label="Cached input (USD per 1M tokens)" inputmode="decimal" :error="errors.cached" @update:model-value="set('cached', $event)" />
+    <TextField :id="`${idPrefix}-cache-write`"
+      short
       :model-value="draft.cacheWrite"
       label="Cache write (USD per 1M tokens)"
       inputmode="decimal"
@@ -26,10 +26,10 @@ function set(key: keyof PriceDraft, value: string): void {
       :error="errors.cacheWrite"
       @update:model-value="set('cacheWrite', $event)"
     />
-    <TextField :id="`${idPrefix}-output`" :model-value="draft.output" label="Output (USD per 1M tokens)" inputmode="decimal" :error="errors.output" @update:model-value="set('output', $event)" />
+    <TextField :id="`${idPrefix}-output`" short :model-value="draft.output" label="Output (USD per 1M tokens)" inputmode="decimal" :error="errors.output" @update:model-value="set('output', $event)" />
     <div class="flex items-start gap-3">
-      <TextField
-        :id="`${idPrefix}-audio`"
+      <TextField :id="`${idPrefix}-audio`"
+        short
         class="min-w-0 flex-1"
         :model-value="draft.audio"
         label="Audio input by duration (USD)"
@@ -40,8 +40,8 @@ function set(key: keyof PriceDraft, value: string): void {
       />
       <SelectField :id="`${idPrefix}-audio-unit`" class="w-36 shrink-0" :model-value="draft.audioUnit" label="Unit" :options="audioUnits" @update:model-value="set('audioUnit', $event)" />
     </div>
-    <TextField
-      :id="`${idPrefix}-audio-in`"
+    <TextField :id="`${idPrefix}-audio-in`"
+      short
       :model-value="draft.audioIn"
       label="Audio input (USD per 1M tokens)"
       inputmode="decimal"
@@ -49,8 +49,8 @@ function set(key: keyof PriceDraft, value: string): void {
       :error="errors.audioIn"
       @update:model-value="set('audioIn', $event)"
     />
-    <TextField
-      :id="`${idPrefix}-audio-out`"
+    <TextField :id="`${idPrefix}-audio-out`"
+      short
       :model-value="draft.audioOut"
       label="Audio output (USD per 1M tokens)"
       inputmode="decimal"
@@ -58,8 +58,8 @@ function set(key: keyof PriceDraft, value: string): void {
       :error="errors.audioOut"
       @update:model-value="set('audioOut', $event)"
     />
-    <TextField
-      :id="`${idPrefix}-image`"
+    <TextField :id="`${idPrefix}-image`"
+      short
       :model-value="draft.image"
       label="Image (USD per picture)"
       inputmode="decimal"

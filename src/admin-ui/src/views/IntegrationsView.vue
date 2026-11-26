@@ -122,7 +122,7 @@ onMounted(() => {
         <span class="block text-caption text-fg-3 tabular">{{ plural(row.assignedKeys, 'assigned key') }}</span>
       </template>
       <template #cell-status="{ row }">
-        <UiBadge :tone="row.isActive ? 'ok' : 'neutral'" :label="row.isActive ? 'Active' : 'Inactive'" />
+        <span v-if="row.isActive" class="text-small text-fg-2">Active</span><UiBadge v-else tone="neutral" label="Inactive" />
       </template>
       <template #cell-actions="{ row }">
         <span class="flex flex-wrap justify-end gap-2">

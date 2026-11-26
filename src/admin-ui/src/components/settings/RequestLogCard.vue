@@ -65,7 +65,7 @@ onMounted(load)
 </script>
 
 <template>
-  <UiCard title="Request logging" meta="Gateway log" heading-id="request-log-h" class="max-w-3xl">
+  <UiCard title="Request logging" meta="Gateway log" heading-id="request-log-h" class="max-w-[680px]">
     <AsyncState :loading="loading" :error="loadError" :empty="!settings" @retry="load">
       <div class="flex flex-col gap-3 text-fg-2">
         <div><UiBadge :tone="status.tone" :label="status.label" /></div>

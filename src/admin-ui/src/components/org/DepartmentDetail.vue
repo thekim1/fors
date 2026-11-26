@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import type { Budget, Department, Team } from '@/api/types'
 import { budgetSpentOf } from '@/utils/budgets'
+import { quietZero } from '@/utils/format'
 import { MENU, PERIOD_LABEL, plural } from '@/utils/labels'
 import DataTable, { type Column } from '../ui/DataTable.vue'
 import MenuButton, { type MenuItem } from '../ui/MenuButton.vue'
@@ -111,8 +112,8 @@ const summary = computed(() => `${plural(props.department.teamCount, 'team')} ·
             <span v-if="row.description" class="text-caption text-fg-3">{{ row.description }}</span>
           </span>
         </template>
-        <template #cell-keys="{ row }">{{ row.keyCount }}</template>
-        <template #cell-status="{ row }"><UiBadge :tone="row.isActive ? 'ok' : 'neutral'" :label="row.isActive ? 'Active' : 'Inactive'" /></template>
+        <template #cell-keys="{ row }"><span class="tabular" :class="quietZero(row.keyCount)">{{ row.keyCount }}</span></template>
+        <template #cell-status="{ row }"><span v-if="row.isActive" class="text-small text-fg-2">Active</span><UiBadge v-else tone="neutral" label="Inactive" /></template>
         <template #cell-actions="{ row }">
           <div class="flex flex-col items-end gap-1">
             <div class="flex items-center justify-end gap-1">
