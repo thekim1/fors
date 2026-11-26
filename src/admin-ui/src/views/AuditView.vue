@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useDebouncedWatch } from '@/composables/useDebouncedWatch'
+import { ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
 import type { AuditEntry } from '@/api/types'
 import { useOpsStore } from '@/stores/ops'
 import { formatDateTime } from '@/utils/format'
@@ -7,11 +9,14 @@ import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import Pagination from '@/components/ui/Pagination.vue'
-import SelectField from '@/components/ui/SelectField.vue'
+import FilterChip from '@/components/ui/FilterChip.vue'
+import FilterTextChip from '@/components/ui/FilterTextChip.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import { FILTERS } from '@/utils/labels'
 
 const PAGE_SIZE = 50
 const ENTITY_TYPES = ['Department', 'Team', 'VirtualKey', 'DataApiKey', 'Provider', 'Model', 'Route', 'RoutingRule', 'Budget', 'Settings', 'Config', 'Usage']
-const entityOptions = [{ value: '', label: 'All entities' }, ...ENTITY_TYPES.map((t) => ({ value: t, label: t }))]
+const entityOptions = ENTITY_TYPES.map((t) => ({ value: t, label: t }))
 
 const columns: Column[] = [
   { key: 'timestamp', label: 'Time' },
@@ -23,15 +28,20 @@ const columns: Column[] = [
 
 const ops = useOpsStore()
 const page = ref(1)
-const entityType = ref('')
+// Layout rule 2: Type and Who are chips kept in the address (?type=Team&actor=anna), as Källa's audit log has them.
+const { filters, active, clear } = useQueryFilters({ type: '', actor: '' }, { type: ONE_OF(ENTITY_TYPES) })
+const filterRow = ref<HTMLElement | null>(null)
 
-const load = () => ops.loadAudit({ page: page.value, pageSize: PAGE_SIZE, entityType: entityType.value || undefined })
+const load = () =>
+  ops.loadAudit({ page: page.value, pageSize: PAGE_SIZE, entityType: filters.type || undefined, actor: filters.actor.trim() || undefined })
 
-function setEntity(value: string): void {
-  entityType.value = value
+function reload(): void {
   page.value = 1
   void load()
 }
+// A type applies at once; who is typed, so it waits until the typing stops.
+watch(() => filters.type, reload)
+useDebouncedWatch(() => filters.actor, reload, 300)
 
 function setPage(next: number): void {
   page.value = next
@@ -60,9 +70,11 @@ onMounted(load)
 <template>
   <PageHeader title="Audit log" description="Who changed what, and when. Metadata only." />
 
-  <div class="mb-4 max-w-xs">
-    <SelectField label="Entity type" :model-value="entityType" :options="entityOptions" @update:model-value="setEntity" />
-  </div>
+  <form ref="filterRow" class="mb-4 flex flex-wrap items-center gap-2" role="search" aria-label="Filter the audit log" data-test="filters" @submit.prevent>
+    <FilterChip v-model="filters.type" label="Type" :options="entityOptions" any="All types" />
+    <FilterTextChip v-model="filters.actor" label="Who" any="Anyone" hint="A name, e-mail or sign-in subject" />
+    <UiButton v-if="active.length" size="sm" variant="quiet" class="max-md:h-11" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
+  </form>
 
   <AsyncState :loading="ops.auditLoading" :error="ops.auditError" @retry="load">
     <DataTable
@@ -70,9 +82,9 @@ onMounted(load)
       :rows="ops.audit.items"
       :row-key="(e) => e.id"
       caption="Audit log entries"
-      :clearable="entityType !== ''"
+      :clearable="active.length > 0"
       empty-text="No audit entries match."
-      @clear="setEntity('')"
+      @clear="clear(filterRow)"
     >
       <template #cell-timestamp="{ row }"><span class="tabular">{{ formatDateTime(row.timestamp, true) }}</span></template>
       <template #cell-actor="{ row }">

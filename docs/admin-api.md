@@ -506,8 +506,10 @@ and invalidate the gateway catalogue.
   Import is transactional, rejects plaintext credentials, preserves existing encrypted credentials when
   a reference is omitted, and never overwrites price history. Environment references must already exist
   in the Admin API process. Export never contains secret values or encrypted credentials.
-- `GET /api/audit?page=&pageSize=&entityType=` → `{ items: [{ id, timestamp, actor, action, entityType, entityId, details, actorName,
-  actorRoles, actorDepartments, sourceAddress, sessionId, requestId, userAgent }], total }`. `actor` is the OIDC subject; the
+- `GET /api/audit?page=&pageSize=&entityType=&actor=` → `{ items: [{ id, timestamp, actor, action, entityType, entityId, details, actorName,
+  actorRoles, actorDepartments, sourceAddress, sessionId, requestId, userAgent }], total }`. The `actor` filter (at most 200
+  characters, else `400`) keeps the entries whose OIDC subject is that text, or whose recorded name or e-mail contains it,
+  ignoring case; `%` and `_` in it are matched as themselves. In an entry, `actor` is the OIDC subject; the
   other actor fields are recorded with each entry: name or e-mail, roles and department codes at the time, the client address
   behind the trusted proxies (`Admin:AuditSourceAddress`: `Full` by default, `Truncated` or `None`), a random session id
   given at sign-in (never the cookie), the request's trace id and the user agent (200 characters). Entries written before

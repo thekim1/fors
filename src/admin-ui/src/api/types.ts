@@ -1289,6 +1289,8 @@ export interface AuditQuery {
   page?: number
   pageSize?: number
   entityType?: string
+  /** Who made the entries: the sign-in subject, or part of the recorded name or e-mail. */
+  actor?: string
 }
 
 // ---------- Routing rules ----------

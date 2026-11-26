@@ -192,7 +192,7 @@ test('deleting a department with rules: delete them or keep them switched off, b
     expect(actions(remover.ruleId)).toEqual(expect.arrayContaining(['create', 'delete']))
     expect(actions(keeper.ruleId)).toEqual(expect.arrayContaining(['create', 'deactivate']))
     await ready(page, '/audit')
-    await page.getByLabel('Entity type').selectOption('RoutingRule')
+    await page.getByRole('search').getByRole('combobox', { name: 'Type:' }).selectOption('RoutingRule')
     await expect(page.locator('main')).toContainText('deactivate')
   } finally {
     await remove(page, `/api/routing-rules/${keeper.ruleId}`)
