@@ -32,7 +32,15 @@ async function mountCard(initial: NetworkSettings) {
   return wrapper
 }
 
-const textarea = (wrapper: Awaited<ReturnType<typeof mountCard>>) => wrapper.find('textarea#trusted-proxies')
+type Card = Awaited<ReturnType<typeof mountCard>>
+/** The proxy addresses, one chip each. */
+const chips = (wrapper: Card) => wrapper.findAll('[data-test=address-chip]').map((c) => c.find('span').text())
+/** Types into the chip input and presses Enter. */
+async function enter(wrapper: Card, text: string): Promise<void> {
+  const input = wrapper.get('input#trusted-proxies')
+  await input.setValue(text)
+  await input.trigger('keydown', { key: 'Enter' })
+}
 
 beforeEach(() => {
   network.mockReset()
@@ -40,9 +48,25 @@ beforeEach(() => {
 })
 
 describe('TrustedProxiesCard', () => {
+  it('turns typed and pasted addresses into chips, marks one that is not an address, and removes a chip', async () => {
+    const wrapper = await mountCard(settings())
+    await enter(wrapper, '10.0.0.5')
+    const input = wrapper.get('input#trusted-proxies')
+    await input.trigger('paste', { clipboardData: { getData: () => '10.0.1.0/28\n10.0.0.5, proxy.example.se' } })
+    expect(chips(wrapper)).toEqual(['10.0.0.5', '10.0.1.0/28', 'proxy.example.se'])
+    expect((input.element as HTMLInputElement).value).toBe('')
+    expect(wrapper.findAll('[data-test=address-chip]')[2]!.text()).toContain('not a valid address')
+    await input.setValue('10.0.2.1')
+    await input.trigger('blur')
+    expect(chips(wrapper)).toHaveLength(4)
+    await wrapper.get('button[aria-label="Remove proxy.example.se"]').trigger('click')
+    expect(chips(wrapper)).toEqual(['10.0.0.5', '10.0.1.0/28', '10.0.2.1'])
+    expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('1 unsaved change')
+  })
+
   it('shows the saved proxies and the connection the admin API saw', async () => {
     const wrapper = await mountCard(settings({ trustedProxies: ['10.0.0.5', '10.0.1.0/28'], updatedAt: '2026-10-12T08:00:00Z' }))
-    expect((textarea(wrapper).element as HTMLTextAreaElement).value).toBe('10.0.0.5\n10.0.1.0/28')
+    expect(chips(wrapper)).toEqual(['10.0.0.5', '10.0.1.0/28'])
     expect(wrapper.text()).toContain('X-Forwarded-For: 203.0.113.7')
     expect(wrapper.text()).toContain('Last changed')
     // Already listed: no shortcut to add it again.
@@ -52,7 +76,7 @@ describe('TrustedProxiesCard', () => {
   it('adds the observed proxy address and saves after confirmation', async () => {
     const wrapper = await mountCard(settings())
     await button(wrapper, 'Add 10.0.0.5').trigger('click')
-    expect((textarea(wrapper).element as HTMLTextAreaElement).value).toBe('10.0.0.5')
+    expect(chips(wrapper)).toEqual(['10.0.0.5'])
 
     expect(wrapper.get('[data-test=save-bar-count]').text()).toBe('1 unsaved change')
 
@@ -69,7 +93,8 @@ describe('TrustedProxiesCard', () => {
 
   it('warns that clearing the list ignores the proxy header', async () => {
     const wrapper = await mountCard(settings({ trustedProxies: ['10.0.0.5'] }))
-    await textarea(wrapper).setValue('')
+    await wrapper.get('button[aria-label="Remove 10.0.0.5"]').trigger('click')
+    expect(chips(wrapper)).toEqual([])
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     expect(wrapper.text()).toContain('ignore X-Forwarded-For')
@@ -81,7 +106,7 @@ describe('TrustedProxiesCard', () => {
     ['proxy.example.se', 'not an IP address'],
   ])('refuses %s before asking for confirmation', async (entry, message) => {
     const wrapper = await mountCard(settings())
-    await textarea(wrapper).setValue(entry)
+    await enter(wrapper, entry)
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     expect(wrapper.text()).toContain(message)

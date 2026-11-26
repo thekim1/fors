@@ -1,8 +1,8 @@
 # Restricting a key to client addresses
 
 A key can be limited to the addresses it may be used from, so a leaked key does not work elsewhere. In the admin UI,
-edit the key (*Keys*) and enter **Allowed client addresses**: one IP address (`192.0.2.10`, `2001:db8::10`) or CIDR
-network (`203.0.113.0/24`) per line, at most 100. Empty means any address. A request from anywhere else is refused with
+edit the key (*Keys*) and enter **Allowed client addresses**: an IP address (`192.0.2.10`, `2001:db8::10`) or CIDR
+network (`203.0.113.0/24`) at a time, each followed by Enter (a pasted list becomes one chip per entry), at most 100. Empty means any address. A request from anywhere else is refused with
 `403 address_not_allowed` and recorded with its source address like other refused keys. The list is copied to the new key
 on rotation.
 

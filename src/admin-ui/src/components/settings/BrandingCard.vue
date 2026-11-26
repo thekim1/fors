@@ -146,7 +146,7 @@ onMounted(load)
       </form>
 
       <div class="mt-6 flex flex-col gap-3">
-        <h3 class="m-0 text-body font-semibold text-fg">Logo</h3>
+        <h4 class="m-0 text-body font-semibold text-fg">Logo</h4>
         <div class="flex items-center gap-3">
           <BrandMark size="lg" />
           <span class="text-small text-fg-2">{{ store.logoUrl ? 'Your logo' : 'The built-in icon (no logo set)' }}</span>

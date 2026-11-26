@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Settings in sections, and address lists as chips** (layout audit step 8, Q6 A, rules 3 and 4): Settings groups its
+  cards under *Network*, *Data*, *Prices* and *This console*, with a section menu at the top (a *Section* picker on a
+  phone). *Proxy addresses* and a key's *Allowed client addresses* are chip inputs: type an address and press Enter (or
+  a comma or space), paste a whole list at once, remove one with its ×; an entry that is not an address is marked.
 - **Phone headers** (layout audit step 7, rule 10): on a phone a page's primary action spans the header and its
   secondary actions sit in a ⋯ beside it (*Test a request* on Routing rules, *Add from manifest* on Integrations);
   segmented controls scroll in one row instead of wrapping.

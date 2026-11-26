@@ -116,10 +116,9 @@ onMounted(load)
             :id="ids.trustedProxies"
             v-model="text"
             label="Proxy addresses"
-            placeholder="10.0.0.5&#10;10.0.1.0/28"
-            :rows="4"
+            placeholder="10.0.0.5, 10.0.1.0/28"
             :error="errors.trustedProxies"
-            hint="One IP address or CIDR network per line. Takes effect on the gateways within seconds."
+            hint="An IP address or CIDR network, then Enter; paste several at once. Takes effect on the gateways within seconds."
           />
         </div>
         <details class="w-full text-small text-fg-2">
