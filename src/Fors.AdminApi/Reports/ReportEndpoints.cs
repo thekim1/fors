@@ -30,8 +30,8 @@ public static class ReportEndpoints
         reports.MapGet("/usage/export.csv", async (DateTimeOffset? from, DateTimeOffset? to, ReportService service, CancellationToken ct) =>
             TypedResults.File(await service.ExportCsvAsync(from, to, ct), "text/csv; charset=utf-8", "anvandning.csv"))
             .WithName("ExportUsageCsv").WithSummary("Cost per cost centre, department, team and key (semicolon-separated, Swedish decimals)");
-        api.MapGet("/audit", async (int? page, int? pageSize, string? entityType, ReportService service, CancellationToken ct) =>
-            TypedResults.Ok(await service.AuditAsync(page, pageSize, entityType, ct)))
+        api.MapGet("/audit", async (int? page, int? pageSize, string? entityType, string? actor, ReportService service, CancellationToken ct) =>
+            TypedResults.Ok(await service.AuditAsync(page, pageSize, entityType, actor, ct)))
             .RequireAuthorization(AdminPolicies.Admin).WithTags("Reports").WithName("ListAudit");
         api.MapGet("/catalog", async (ProviderCatalogService catalog, IOptions<GatewayLinkOptions> gateway, CancellationToken ct) =>
             TypedResults.Ok(await catalog.PublishedCatalogAsync(gateway.Value.PublicBaseUrl, ct)))

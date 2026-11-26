@@ -9,6 +9,8 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Fors.AdminApi.Common;
 using Fors.AdminApi.Security;
+using Fors.Domain.Entities;
+using Fors.Infrastructure.Persistence;
 
 namespace Fors.AdminApi.Tests;
 
@@ -31,6 +33,37 @@ public sealed class AdminActivityTests(AdminFixture fixture)
         entry["actorRoles"]!.GetValue<string>().ShouldBe("gateway-admin");
         entry["requestId"]!.GetValue<string>().ShouldNotBeNullOrWhiteSpace();
         entry["userAgent"]!.GetValue<string>().ShouldBe("AuditTest/1.0");
+    }
+
+    [Fact]
+    public async Task The_audit_log_filters_by_who_made_the_entries()
+    {
+        // Two people of our own, so other tests' entries in the shared database do not matter. The second name has a
+        // wildcard character in it, which the filter must match literally.
+        var marker = Guid.NewGuid().ToString("N")[..8];
+        var anna = new AuditLogEntry { Actor = $"sub-anna-{marker}", ActorName = $"Anna Andersson {marker}", Action = "update", EntityType = "Team", Timestamp = DateTimeOffset.UtcNow };
+        var odd = new AuditLogEntry { Actor = $"sub-odd-{marker}", ActorName = $"50%_off {marker}", Action = "update", EntityType = "Team", Timestamp = DateTimeOffset.UtcNow };
+        using (var scope = fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+            db.AuditLog.AddRange(anna, odd);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        using var client = await fixture.ClientAsync();
+        async Task<string[]> WhoAsync(string actor)
+        {
+            using var response = await client.GetAsync($"/api/audit?actor={Uri.EscapeDataString(actor)}&pageSize=200", Ct);
+            return [.. (await AdminFixture.ReadAsync(response))["items"]!.AsArray().Select(e => e!["actor"]!.GetValue<string>())];
+        }
+
+        (await WhoAsync($"anna ANDERSSON {marker}")).ShouldBe([anna.Actor]); // part of the name, any case
+        (await WhoAsync(anna.Actor)).ShouldBe([anna.Actor]); // the sign-in subject itself
+        (await WhoAsync($"50%_off {marker}")).ShouldBe([odd.Actor]);
+        (await WhoAsync($"5_%")).ShouldNotContain(anna.Actor); // % and _ are not wildcards
+
+        using var tooLong = await client.GetAsync($"/api/audit?actor={new string('a', 201)}", Ct);
+        tooLong.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
     [Fact]

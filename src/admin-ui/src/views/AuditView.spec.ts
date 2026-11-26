@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import type { AuditEntry } from '@/api/types'
 import AuditView from './AuditView.vue'
 
@@ -13,9 +14,9 @@ const entries: AuditEntry[] = [
   { id: '1', timestamp: '2026-10-20T08:00:00Z', actor: 'system:seed', action: 'seed', entityType: 'Database', entityId: null, details: 'Demo data created' },
 ]
 
-vi.mock('@/api', () => ({
-  api: { audit: { list: () => Promise.resolve({ items: entries, total: entries.length }) } },
-}))
+const list = vi.fn()
+vi.mock('@/api', () => ({ api: { audit: { list: (...a: unknown[]) => list(...a) } } }))
+beforeEach(() => list.mockReset().mockImplementation(() => Promise.resolve({ items: entries, total: entries.length })))
 
 describe('AuditView', () => {
   it('shows who made an entry, from where and in which session', async () => {
@@ -32,5 +33,31 @@ describe('AuditView', () => {
     // Entries from before the upgrade have only the subject and details.
     expect(rows[1]!.text()).toContain('system:seed')
     expect(rows[1]!.find('dl').exists()).toBe(false)
+  })
+
+  it('filters by Type at once and by Who once the typing stops, both kept in the address (layout rule 2)', async () => {
+    vi.useFakeTimers()
+    try {
+      setActivePinia(createPinia())
+      const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/audit', component: { render: () => null } }] })
+      await router.push('/audit?type=Team')
+      const wrapper = mount(AuditView, { global: { plugins: [router] } })
+      await flushPromises()
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ entityType: 'Team', actor: undefined }))
+
+      await wrapper.get('[data-test="chip-Who"] input').setValue('anna')
+      await flushPromises()
+      expect(list).not.toHaveBeenLastCalledWith(expect.objectContaining({ actor: 'anna' }))
+      await vi.advanceTimersByTimeAsync(300)
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ entityType: 'Team', actor: 'anna', page: 1 }))
+      expect(router.currentRoute.value.query).toEqual({ type: 'Team', actor: 'anna' })
+
+      await wrapper.get('[data-test=clear-filters]').trigger('click')
+      await vi.advanceTimersByTimeAsync(300)
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ entityType: undefined, actor: undefined }))
+      expect(router.currentRoute.value.query).toEqual({})
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

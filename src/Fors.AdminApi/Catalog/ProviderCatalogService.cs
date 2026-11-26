@@ -201,8 +201,8 @@ public sealed class ProviderCatalogService(AdminContext ctx, RoutingRuleService 
     /// </summary>
     private async Task EnsureModelNameFreeAsync(string name, Guid? id, Guid providerId, CancellationToken ct)
     {
-        var pattern = LikeLiteral(name);
-        if (await ctx.Db.ModelDeployments.AnyAsync(x => x.Id != id && x.ProviderAccountId == providerId && EF.Functions.ILike(x.Name, pattern, LikeEscape), ct))
+        var pattern = LikePattern.Literal(name);
+        if (await ctx.Db.ModelDeployments.AnyAsync(x => x.Id != id && x.ProviderAccountId == providerId && EF.Functions.ILike(x.Name, pattern, LikePattern.Escape), ct))
         {
             throw new ApiFaultException(409, $"The provider already has a model called {name}.");
         }
@@ -211,8 +211,8 @@ public sealed class ProviderCatalogService(AdminContext ctx, RoutingRuleService 
     /// <summary>The model's public name: provider/name when another provider has a model of the same name.</summary>
     public async Task<string> PublicNameAsync(ModelDeployment m, CancellationToken ct)
     {
-        var pattern = LikeLiteral(m.Name);
-        var shared = await ctx.Db.ModelDeployments.AnyAsync(x => x.Id != m.Id && EF.Functions.ILike(x.Name, pattern, LikeEscape), ct);
+        var pattern = LikePattern.Literal(m.Name);
+        var shared = await ctx.Db.ModelDeployments.AnyAsync(x => x.Id != m.Id && EF.Functions.ILike(x.Name, pattern, LikePattern.Escape), ct);
         return shared ? PublicModelNames.Qualified(m.ProviderAccount?.Name ?? (await ProviderAsync(m.ProviderAccountId, ct)).Name, m.Name) : m.Name;
     }
 
@@ -286,18 +286,11 @@ public sealed class ProviderCatalogService(AdminContext ctx, RoutingRuleService 
         await ctx.SaveAsync(AuditActions.Delete, AuditEntities.Route, id, RouteAudit.Of(r), null, InvalidationKind.Config, ct);
     }
 
-    private const string LikeEscape = "\\";
-
-    /// <summary>A name as an ILIKE pattern that matches only itself (case-insensitively): wildcards are escaped.</summary>
-    private static string LikeLiteral(string name) =>
-        name.Replace(LikeEscape, LikeEscape + LikeEscape, StringComparison.Ordinal)
-            .Replace("%", LikeEscape + "%", StringComparison.Ordinal).Replace("_", LikeEscape + "_", StringComparison.Ordinal);
-
     /// <summary>Route names are matched case-insensitively. A route may share a model's name: the route is used (fallback).</summary>
     private async Task EnsureRouteNameFreeAsync(string name, Guid? id, CancellationToken ct)
     {
-        var pattern = LikeLiteral(name);
-        if (await ctx.Db.RouteAliases.AnyAsync(x => x.Id != id && EF.Functions.ILike(x.Name, pattern, LikeEscape), ct))
+        var pattern = LikePattern.Literal(name);
+        if (await ctx.Db.RouteAliases.AnyAsync(x => x.Id != id && EF.Functions.ILike(x.Name, pattern, LikePattern.Escape), ct))
         {
             throw new ApiFaultException(409, $"There is already a route called {name}.");
         }

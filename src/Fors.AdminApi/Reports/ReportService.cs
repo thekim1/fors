@@ -139,11 +139,25 @@ public sealed class ReportService(AdminContext ctx)
         return [.. Encoding.UTF8.GetPreamble(), .. Encoding.UTF8.GetBytes(csv.ToString())];
     }
 
-    public async Task<PageDto<AuditEntryDto>> AuditAsync(int? page, int? pageSize, string? entityType, CancellationToken ct)
+    /// <summary>The longest <c>actor</c> filter the audit log takes.</summary>
+    internal const int MaxActorFilterLength = 200;
+
+    /// <summary>
+    /// The audit log, newest first. <paramref name="actor"/> is who made the entries: the sign-in subject itself, or part of
+    /// the name or e-mail recorded with them, case-insensitively (the admin UI's <em>Who</em> filter).
+    /// </summary>
+    public async Task<PageDto<AuditEntryDto>> AuditAsync(int? page, int? pageSize, string? entityType, string? actor, CancellationToken ct)
     {
         var (skip, take) = ReportQuery.Pagination(page, pageSize);
         var query = ctx.Db.AuditLog.AsNoTracking();
         if (!string.IsNullOrEmpty(entityType)) { query = query.Where(a => a.EntityType == entityType); }
+        var who = actor?.Trim();
+        if (!string.IsNullOrEmpty(who))
+        {
+            if (who.Length > MaxActorFilterLength) { throw new ApiFaultException(400, $"The actor filter is at most {MaxActorFilterLength} characters."); }
+            var pattern = LikePattern.Containing(who);
+            query = query.Where(a => a.Actor == who || (a.ActorName != null && EF.Functions.ILike(a.ActorName, pattern, LikePattern.Escape)));
+        }
         var items = await query.OrderByDescending(a => a.Id).Skip(skip).Take(take)
             .Select(a => new AuditEntryDto(a.Id, a.Timestamp, a.Actor, a.Action, a.EntityType, a.EntityId, a.Details,
                 a.ActorName, a.ActorRoles, a.ActorDepartments, a.SourceAddress, a.SessionId, a.RequestId, a.UserAgent)).ToListAsync(ct);

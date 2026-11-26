@@ -36,7 +36,8 @@ saving does. *Discard* asks once. Leaving the page, or closing a drawer by ×, E
 first. **Rare and destructive actions** (*Delete…*, *Revoke…*, *Change owners*) are on a **⋯** menu beside the page's
 or the row's buttons, *Delete* last and red, each behind its confirmation.
 
-**Filters** on *Usage › Requests and costs*, *PII incidents*, *Keys*, *Budgets & alerts* and *Provider stability* are
+**Filters** on *Usage › Requests and costs*, *PII incidents*, *Keys*, *Budgets & alerts*, *Provider stability* and the
+*Audit log* (*Type*, and *Who*: part of a name or e-mail, applied when you stop typing) are
 one row of chips: a period (*Last 7 days*, *Last 30 days*, *This month*, *Custom…*; *Last 24 hours*, *7* or *30 days* on
 Provider stability) and one chip per filter, coloured with an × of its own when set, and *Clear filters* while any is.
 A chip that picks from a list shows each choice's count (*Revoked (2)*). They apply as they change, and the address keeps

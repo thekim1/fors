@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **The audit log filters by who** (layout audit step 3, Q5 A): *Type* and *Who* chips, kept in the address
+  (`/audit?type=Team&actor=anna`), replace the *Entity type* select. *Who* matches part of the name or e-mail recorded
+  with an entry, or its sign-in subject, ignoring case, and applies once the typing stops. `GET /api/audit` takes the
+  new `actor` filter for it (at most 200 characters; [docs/admin-api.md](docs/admin-api.md)).
 - **Keys, Budgets & alerts and Provider stability filter with chips kept in the address** (layout audit step 3, rule 2):
   Keys' search and a *Status* chip (`/keys?status=Revoked&q=chat`), Budgets' *Owner* chip (`?scope=Team`) and Provider
   stability's period (`?period=7d`) replace their segmented controls; the counts are in the chips' choices
