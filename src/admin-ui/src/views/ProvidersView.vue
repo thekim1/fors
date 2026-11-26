@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, ref, toRef, watch } from 'vue'
+import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import type { Model, Provider } from '@/api/types'
+import { ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
+import { useTabQuery } from '@/composables/useTabQuery'
 import { useSortedPage } from '@/composables/useTableView'
 import ModelFormDrawer from '@/components/providers/ModelFormDrawer.vue'
 import ProviderFormDrawer from '@/components/providers/ProviderFormDrawer.vue'
@@ -9,31 +11,30 @@ import { formatAudioPrice } from '@/components/providers/priceDraft'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
-import FilterSelect from '@/components/ui/FilterSelect.vue'
+import FilterChip from '@/components/ui/FilterChip.vue'
 import Pagination from '@/components/ui/Pagination.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import ResidencyLabel from '@/components/ui/ResidencyLabel.vue'
-import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
+import UiTabs from '@/components/ui/UiTabs.vue'
 import { useModelsStore } from '@/stores/models'
 import { useProvidersStore } from '@/stores/providers'
 import { formatNumber, formatUsd } from '@/utils/format'
-import { KIND_LABEL, MODEL_FEATURES, PRICE_MODE_LABEL, PROVIDER_TYPE_LABEL, RESIDENCY, featureLabel, plural } from '@/utils/labels'
-
-type Segment = 'providers' | 'models'
+import { FILTERS, KIND_LABEL, MODEL_FEATURES, PRICE_MODE_LABEL, PROVIDER_TYPE_LABEL, RESIDENCY, featureLabel, plural } from '@/utils/labels'
 
 const providers = useProvidersStore()
 const models = useModelsStore()
 
 const route = useRoute()
 const router = useRouter()
-// ?show=models opens the models list, so search and bookmarks can link to it.
-const segment = ref<Segment>(route.query.show === 'models' ? 'models' : 'providers')
-watch(() => route.query.show, (value) => (segment.value = value === 'models' ? 'models' : 'providers'))
-watch(segment, (value) => {
-  if ((route.query.show === 'models') !== (value === 'models')) void router.replace({ query: { ...route.query, show: value === 'models' ? 'models' : undefined } })
-})
+// Layout rule 6: Providers and Models are tabs in the address (?tab=models). An older link's ?show=models opens Models.
+const segment = useTabQuery(['providers', 'models'] as const)
+if (route.query.show === 'models') {
+  const query: LocationQueryRaw = { ...route.query, tab: 'models' }
+  delete query.show
+  void router.replace({ query })
+}
 const providerDrawer = ref(false)
 const modelDrawer = ref(false)
 const providerId = ref<string | null>(null)
@@ -43,9 +44,9 @@ const editingProvider = computed(() => providers.items.find((p) => p.id === prov
 const editingModel = computed(() => models.items.find((m) => m.id === modelId.value) ?? null)
 const noProviders = computed(() => providers.items.length === 0)
 
-const segments = computed(() => [
-  { value: 'providers' as Segment, label: 'Providers', count: providers.items.length },
-  { value: 'models' as Segment, label: 'Models', count: models.items.length },
+const tabs = computed(() => [
+  { value: 'providers' as const, label: `Providers (${providers.items.length})` },
+  { value: 'models' as const, label: `Models (${models.items.length})` },
 ])
 
 const providerColumns: Column[] = [
@@ -65,23 +66,37 @@ const modelColumns: Column[] = [
   { key: 'status', label: 'Status', sortable: true },
 ]
 
-const ALL = 'all'
-const withAll = (label: string, options: { value: string; label: string }[]) => [{ value: ALL, label }, ...options]
+// Layout rule 2: the search and chips, kept in the address (?tab=models&kind=Chat&q=gpt). Search and status are shared by
+// the two tabs; the others belong to one of them and are dropped when the other tab opens.
+const PRICE_FILTERS = ['priced', 'unpriced', 'List', 'Manual', 'Unlisted']
+const { filters, active, clear } = useQueryFilters(
+  { q: '', status: '', type: '', residency: '', provider: '', kind: '', capability: '', price: '' },
+  { status: ONE_OF(['enabled', 'disabled', 'drained']), price: ONE_OF(PRICE_FILTERS) },
+)
+const filterRow = ref<HTMLElement | null>(null)
+const OWN: Record<'providers' | 'models', string[]> = { providers: ['type', 'residency'], models: ['provider', 'kind', 'capability', 'price'] }
+// After the address shows the new tab: a change made before would be written over the tab's own change of the address.
+watch(() => route.query.tab, () => {
+  const other = segment.value === 'models' ? OWN.providers : OWN.models
+  for (const key of other) filters[key as keyof typeof filters] = ''
+  if (segment.value === 'models' && filters.status === 'drained') filters.status = ''
+})
+const ALL = ''
 const includes = (query: string, ...values: (string | null | undefined)[]) => values.some((v) => v?.toLowerCase().includes(query))
 
 // Providers: search, filters, sorting
-const providerSearch = ref('')
-const providerType = ref(ALL)
-const providerResidency = ref(ALL)
-const providerStatus = ref(ALL)
+const providerSearch = toRef(filters, 'q')
+const providerType = toRef(filters, 'type')
+const providerResidency = toRef(filters, 'residency')
+const providerStatus = toRef(filters, 'status')
 
 const providerTypeOptions = computed(() =>
-  withAll('All types', [...new Set(providers.items.map((p) => p.type))].map((t) => ({ value: t, label: PROVIDER_TYPE_LABEL[t] })).sort((a, b) => a.label.localeCompare(b.label))),
+  ([...new Set(providers.items.map((p) => p.type))].map((t) => ({ value: t, label: PROVIDER_TYPE_LABEL[t] })).sort((a, b) => a.label.localeCompare(b.label))),
 )
 const residencyOptions = computed(() =>
-  withAll('All residencies', [...new Set([...providers.items.map((p) => p.residency), ...models.items.map((m) => m.residency)])].map((r) => ({ value: r, label: RESIDENCY[r].label }))),
+  ([...new Set([...providers.items.map((p) => p.residency), ...models.items.map((m) => m.residency)])].map((r) => ({ value: r, label: RESIDENCY[r].label }))),
 )
-const statusOptions = withAll('All statuses', [
+const statusOptions = ([
   { value: 'enabled', label: 'Enabled' },
   { value: 'disabled', label: 'Disabled' },
   { value: 'drained', label: 'Drained' },
@@ -110,35 +125,32 @@ const providerView = useSortedPage(
   { key: 'name' },
 )
 const providerPage = providerView.page
-const providersFiltering = computed(() => providerSearch.value.trim() !== '' || providerType.value !== ALL || providerResidency.value !== ALL || providerStatus.value !== ALL)
-function clearProviderFilters(): void {
-  providerSearch.value = ''
-  providerType.value = providerResidency.value = providerStatus.value = ALL
-}
+const providersFiltering = computed(() => active.value.length > 0)
+const clearProviderFilters = () => clear(filterRow.value)
 
 // Models: search, filters, sorting
-const modelSearch = ref('')
-const modelProvider = ref(ALL)
-const modelKind = ref(ALL)
-const modelFeature = ref(ALL)
-const modelStatus = ref(ALL)
-const modelPrice = ref(ALL)
+const modelSearch = toRef(filters, 'q')
+const modelProvider = toRef(filters, 'provider')
+const modelKind = toRef(filters, 'kind')
+const modelFeature = toRef(filters, 'capability')
+const modelStatus = toRef(filters, 'status')
+const modelPrice = toRef(filters, 'price')
 
 const modelProviderOptions = computed(() =>
-  withAll('All providers', [...new Map(models.items.map((m) => [m.providerId, m.providerName])).entries()].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label))),
+  ([...new Map(models.items.map((m) => [m.providerId, m.providerName])).entries()].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label))),
 )
-const kindOptions = withAll('All kinds', Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label })))
+const kindOptions = (Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label })))
 const featureOptions = computed(() => {
   const present = new Set(models.items.flatMap((m) => m.features))
   const known = MODEL_FEATURES.filter((f) => present.has(f))
   const other = [...present].filter((f) => !(MODEL_FEATURES as readonly string[]).includes(f)).sort()
-  return withAll('Any capability', [...known, ...other].map((f) => ({ value: f, label: featureLabel(f) })))
+  return ([...known, ...other].map((f) => ({ value: f, label: featureLabel(f) })))
 })
-const modelStatusOptions = withAll('All statuses', [
+const modelStatusOptions = ([
   { value: 'enabled', label: 'Enabled' },
   { value: 'disabled', label: 'Disabled' },
 ])
-const priceOptions = withAll('Any price', [
+const priceOptions = ([
   { value: 'priced', label: 'Has price' },
   { value: 'unpriced', label: 'No price' },
   { value: 'List', label: 'From models.dev' },
@@ -173,13 +185,8 @@ const modelView = useSortedPage(
   { key: 'name' },
 )
 const modelPage = modelView.page
-const modelsFiltering = computed(
-  () => modelSearch.value.trim() !== '' || [modelProvider, modelKind, modelFeature, modelStatus, modelPrice].some((f) => f.value !== ALL),
-)
-function clearModelFilters(): void {
-  modelSearch.value = ''
-  modelProvider.value = modelKind.value = modelFeature.value = modelStatus.value = modelPrice.value = ALL
-}
+const modelsFiltering = computed(() => active.value.length > 0)
+const clearModelFilters = () => clear(filterRow.value)
 
 async function load(): Promise<void> {
   await Promise.all([providers.load(), models.load()])
@@ -215,30 +222,33 @@ onMounted(load)
 
   <AsyncState :loading="providers.loading || models.loading" :error="providers.error ?? models.error" :empty="!providers.loaded && !models.loaded" @retry="load">
     <div class="flex flex-col gap-4">
-      <SegmentedControl v-model="segment" label="Show" :options="segments" />
-
-      <div v-if="segment === 'providers'" class="flex flex-wrap items-center gap-3">
+      <UiTabs id="providers" v-model="segment" :tabs="tabs" label="Providers and models" />
+    </div>
+    <div :id="`providers-panel-${segment}`" role="tabpanel" :aria-labelledby="`providers-tab-${segment}`" class="mt-4 flex flex-col gap-4">
+      <form v-if="segment === 'providers'" ref="filterRow" class="flex flex-wrap items-center gap-2" role="search" aria-label="Filter providers" data-test="filters" @submit.prevent>
         <div class="relative min-w-[240px] max-w-sm flex-1">
           <label for="provider-search" class="sr-only">Search providers</label>
           <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-3" />
           <input id="provider-search" v-model="providerSearch" type="search" autocomplete="off" placeholder="Search by name, type or URL" class="field-input w-full !pl-10" />
         </div>
-        <FilterSelect v-model="providerType" label="Type" :options="providerTypeOptions" />
-        <FilterSelect v-model="providerResidency" label="Residency" :options="residencyOptions" />
-        <FilterSelect v-model="providerStatus" label="Status" :options="statusOptions" />
-      </div>
-      <div v-else class="flex flex-wrap items-center gap-3">
+        <FilterChip v-model="providerType" label="Type" :options="providerTypeOptions" any="All types" />
+        <FilterChip v-model="providerResidency" label="Residency" :options="residencyOptions" any="All residencies" />
+        <FilterChip v-model="providerStatus" label="Status" :options="statusOptions" any="All statuses" />
+        <UiButton v-if="active.length" size="sm" variant="quiet" class="max-md:h-11" data-test="clear-filters" @click="clearProviderFilters">{{ FILTERS.clear }}</UiButton>
+      </form>
+      <form v-else ref="filterRow" class="flex flex-wrap items-center gap-2" role="search" aria-label="Filter models" data-test="filters" @submit.prevent>
         <div class="relative min-w-[240px] max-w-sm flex-1">
           <label for="model-search" class="sr-only">Search models</label>
           <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-3" />
           <input id="model-search" v-model="modelSearch" type="search" autocomplete="off" placeholder="Search by model, upstream name, provider or capability" class="field-input w-full !pl-10" />
         </div>
-        <FilterSelect v-model="modelProvider" label="Provider" :options="modelProviderOptions" />
-        <FilterSelect v-model="modelKind" label="Kind" :options="kindOptions" />
-        <FilterSelect v-model="modelFeature" label="Capability" :options="featureOptions" />
-        <FilterSelect v-model="modelPrice" label="Price" :options="priceOptions" />
-        <FilterSelect v-model="modelStatus" label="Status" :options="modelStatusOptions" />
-      </div>
+        <FilterChip v-model="modelProvider" label="Provider" :options="modelProviderOptions" any="All providers" />
+        <FilterChip v-model="modelKind" label="Kind" :options="kindOptions" any="All kinds" />
+        <FilterChip v-model="modelFeature" label="Capability" :options="featureOptions" any="Any capability" />
+        <FilterChip v-model="modelPrice" label="Price" :options="priceOptions" any="Any price" />
+        <FilterChip v-model="modelStatus" label="Status" :options="modelStatusOptions" any="All statuses" />
+        <UiButton v-if="active.length" size="sm" variant="quiet" class="max-md:h-11" data-test="clear-filters" @click="clearModelFilters">{{ FILTERS.clear }}</UiButton>
+      </form>
 
       <DataTable
         v-if="segment === 'providers'"
