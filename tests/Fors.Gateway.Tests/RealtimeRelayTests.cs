@@ -36,6 +36,26 @@ public sealed class RealtimeRelayTests
         await provider;
     }
 
+    [Fact]
+    public async Task A_dropped_provider_is_why_the_session_ended_when_the_clients_answer_to_the_close_comes_first()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var clientPair = await SocketPair.OpenAsync(ct);
+        // The relay's close of the client returns only after the relay has read the client's answering close: the order that
+        // used to end the session as Closed (recorded as a success) although the provider had dropped.
+        using var client = new AnswerFirstWebSocket(clientPair.Server);
+        using var upstream = new DroppedWebSocket();
+        var session = new ModelDeployment { Name = "p/realtime", UpstreamModel = "gpt-realtime", Kind = ModelKind.Realtime };
+        using var relay = new RealtimeRelay(client, upstream, new RealtimeEventPolicy(session, _ => null, PiiPolicy.Off, onPrem: false),
+            new RealtimeMeter(), 64 * 1024, NullLogger.Instance);
+
+        var closed = ReceiveCloseAsync(clientPair.Client, ct);
+        var reason = await relay.RunAsync(TimeSpan.FromSeconds(30), _ => Task.FromResult<RealtimeStop?>(null), CancellationToken.None, ct);
+
+        (await closed).ShouldBe(WebSocketCloseStatus.EndpointUnavailable);
+        reason.ShouldBe(RealtimeEndReason.ProviderFailed);
+    }
+
     private static async Task AnswerCloseAsync(WebSocket provider, CancellationToken ct)
     {
         var buffer = new byte[4096];
@@ -90,6 +110,44 @@ public sealed class RealtimeRelayTests
             Server.Dispose();
             _client.Dispose();
             _server.Dispose();
+        }
+    }
+
+    /// <summary>A provider connection that has dropped: reading it fails as a lost TCP connection does.</summary>
+    private sealed class DroppedWebSocket : WebSocket
+    {
+        public override WebSocketCloseStatus? CloseStatus => null;
+        public override string? CloseStatusDescription => null;
+        public override WebSocketState State => WebSocketState.Aborted;
+        public override string? SubProtocol => null;
+
+        public override async ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(Memory<byte> buffer, CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely);
+        }
+
+        public override ValueTask SendAsync(ReadOnlyMemory<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
+
+        public override Task CloseOutputAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public override Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public override void Abort()
+        {
+        }
+
+        public override void Dispose()
+        {
         }
     }
 

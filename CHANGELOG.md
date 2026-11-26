@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Fixed: a live session whose provider dropped could be recorded as a success.** When the provider's connection
+  broke, the gateway told the client (`provider_disconnected`) and closed it, but if the client answered that close
+  before the gateway had noted the provider's failure, the session was recorded as *Success* rather than *Provider
+  error* (`stream_interrupted`). The provider's failure now wins, whichever side finished first. Found as a flaky
+  `RealtimeTests` test in CI; `RealtimeRelayTests` forces the order.
 - **Providers & models: tabs and chips in the address** (layout audit step 4, rules 2 and 6): *Providers* and *Models*
   are tabs (`?tab=models`; an older `?show=models` link still opens Models), and each tab's search and filters are
   chips kept in the address (`/providers?tab=models&kind=Chat&q=gpt`) instead of labelled selects. The search and the
