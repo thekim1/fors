@@ -472,9 +472,9 @@ async function submit(): Promise<void> {
             :id="ids.allowedIpRanges"
             v-model="values.addresses"
             label="Allowed client addresses (optional)"
-            placeholder="203.0.113.0/24&#10;2001:db8::10"
+            placeholder="203.0.113.0/24, 2001:db8::10"
             :error="errors.allowedIpRanges"
-            hint="One IP address or CIDR network per line. Leave empty to allow any address. Behind a reverse proxy this only works once a gateway admin has listed the proxy under Settings, Trusted proxies."
+            hint="An IP address or CIDR network, then Enter; paste several at once. Leave empty to allow any address. Behind a reverse proxy this only works once a gateway admin has listed the proxy under Settings, Trusted proxies."
           />
 
         </FieldGroup>

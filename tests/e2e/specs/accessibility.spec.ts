@@ -175,6 +175,31 @@ for (const theme of themes) {
   })
 }
 
+// Settings (Q6 A): grouped sections with a menu, and the proxy list as chips; scanned with chips in each theme.
+test('settings: the section picker moves to its heading, and the proxy chips pass axe', async ({ page }) => {
+  await login(page)
+  for (const theme of themes) {
+    await useTheme(page, theme)
+    await ready(page, '/settings')
+    const field = page.getByLabel('Proxy addresses')
+    await field.fill('10.0.0.5')
+    await field.press('Enter')
+    await field.fill('not-an-address')
+    await field.press('Enter')
+    await expect(page.locator('[data-test="address-chip"]')).toHaveCount(2)
+    await scan(page, `${theme}: /settings with proxy chips`)
+    await page.getByRole('button', { name: 'Remove not-an-address' }).click()
+    await expect(field).toBeFocused()
+    await page.locator('[data-test="save-bar-discard"]').click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Discard' }).click()
+    await expect(page.locator('[data-test="address-chip"]')).toHaveCount(0)
+  }
+  await page.setViewportSize({ width: 390, height: 844 })
+  await ready(page, '/settings')
+  await page.getByLabel('Section', { exact: true }).selectOption({ label: 'This console' })
+  await expect(page.getByRole('heading', { name: 'This console' })).toBeFocused()
+})
+
 // Layout rule 10: on a phone the primary action spans the header beside a ⋯ that holds the secondary actions.
 test('phone headers: the primary action across the width, the secondary ones in a ⋯', async ({ page }) => {
   await login(page)
