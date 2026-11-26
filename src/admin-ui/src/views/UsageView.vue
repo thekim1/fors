@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { REQUEST_OUTCOMES, USAGE_GROUP_BY, type RequestOutcome, type UsageGroupBy, type UsageRequest, type UsageSummaryRow } from '@/api/types'
+import { GATEWAY_ENDPOINTS, REQUEST_OUTCOMES, USAGE_GROUP_BY, type RequestOutcome, type UsageGroupBy, type UsageRequest, type UsageSummaryRow } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { useProvidersStore } from '@/stores/providers'
 import { useUsageStore } from '@/stores/usage'
@@ -10,7 +10,7 @@ import { useTeamsStore } from '@/stores/teams'
 import { useKeysStore } from '@/stores/keys'
 import { useModelOptions } from '@/composables/useModelOptions'
 import { IS_DAY, ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
-import { FILTERS, OUTCOME_LABEL, plural } from '@/utils/labels'
+import { ENDPOINT_LABEL, FILTERS, OUTCOME_LABEL, plural } from '@/utils/labels'
 import { PERIODS, periodRange } from '@/utils/period'
 import { problemMessage } from '@/utils/problem'
 import { formatDate, formatDateTime, formatMs, formatNumber, formatUsdCost } from '@/utils/format'
@@ -60,14 +60,16 @@ const keys = useKeysStore()
 const auth = useAuthStore()
 const providers = useProvidersStore()
 const { options: modelOptions } = useModelOptions()
-// Layout rule 2: the request list's filters are one row of chips kept in the address, under the names other pages link
-// with (requestsLink): `?tab=requests&outcome=errors&period=custom&from=2026-11-24`. The summary's grouping is a view
-// choice, kept in the address too but not a filter.
+// Layout rule 2: one row of chips for both tabs, above them, kept in the address under the names other pages link with
+// (requestsLink): `?tab=requests&outcome=errors&period=custom&from=2026-11-24`. The last 7 days by default. *Endpoint*
+// is the dashboard's only (the request list has no such filter). The summary's grouping is a view choice, kept in the
+// address too but not a filter.
 const OUTCOMES = ['errors', ...REQUEST_OUTCOMES] as const
 const { filters, active, clear } = useQueryFilters(
-  { period: '30d', from: '', to: '', departmentId: '', teamId: '', keyId: '', model: '', provider: '', outcome: '' },
-  { period: ONE_OF(PERIODS), from: IS_DAY, to: IS_DAY, outcome: ONE_OF(OUTCOMES) },
+  { period: '7d', from: '', to: '', departmentId: '', teamId: '', keyId: '', model: '', provider: '', outcome: '', endpoint: '' },
+  { period: ONE_OF(PERIODS), from: IS_DAY, to: IS_DAY, outcome: ONE_OF(OUTCOMES), endpoint: ONE_OF(GATEWAY_ENDPOINTS) },
 )
+const endpointOptions = GATEWAY_ENDPOINTS.map((e) => ({ value: e, label: ENDPOINT_LABEL[e] }))
 const { filters: view } = useQueryFilters({ group: 'department' }, { group: ONE_OF(USAGE_GROUP_BY) })
 const group = computed(() => view.group as UsageGroupBy)
 const filterRow = ref<HTMLElement | null>(null)
@@ -228,6 +230,8 @@ function openRequestsTab(): void {
 watch(() => route.query.tab, (value) => {
   const next: Tab = value === 'requests' ? 'requests' : 'dashboard'
   if (next !== tab.value) tab.value = next
+  // The request list has no endpoint filter: dropped once the address shows that tab.
+  if (next === 'requests' && filters.endpoint) filters.endpoint = ''
 })
 
 watch(tab, (value) => {
@@ -257,25 +261,29 @@ onMounted(() => {
 
   <UiTabs id="usage" v-model="tab" :tabs="tabs" label="Usage views" class="mb-6" />
 
-  <div v-if="tab === 'dashboard'" id="usage-panel-dashboard" role="tabpanel" aria-labelledby="usage-tab-dashboard">
-    <UsageDashboard />
-  </div>
-
-  <div v-else id="usage-panel-requests" role="tabpanel" aria-labelledby="usage-tab-requests">
-
-    <form ref="filterRow" class="mb-6 flex flex-wrap items-center gap-2" role="search" aria-label="Filter requests" data-test="filters" @submit.prevent>
-      <PeriodPicker v-model:period="filters.period" v-model:from="filters.from" v-model:to="filters.to" id-prefix="usage" />
+  <form ref="filterRow" class="mb-6 flex flex-wrap items-center gap-2" role="search" aria-label="Filter usage" data-test="filters" @submit.prevent>
+    <PeriodPicker
+      v-model:period="filters.period" v-model:from="filters.from" v-model:to="filters.to" id-prefix="usage"
+      :presets="['24h', '7d', '30d', '90d', 'month', 'custom']" default-period="7d"
+    />
       <FilterChip v-model="filters.departmentId" label="Department" :options="departmentOptions" any="All departments" />
       <FilterChip v-model="filters.teamId" label="Team" :options="teamOptions" any="All teams" />
       <FilterChip v-model="filters.keyId" label="Key" :options="keyOptions" any="All keys" />
       <FilterChip v-model="filters.model" label="Model" :options="modelChipOptions" any="All models" />
       <FilterChip v-if="auth.isGatewayAdmin || filters.provider" v-model="filters.provider" label="Provider" :options="providerChipOptions" any="All providers" />
       <FilterChip v-model="filters.outcome" label="Outcome" :options="outcomeOptions" any="All requests" />
+      <FilterChip v-if="tab === 'dashboard'" v-model="filters.endpoint" label="Endpoint" :options="endpointOptions" any="All endpoints" />
       <UiButton v-if="active.length" size="sm" variant="quiet" class="max-md:h-11" data-test="clear-filters" @click="clear(filterRow)">{{ FILTERS.clear }}</UiButton>
-      <p class="ml-auto text-small text-fg-2 max-md:basis-full" aria-live="polite" data-test="filter-count">
+      <p v-if="tab === 'requests'" class="ml-auto text-small text-fg-2 max-md:basis-full" aria-live="polite" data-test="filter-count">
         <template v-if="!usage.requestsLoading">{{ plural(usage.requests.total, 'request') }}</template>
       </p>
-    </form>
+  </form>
+
+  <div v-if="tab === 'dashboard'" id="usage-panel-dashboard" role="tabpanel" aria-labelledby="usage-tab-dashboard">
+    <UsageDashboard :filters="filters" />
+  </div>
+
+  <div v-else id="usage-panel-requests" role="tabpanel" aria-labelledby="usage-tab-requests">
     <p v-if="filters.model || filters.provider || filters.outcome" class="-mt-3 mb-6 text-small text-fg-3">Model, provider and outcome only filter the request list, not the summary.</p>
 
     <section aria-labelledby="summary-h" class="mb-8">

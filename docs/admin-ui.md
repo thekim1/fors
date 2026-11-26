@@ -136,9 +136,10 @@ last 24 hours or 7 days (per hour) or 30 days (per day, Swedish time), plus a ra
 
 **Monitor > Usage** opens on a **Dashboard** tab with a quick overview of how the gateway is used and how it performs. The
 earlier summary, request list and request lookup are on the **Requests and costs** tab (`/usage?tab=requests`). The
-dashboard has a time range (24 hours, 7 days, 30 days, 90 days or custom dates; up to two days per hour, otherwise per
-day in Swedish time) and filters for department, team, key, model, provider (gateway-admin), outcome and endpoint, which
-apply at once. Department admins and viewers see only their own departments. Nine cards, each with a bar, line and table
+two tabs share one row of filter chips above them, kept in the address: a period (the last 24 hours, 7 days (the
+default), 30 or 90 days, this month or custom dates; the dashboard shows up to two days per hour, otherwise per day in
+Swedish time) and department, team, key, model, provider (gateway-admin) and outcome; the dashboard also filters by
+endpoint, which the request list does not have. They apply at once. Department admins and viewers see only their own departments. Nine cards, each with a bar, line and table
 view:
 
 | Card | Shows |

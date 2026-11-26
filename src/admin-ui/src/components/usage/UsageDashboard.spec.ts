@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { reactive } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import type { UsageMetrics, UsageMetricsBucket } from '@/api/types'
-import { button } from '@/test/helpers'
 import { useDepartmentsStore } from '@/stores/departments'
 import { useKeysStore } from '@/stores/keys'
 import { useTeamsStore } from '@/stores/teams'
-import UsageDashboard from './UsageDashboard.vue'
+import UsageDashboard, { type UsageFilters } from './UsageDashboard.vue'
 
 const metrics = vi.fn()
 vi.mock('@/api', () => ({
@@ -40,11 +40,16 @@ function data(overrides: Partial<UsageMetrics> = {}): UsageMetrics {
   }
 }
 
-async function mountDashboard() {
+/** The Usage page's filters, which it keeps in the address and hands to the dashboard (one set for both tabs). */
+const filters = (overrides: Partial<UsageFilters> = {}): UsageFilters => reactive({
+  period: '7d', from: '', to: '', departmentId: '', teamId: '', keyId: '', model: '', provider: '', outcome: '', endpoint: '', ...overrides,
+})
+
+async function mountDashboard(f: UsageFilters = filters()) {
   setActivePinia(createPinia())
   // The Usage page loads the organisation for both of its tabs.
   await Promise.all([useDepartmentsStore().load(), useTeamsStore().load(), useKeysStore().load()])
-  const wrapper = mount(UsageDashboard)
+  const wrapper = mount(UsageDashboard, { props: { filters: f } })
   await flushPromises()
   return wrapper
 }
@@ -55,7 +60,8 @@ describe('UsageDashboard', () => {
   it('says it is loading until the first answer, then keeps the cards while a filter reloads them', async () => {
     let answer!: (value: UsageMetrics) => void
     metrics.mockReturnValue(new Promise<UsageMetrics>((resolve) => (answer = resolve)))
-    const wrapper = await mountDashboard()
+    const f = filters()
+    const wrapper = await mountDashboard(f)
     expect(wrapper.find('[role=status]').text()).toContain('Loading')
 
     answer(data())
@@ -65,7 +71,7 @@ describe('UsageDashboard', () => {
 
     let reload!: (value: UsageMetrics) => void
     metrics.mockReturnValue(new Promise<UsageMetrics>((resolve) => (reload = resolve))) // a reload that has not answered yet
-    await button(wrapper, '30 days').trigger('click')
+    f.period = '30d'
     await flushPromises()
     expect(wrapper.find('[role=status]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Cost')
@@ -87,21 +93,25 @@ describe('UsageDashboard', () => {
     expect(wrapper.text()).toContain('No streamed answers in this period.')
   })
 
-  it('reloads at once when a filter or the time range changes, and clears the filters', async () => {
+  it('reloads at once when the page\'s filters or period change: a rolling period ends now, a custom one is whole days', async () => {
     metrics.mockResolvedValue(data())
-    const wrapper = await mountDashboard()
-    const selects = wrapper.findAll('select')
-    await selects[0]!.setValue('d1')
+    const f = filters()
+    await mountDashboard(f)
+    f.departmentId = 'd1'
+    f.endpoint = 'Embeddings'
     await flushPromises()
-    expect(metrics).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: 'd1' }))
+    expect(metrics).toHaveBeenLastCalledWith(expect.objectContaining({ departmentId: 'd1', endpoint: 'Embeddings' }))
 
-    await button(wrapper, '24 hours').trigger('click')
+    f.period = '24h'
     await flushPromises()
-    const query = metrics.mock.lastCall![0] as { from: string; to: string }
+    let query = metrics.mock.lastCall![0] as { from: string; to: string }
     expect(new Date(query.to).getTime() - new Date(query.from).getTime()).toBe(86_400_000)
 
-    await button(wrapper, 'Clear filters').trigger('click')
+    Object.assign(f, { period: 'custom', from: '2026-11-01', to: '2026-11-03', departmentId: '', endpoint: '' })
     await flushPromises()
+    query = metrics.mock.lastCall![0] as { from: string; to: string }
+    expect(new Date(query.from).getDate()).toBe(1)
+    expect(new Date(query.to).getDate()).toBe(3)
     expect(metrics).toHaveBeenLastCalledWith(expect.not.objectContaining({ departmentId: expect.anything() }))
   })
 

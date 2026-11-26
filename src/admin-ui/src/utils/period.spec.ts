@@ -9,6 +9,8 @@ describe('periodRange', () => {
     expect(periodRange('7d', '', '', now)).toEqual({ from: '2026-11-19', to: '2026-11-25' })
     expect(periodRange('30d', '', '', now)).toEqual({ from: '2026-10-27', to: '2026-11-25' })
     expect(periodRange('month', '', '', now)).toEqual({ from: '2026-11-01', to: '2026-11-25' })
+    expect(periodRange('24h', '', '', now)).toEqual({ from: '2026-11-24', to: '2026-11-25' })
+    expect(periodRange('90d', '', '', now)).toEqual({ from: '2026-08-28', to: '2026-11-25' })
   })
 
   it('reads a custom range forwards and fills an empty end', () => {

@@ -7,6 +7,11 @@
   before the gateway had noted the provider's failure, the session was recorded as *Success* rather than *Provider
   error* (`stream_interrupted`). The provider's failure now wins, whichever side finished first. Found as a flaky
   `RealtimeTests` test in CI; `RealtimeRelayTests` forces the order.
+- **Usage: one row of filter chips for both tabs** (layout audit step 5, rule 2): the dashboard's segmented time range,
+  date fields with *Apply* and seven labelled selects are gone; the chips of *Requests and costs* now sit above both
+  tabs and are kept in the address, so the dashboard's view can be linked too and changing tabs keeps the filters. The
+  period offers the last 24 hours, 7 days (the default for both tabs now; the request list used 30), 30 or 90 days, this
+  month and a custom range. *Endpoint* is a dashboard chip only.
 - **Providers & models: tabs and chips in the address** (layout audit step 4, rules 2 and 6): *Providers* and *Models*
   are tabs (`?tab=models`; an older `?show=models` link still opens Models), and each tab's search and filters are
   chips kept in the address (`/providers?tab=models&kind=Chat&q=gpt`) instead of labelled selects. The search and the

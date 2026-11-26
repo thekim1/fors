@@ -59,4 +59,16 @@ describe('UsageView requests and costs', () => {
     expect(router.currentRoute.value.query).toEqual({ tab: 'requests' })
     expect(requests.mock.lastCall![0]).not.toHaveProperty('outcome')
   })
+
+  it('has one filter row for both tabs: the dashboard gets the filters, and the request list drops the endpoint', async () => {
+    const { wrapper, router } = await mountView('/usage?departmentId=00000000-0000-4000-8000-000000000001&endpoint=Embeddings')
+    expect(wrapper.find('[data-test="chip-Endpoint"]').exists()).toBe(true)
+    const dashboard = wrapper.findComponent({ name: 'UsageDashboard' })
+    expect(dashboard.props('filters')).toMatchObject({ period: '7d', endpoint: 'Embeddings' })
+
+    await wrapper.findAll('[role=tab]')[1]!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="chip-Endpoint"]').exists()).toBe(false)
+    expect(router.currentRoute.value.query).toEqual({ tab: 'requests', departmentId: '00000000-0000-4000-8000-000000000001' })
+  })
 })
