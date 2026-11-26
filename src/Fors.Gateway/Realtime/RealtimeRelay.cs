@@ -82,8 +82,17 @@ public sealed partial class RealtimeRelay(
         {
         }
 
+        // A provider that failed is why the session ended, even when the client's answer to the close it was sent ended the
+        // client side first (as Closed).
+        if (reason == RealtimeEndReason.Closed && (Failed(clientPump) || Failed(upstreamPump)))
+        {
+            reason = RealtimeEndReason.ProviderFailed;
+        }
+
         // A stop the gateway decided is why the session ended, even when a pump saw the resulting close first.
         return Volatile.Read(ref _stop)?.Reason ?? reason;
+
+        static bool Failed(Task<RealtimeEndReason> pump) => pump.IsCompletedSuccessfully && pump.Result == RealtimeEndReason.ProviderFailed;
     }
 
     private async Task<RealtimeEndReason> PumpClientAsync(CancellationToken ct)
