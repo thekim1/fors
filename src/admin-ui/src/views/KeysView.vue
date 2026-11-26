@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { CreateKeyResponse, KeyStatus, RotateKeyResponse, VirtualKey } from '@/api/types'
+import { KEY_STATUSES, type CreateKeyResponse, type KeyStatus, type RotateKeyResponse, type VirtualKey } from '@/api/types'
+import { ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
 import { useKeysStore } from '@/stores/keys'
 import { useUiStore } from '@/stores/ui'
-import { INTEGRATION_ROLE, KEY_STATUS, modelsLabel, plural } from '@/utils/labels'
+import { FILTERS, INTEGRATION_ROLE, KEY_STATUS, modelsLabel, plural } from '@/utils/labels'
 import { formatRelative } from '@/utils/format'
 import KeyDetailDrawer from '@/components/keys/KeyDetailDrawer.vue'
 import KeyFormDrawer from '@/components/keys/KeyFormDrawer.vue'
@@ -16,16 +17,16 @@ import KeyStatusBadge from '@/components/ui/KeyStatusBadge.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import ResidencyLabel from '@/components/ui/ResidencyLabel.vue'
 import SecretDialog from '@/components/ui/SecretDialog.vue'
-import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import FilterChip from '@/components/ui/FilterChip.vue'
 import UiButton from '@/components/ui/UiButton.vue'
-
-type StatusFilter = 'all' | KeyStatus
 
 const keys = useKeysStore()
 const ui = useUiStore()
 
-const status = ref<StatusFilter>('all')
-const search = ref('')
+// Layout rule 2: the search and a Status chip, kept in the address (?q=chat&status=Revoked); the counts are in the chip's
+// options (Q2 of the layout audit).
+const { filters, active, clear } = useQueryFilters({ q: '', status: '' }, { status: ONE_OF(KEY_STATUSES) })
+const filterRow = ref<HTMLElement | null>(null)
 const selectedId = ref<string | null>(null)
 const detailOpen = ref(false)
 const formOpen = ref(false)
@@ -48,19 +49,19 @@ const selected = computed(() => keys.items.find((k) => k.id === selectedId.value
 
 const statusOptions = computed(() => {
   const count = (s: KeyStatus) => keys.items.filter((k) => k.status === s).length
-  const options: { value: StatusFilter; label: string; count: number }[] = [{ value: 'all', label: 'All', count: keys.items.length }]
-  for (const s of ['Active', 'InGracePeriod', 'Expired', 'Revoked', 'Disabled'] as const) {
+  const options: { value: string; label: string }[] = []
+  for (const s of KEY_STATUSES) {
     const n = count(s)
     // Disabled is rare, so it only appears when a key has that status.
-    if (s !== 'Disabled' || n > 0 || status.value === s) options.push({ value: s, label: KEY_STATUS[s].label, count: n })
+    if (s !== 'Disabled' || n > 0 || filters.status === s) options.push({ value: s, label: `${KEY_STATUS[s].label} (${n})` })
   }
   return options
 })
 
 const filtered = computed(() => {
-  const query = search.value.trim().toLowerCase()
+  const query = filters.q.trim().toLowerCase()
   return keys.items.filter((k) => {
-    if (status.value !== 'all' && k.status !== status.value) return false
+    if (filters.status && k.status !== filters.status) return false
     if (!query) return true
     return [k.name, k.prefix, k.teamName, k.departmentName, k.integrationName ?? ''].some((v) => v.toLowerCase().includes(query))
   })
@@ -71,11 +72,10 @@ const summary = computed(() => {
   return `${plural(keys.items.length, 'key')}, ${active} active.`
 })
 
-const filtering = computed(() => status.value !== 'all' || search.value.trim() !== '')
+const filtering = computed(() => active.value.length > 0)
 
 function clearFilters(): void {
-  status.value = 'all'
-  search.value = ''
+  clear(filterRow.value)
 }
 
 function openDetail(key: VirtualKey): void {
@@ -147,14 +147,15 @@ onBeforeUnmount(() => {
     <UiButton variant="primary" icon="add" @click="openCreate">New key</UiButton>
   </PageHeader>
 
-  <div class="mb-4 flex flex-wrap items-center gap-3">
-    <div class="relative min-w-[240px] flex-1 max-w-sm">
+  <form ref="filterRow" class="mb-4 flex flex-wrap items-center gap-2" role="search" aria-label="Filter keys" data-test="filters" @submit.prevent>
+    <div class="relative min-w-[240px] max-w-sm flex-1">
       <label for="key-search" class="sr-only">Search keys</label>
       <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-3" />
-      <input id="key-search" v-model="search" type="search" autocomplete="off" placeholder="Search by name, prefix, team or integration" class="field-input w-full !pl-10" />
+      <input id="key-search" v-model="filters.q" type="search" autocomplete="off" placeholder="Search by name, prefix, team or integration" class="field-input w-full !pl-10" />
     </div>
-    <SegmentedControl v-model="status" label="Filter by status" :options="statusOptions" />
-  </div>
+    <FilterChip v-model="filters.status" label="Status" :options="statusOptions" :any="`All (${keys.items.length})`" />
+    <UiButton v-if="active.length" size="sm" variant="quiet" class="max-md:h-11" data-test="clear-filters" @click="clearFilters">{{ FILTERS.clear }}</UiButton>
+  </form>
 
   <AsyncState :loading="keys.loading" :error="keys.error" :empty="keys.items.length === 0" empty-text="No keys yet. Create one to give an application access." @retry="keys.load()">
     <DataTable

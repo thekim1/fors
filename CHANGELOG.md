@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Keys, Budgets & alerts and Provider stability filter with chips kept in the address** (layout audit step 3, rule 2):
+  Keys' search and a *Status* chip (`/keys?status=Revoked&q=chat`), Budgets' *Owner* chip (`?scope=Team`) and Provider
+  stability's period (`?period=7d`) replace their segmented controls; the counts are in the chips' choices
+  ("Revoked (2)"). `PeriodPicker` takes a page's own periods (`presets`, `defaultPeriod`; *Last 24 hours* and *Last 90
+  days* are new labels), as Q3 of the audit recommended. The audit log's *Who* filter needs an admin API change and
+  follows on its own.
 - **Rare and destructive actions in drawers and rows are on a ⋯ menu** (layout audit step 2, rule 1): *Delete provider…*,
   *Delete model…* and *Delete budget…* in their drawers, *Revoke…* in a key's drawer, and *Open circuit…* / *Close
   circuit…* on each provider row of Health & operations, each behind its confirmation. `MenuButton` now opens inside the

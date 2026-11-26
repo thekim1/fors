@@ -36,10 +36,12 @@ saving does. *Discard* asks once. Leaving the page, or closing a drawer by ×, E
 first. **Rare and destructive actions** (*Delete…*, *Revoke…*, *Change owners*) are on a **⋯** menu beside the page's
 or the row's buttons, *Delete* last and red, each behind its confirmation.
 
-**Filters** on *Usage › Requests and costs* and *PII incidents* are one row of chips: a period (*Last 7 days*, *Last 30
-days*, *This month*, *Custom…*) and one chip per filter, coloured with an × of its own when set, and *Clear filters*
-while any is. They apply as they change, and the address keeps them (`/pii-incidents?period=7d&category=Email`), so a
-filtered view can be bookmarked or sent, and survives a reload.
+**Filters** on *Usage › Requests and costs*, *PII incidents*, *Keys*, *Budgets & alerts* and *Provider stability* are
+one row of chips: a period (*Last 7 days*, *Last 30 days*, *This month*, *Custom…*; *Last 24 hours*, *7* or *30 days* on
+Provider stability) and one chip per filter, coloured with an × of its own when set, and *Clear filters* while any is.
+A chip that picks from a list shows each choice's count (*Revoked (2)*). They apply as they change, and the address keeps
+them with the search (`/pii-incidents?period=7d&category=Email`, `/keys?status=Revoked&q=chat`), so a filtered view can be
+bookmarked or sent, and survives a reload.
 
 **On a phone** the bar at the bottom has Overview, Alerts, Keys and Health, plus **Menu**. Menu opens every page (same groups
 as the side menu), search, your session and the same user card; there the user menu opens as a sheet from the bottom, with

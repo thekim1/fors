@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api'
+import { ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
 import type { ProviderRank, ProviderStability } from '@/api/types'
 import { formatMs, formatNumber, formatRatio, formatShortDate, formatTime, TIME_ZONE } from '@/utils/format'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
-import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import PeriodPicker from '@/components/ui/PeriodPicker.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import ProviderLineChart, { type LineSeries } from '@/components/ops/ProviderLineChart.vue'
@@ -18,14 +19,12 @@ const DAY_MS = 86_400_000
 /** The categorical palette has eight validated hues; more providers than that are listed in the table only. */
 const MAX_SERIES = 8
 
-const periods: { value: Period; label: string }[] = [
-  { value: '24h', label: '24 hours' },
-  { value: '7d', label: '7 days' },
-  { value: '30d', label: '30 days' },
-]
+const PERIODS: readonly Period[] = ['24h', '7d', '30d']
 const PERIOD_TEXT: Record<Period, string> = { '24h': 'last 24 hours, per hour', '7d': 'last 7 days, per hour', '30d': 'last 30 days, per day' }
 
-const period = ref<Period>('24h')
+// Layout rule 2: the period is a chip kept in the address (?period=7d), the last 24 hours by default.
+const { filters } = useQueryFilters({ period: '24h' }, { period: ONE_OF(PERIODS) })
+const period = computed(() => filters.period as Period)
 const data = ref<ProviderStability | null>(null)
 const loading = ref(false)
 const error = ref<unknown>(null)
@@ -114,7 +113,9 @@ const rankLabel = (p: ProviderRank) => (p.exists ? p.name : `${p.name} (deleted)
   </PageHeader>
 
   <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
-    <SegmentedControl v-model="period" :options="periods" label="Period" />
+    <form class="flex flex-wrap items-center gap-2" role="search" aria-label="Filter provider statistics" @submit.prevent>
+      <PeriodPicker v-model:period="filters.period" id-prefix="stability" :presets="PERIODS" default-period="24h" />
+    </form>
   </div>
 
   <AsyncState :loading="loading" :error="error" :empty="!data" empty-text="No statistics yet." @retry="load">

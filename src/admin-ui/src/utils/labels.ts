@@ -440,7 +440,9 @@ export const UNSAVED = {
 /** Filter chips and the period picker (layout rule 2). */
 export const FILTERS = {
   period: 'Period',
-  periods: { '7d': 'Last 7 days', '30d': 'Last 30 days', month: 'This month', custom: 'Custom…' } as Record<string, string>,
+  periods: {
+    '24h': 'Last 24 hours', '7d': 'Last 7 days', '30d': 'Last 30 days', '90d': 'Last 90 days', month: 'This month', custom: 'Custom…',
+  } as Record<string, string>,
   from: 'From',
   to: 'To',
   remove: (filter: string) => `Remove the ${filter.toLowerCase()} filter`,
