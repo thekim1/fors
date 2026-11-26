@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { OpsProviderHealth } from '@/api/types'
-import { PROVIDER_STATUS } from '@/utils/labels'
+import { MENU, PROVIDER_STATUS } from '@/utils/labels'
 import { formatMs, formatNumber, formatRatio } from '@/utils/format'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
-import UiButton from '@/components/ui/UiButton.vue'
+import MenuButton from '@/components/ui/MenuButton.vue'
 
 defineProps<{ providers: OpsProviderHealth[] }>()
 defineEmits<{ (e: 'toggle', provider: OpsProviderHealth): void }>()
@@ -40,9 +40,13 @@ const columns: Column[] = [
       <span v-else title="No streamed answers in 24 h">— <span class="sr-only">No streamed answers in 24 h</span></span>
     </template>
     <template #cell-actions="{ row }">
-      <UiButton size="sm" :variant="row.circuitState === 'Open' ? 'secondary' : 'danger'" @click="$emit('toggle', row)">
-        {{ row.circuitState === 'Open' ? 'Close circuit' : 'Open circuit' }}<span class="sr-only"> for {{ row.name }}</span>
-      </UiButton>
+      <MenuButton
+        size="sm" :label="MENU.more(row.name)"
+        :items="[row.circuitState === 'Open'
+          ? { key: 'close', label: 'Close circuit…', icon: 'play_arrow' }
+          : { key: 'open', label: 'Open circuit…', icon: 'block', danger: true }]"
+        @select="$emit('toggle', row)"
+      />
     </template>
   </DataTable>
   <p class="mt-2 text-small text-fg-3">

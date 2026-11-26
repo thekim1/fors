@@ -35,7 +35,9 @@ function close(): void {
         <AppIcon name="close" />
       </button>
     </header>
-    <div class="min-h-0 flex-1 overflow-auto px-6 py-5"><slot /></div>
+    <!-- Focusable, so a keyboard can scroll a long drawer with nothing focusable in it (a key's details; WCAG 2.1.1, axe's
+         scrollable-region-focusable). It comes after the header, so the first control a drawer focuses is unchanged. -->
+    <div class="min-h-0 flex-1 overflow-auto px-6 py-5 outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]" tabindex="0"><slot /></div>
     <footer v-if="$slots.footer" class="flex flex-wrap items-center gap-2 border-t border-border p-4 px-6 pb-[max(16px,env(safe-area-inset-bottom))]"><slot name="footer" :close="close" /></footer>
   </ModalDialog>
 </template>

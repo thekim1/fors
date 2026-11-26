@@ -7,12 +7,13 @@ import { useFormErrors } from '@/composables/useFormErrors'
 import { useModelsStore } from '@/stores/models'
 import { useProvidersStore } from '@/stores/providers'
 import { useUiStore } from '@/stores/ui'
-import { AUTH_MODE_LABEL, CAPABILITY_LABEL, PROVIDER_TYPE_LABEL, RESIDENCY, TYPE_CAPABILITIES, plural } from '@/utils/labels'
+import { AUTH_MODE_LABEL, CAPABILITY_LABEL, MENU, PROVIDER_TYPE_LABEL, RESIDENCY, TYPE_CAPABILITIES, plural } from '@/utils/labels'
 import { problemMessage } from '@/utils/problem'
 import CheckField from '../ui/CheckField.vue'
 import ConfirmDialog from '../ui/ConfirmDialog.vue'
 import FieldGroup from '../ui/FieldGroup.vue'
 import InlineError from '../ui/InlineError.vue'
+import MenuButton from '../ui/MenuButton.vue'
 import SelectField from '../ui/SelectField.vue'
 import TextField from '../ui/TextField.vue'
 import ToggleChip from '../ui/ToggleChip.vue'
@@ -311,9 +312,11 @@ async function remove(): Promise<void> {
     <template #footer="{ close }">
       <UiButton variant="primary" type="submit" form="provider-form" :loading="busy">{{ provider ? 'Save changes' : 'Create provider' }}</UiButton>
       <UiButton @click="close">Cancel</UiButton>
-      <template v-if="provider">
-        <UiButton class="ml-auto" variant="danger" @click="confirmDelete = true">Delete</UiButton>
-      </template>
+      <!-- Layout rule 1: deleting is on the ⋯ menu, last and red, behind its confirmation. -->
+      <MenuButton
+        v-if="provider" class="ml-auto" :label="MENU.more(provider.name)"
+        :items="[{ key: 'delete', label: 'Delete provider…', icon: 'delete', danger: true }]" @select="confirmDelete = true"
+      />
     </template>
 
     <DiscoverModelsDialog v-model:open="discoverOpen" :provider="provider" />

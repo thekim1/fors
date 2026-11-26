@@ -84,18 +84,42 @@ function menuItems(): HTMLElement[] {
   return [...(menu.value?.querySelectorAll<HTMLElement>('[role=menuitem], [role=menuitemradio]') ?? [])]
 }
 
+/**
+ * Where the open menu goes: the modal <dialog> the button is in (a drawer, say), since a modal dialog is in the top layer
+ * and makes the rest of the page inert, so a menu in the body would sit behind it and could not be used; the body
+ * otherwise.
+ */
+const host = ref<HTMLElement | 'body'>('body')
+
+/**
+ * The box the menu's fixed coordinates are measured from: the host when its styles make it the containing block of
+ * fixed descendants (a drawer's glass backdrop filter), the window otherwise.
+ */
+function frame(): { left: number; top: number; width: number; height: number } {
+  const el = host.value
+  if (el !== 'body') {
+    const style = getComputedStyle(el)
+    if ([style.backdropFilter, style.filter, style.transform].some((v) => v && v !== 'none')) {
+      const r = el.getBoundingClientRect()
+      return { left: r.left, top: r.top, width: r.width, height: r.height }
+    }
+  }
+  return { left: 0, top: 0, width: document.documentElement.clientWidth, height: window.innerHeight }
+}
+
 /** Below the button, lined up with its `align` edge; above it when the menu would run past the bottom of the window. */
 function place(): void {
   const b = button.value?.getBoundingClientRect()
   if (!b) return
+  const f = frame()
   const height = menu.value?.offsetHeight ?? 0
   const gap = 4
   const below = b.bottom + gap + height <= window.innerHeight || b.top - gap - height < 0
   position.value = {
     ...(props.align === 'start'
-      ? { left: `${Math.max(0, b.left)}px` }
-      : { right: `${Math.max(0, document.documentElement.clientWidth - b.right)}px` }),
-    ...(below ? { top: `${b.bottom + gap}px` } : { bottom: `${window.innerHeight - b.top + gap}px` }),
+      ? { left: `${Math.max(0, b.left - f.left)}px` }
+      : { right: `${Math.max(0, f.left + f.width - b.right)}px` }),
+    ...(below ? { top: `${b.bottom - f.top + gap}px` } : { bottom: `${f.top + f.height - b.top + gap}px` }),
   }
 }
 
@@ -160,6 +184,7 @@ function onViewportChange(e: Event): void {
 }
 
 onMounted(() => {
+  host.value = button.value?.closest('dialog') ?? 'body'
   document.addEventListener('click', onDocumentClick, true)
   window.addEventListener('resize', onViewportChange)
   window.addEventListener('scroll', onViewportChange, true)
@@ -196,7 +221,7 @@ const itemClass = (item: MenuItem) => (item.danger ? 'text-danger' : 'text-fg')
     >
       <slot><AppIcon name="more_horiz" :size="20" /></slot>
     </button>
-    <Teleport to="body">
+    <Teleport :to="host">
       <ul
         v-if="open && !phone"
         :id="menuId"

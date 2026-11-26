@@ -8,7 +8,7 @@ import { useKeysStore } from '@/stores/keys'
 import { useTeamsStore } from '@/stores/teams'
 import { useUiStore } from '@/stores/ui'
 import { useFormErrors } from '@/composables/useFormErrors'
-import { PERIOD_LABEL, RESIDENCY, SCOPE_LABEL } from '@/utils/labels'
+import { MENU, PERIOD_LABEL, RESIDENCY, SCOPE_LABEL } from '@/utils/labels'
 import { alertSpentOf, budgetKind, budgetSpentOf, isTokenQuota } from '@/utils/budgets'
 import { problemMessage } from '@/utils/problem'
 import { formatDate, formatPercent, quietZero } from '@/utils/format'
@@ -19,6 +19,7 @@ import CheckField from '@/components/ui/CheckField.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import InlineError from '@/components/ui/InlineError.vue'
+import MenuButton from '@/components/ui/MenuButton.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import SelectField from '@/components/ui/SelectField.vue'
@@ -310,7 +311,10 @@ async function remove(): Promise<void> {
     </form>
     <template #footer>
       <UiButton type="submit" form="budget-form" variant="primary" :loading="saving">{{ editing ? 'Save budget' : 'Create budget' }}</UiButton>
-      <UiButton v-if="editing" variant="danger" class="ml-auto" @click="deleteOpen = true">Delete</UiButton>
+      <MenuButton
+        v-if="editing" class="ml-auto" :label="MENU.more(editing.scopeName)"
+        :items="[{ key: 'delete', label: 'Delete budget…', icon: 'delete', danger: true }]" @select="deleteOpen = true"
+      />
     </template>
   </UiDrawer>
 

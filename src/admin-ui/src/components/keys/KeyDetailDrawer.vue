@@ -4,13 +4,14 @@ import { api } from '@/api'
 import type { VirtualKey } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
-import { ATTACHMENT_HINT, ATTACHMENT_LABEL, ATTACHMENT_LIMIT_NOTE, CONTENT_GUARD_HINT, CONTENT_GUARD_LABEL, INTEGRATION_ROLE, PII_HINT, PII_LABEL, PROVIDER_STORAGE_HINT, PROVIDER_TOOLS_HINT, REQUIRE_MAX_RESIDENCY_HINT, integrationScopeLabel, modelsLabel } from '@/utils/labels'
+import { ATTACHMENT_HINT, ATTACHMENT_LABEL, ATTACHMENT_LIMIT_NOTE, CONTENT_GUARD_HINT, CONTENT_GUARD_LABEL, INTEGRATION_ROLE, PII_HINT, PII_LABEL, PROVIDER_STORAGE_HINT, PROVIDER_TOOLS_HINT, REQUIRE_MAX_RESIDENCY_HINT, MENU, integrationScopeLabel, modelsLabel } from '@/utils/labels'
 import { formatDateTime, formatNumber, formatRelative } from '@/utils/format'
 import KeyBudgets from '@/components/keys/KeyBudgets.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import DetailRow from '@/components/ui/DetailRow.vue'
 import DetailSection from '@/components/ui/DetailSection.vue'
 import KeyStatusBadge from '@/components/ui/KeyStatusBadge.vue'
+import MenuButton from '@/components/ui/MenuButton.vue'
 import ResidencyLabel from '@/components/ui/ResidencyLabel.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
@@ -177,7 +178,10 @@ const reason = computed(() => {
     <template #footer>
       <UiButton icon="autorenew" :disabled="inactive || assigned" @click="emit('rotate')">Rotate</UiButton>
       <UiButton icon="edit" :disabled="keyData?.status === 'Revoked'" @click="emit('edit')">Edit</UiButton>
-      <UiButton class="ml-auto" variant="danger" icon="block" :disabled="inactive" @click="emit('revoke')">Revoke</UiButton>
+      <MenuButton
+        v-if="keyData" class="ml-auto" :label="MENU.more(keyData.name)"
+        :items="[{ key: 'revoke', label: 'Revoke…', icon: 'block', danger: true, disabled: inactive }]" @select="emit('revoke')"
+      />
       <p v-if="reason" class="basis-full text-small text-fg-3">{{ reason }}</p>
     </template>
   </UiDrawer>
