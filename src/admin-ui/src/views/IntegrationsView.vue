@@ -88,8 +88,11 @@ onMounted(() => {
 
 <template>
   <PageHeader title="Integrations" :description="summary">
-    <UiButton icon="upload" @click="importOpen = true">Add from manifest</UiButton>
+    <UiButton icon="upload" class="max-md:hidden" @click="importOpen = true">Add from manifest</UiButton>
     <UiButton variant="primary" icon="add" @click="openCreate">New integration</UiButton>
+    <span class="flex-none md:hidden">
+      <MenuButton label="More actions" :items="[{ key: 'import', label: 'Add from manifest', icon: 'upload', phoneOnly: true }]" @select="importOpen = true" />
+    </span>
   </PageHeader>
 
   <p class="mb-4 flex items-start gap-2 text-small text-fg-2">

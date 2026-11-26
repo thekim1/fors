@@ -12,6 +12,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
+import MenuButton from '@/components/ui/MenuButton.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { useRoutingRulesStore } from '@/stores/routingRules'
 import { useUiStore } from '@/stores/ui'
@@ -162,8 +163,11 @@ onMounted(async () => {
 <template>
   <PageHeader title="Routing rules">
     <template #description>A rule sends matching requests to a different model. The first match wins, most specific scope first.</template>
-    <UiButton icon="play_arrow" @click="testing = true">Test a request</UiButton>
+    <UiButton icon="play_arrow" class="max-md:hidden" @click="testing = true">Test a request</UiButton>
     <UiButton variant="primary" icon="add" @click="create">New rule</UiButton>
+    <span class="flex-none md:hidden">
+      <MenuButton label="More actions" :items="[{ key: 'test', label: 'Test a request', icon: 'play_arrow', phoneOnly: true }]" @select="testing = true" />
+    </span>
   </PageHeader>
 
   <p class="sr-only" role="status">{{ live }}</p>

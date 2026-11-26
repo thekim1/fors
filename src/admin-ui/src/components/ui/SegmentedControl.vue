@@ -33,7 +33,7 @@ function onKey(event: KeyboardEvent, index: number): void {
 </script>
 
 <template>
-  <div :role="mode === 'radio' ? 'radiogroup' : 'group'" :aria-label="label" class="flex gap-0.5 rounded-control bg-sunken p-[3px]" :class="full ? 'w-full' : 'w-fit max-w-full flex-wrap'">
+  <div :role="mode === 'radio' ? 'radiogroup' : 'group'" :aria-label="label" class="flex gap-0.5 rounded-control bg-sunken p-[3px]" :class="full ? 'w-full' : 'w-fit max-w-full flex-wrap max-md:flex-nowrap max-md:overflow-x-auto'">
     <button
       v-for="(option, index) in options"
       :key="String(option.value)"
