@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
         <span class="block">{{ formatDate(row.createdAt) }}</span>
         <span class="block text-caption text-fg-3">{{ row.expiresAt ? `Expires ${formatDate(row.expiresAt)}` : 'No expiry' }}</span>
       </template>
-      <template #cell-lastUsed="{ row }"><span class="text-fg-2">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : 'Never used' }}</span></template>
+      <template #cell-lastUsed="{ row }"><span :class="row.lastUsedAt ? 'text-fg-2' : 'text-fg-3'">{{ row.lastUsedAt ? formatRelative(row.lastUsedAt) : 'Never used' }}</span></template>
       <template #cell-actions="{ row }">
         <span class="flex flex-wrap justify-end gap-2">
           <UiButton v-if="row.status !== 'Revoked'" size="sm" icon="edit" @click="openEdit(row)">Edit<span class="sr-only"> {{ row.name }}</span></UiButton>

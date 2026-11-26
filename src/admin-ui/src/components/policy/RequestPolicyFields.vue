@@ -15,8 +15,8 @@ function set(key: keyof PolicyDraft, value: string): void {
 
 <template>
   <FieldGroup legend="Request policy" :hint="hint">
-    <TextField
-      :id="`${idPrefix}-max-output`"
+    <TextField :id="`${idPrefix}-max-output`"
+      short
       :model-value="draft.maxOutputTokens"
       label="Max output tokens"
       inputmode="numeric"

@@ -11,7 +11,7 @@ import { useFormErrors } from '@/composables/useFormErrors'
 import { PERIOD_LABEL, RESIDENCY, SCOPE_LABEL } from '@/utils/labels'
 import { alertSpentOf, budgetKind, budgetSpentOf, isTokenQuota } from '@/utils/budgets'
 import { problemMessage } from '@/utils/problem'
-import { formatDate, formatPercent } from '@/utils/format'
+import { formatDate, formatPercent, quietZero } from '@/utils/format'
 import { parseDecimal } from '@/utils/validation'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
@@ -268,10 +268,10 @@ async function remove(): Promise<void> {
         <template #cell-usage="{ row }">
           <span class="flex items-center gap-2">
             <UiMeter :value="row.percentUsed" :label="`${row.scopeName} budget used`" :ticks="row.alertThresholds" class="flex-1" />
-            <span class="tabular w-12 text-right text-small font-medium">{{ formatPercent(row.percentUsed) }}</span>
+            <span class="tabular w-12 text-right text-small font-medium" :class="quietZero(row.percentUsed)">{{ formatPercent(row.percentUsed) }}</span>
           </span>
         </template>
-        <template #cell-amount="{ row }">{{ budgetSpentOf(row).spent }} <span class="text-fg-3">/ {{ budgetSpentOf(row).limit }}</span></template>
+        <template #cell-amount="{ row }"><span :class="quietZero(row.percentUsed)">{{ budgetSpentOf(row).spent }}</span> <span class="text-fg-3">/ {{ budgetSpentOf(row).limit }}</span></template>
         <template #cell-resets="{ row }">{{ formatDate(row.periodEnd) }}</template>
       </DataTable>
     </AsyncState>
@@ -288,8 +288,8 @@ async function remove(): Promise<void> {
       <InlineError v-if="optionsError" :message="problemMessage(optionsError)" />
       <SelectField v-model="form.scopeId" :label="ownerLabel" :options="ownerOptions" placeholder="Choose…" :error="errors.scopeId" />
       <SegmentedControl v-model="form.unit" :options="unitOptions" label="Counts" mode="radio" />
-      <TextField
-        v-model="form.limit"
+      <TextField v-model="form.limit"
+        short
         :label="form.unit === 'Tokens' ? 'Limit (tokens)' : 'Limit (USD)'"
         :inputmode="form.unit === 'Tokens' ? 'numeric' : 'decimal'"
         :error="errors.limitUsd"
@@ -305,7 +305,7 @@ async function remove(): Promise<void> {
         hint="For example On-prem models only: requests served elsewhere do not use the quota."
       />
       <SelectField v-model="form.period" label="Period" :options="periodOptions" />
-      <TextField v-model="form.thresholds" label="Alert levels (%)" :error="errors.alertThresholds" hint="An alert opens when spend passes each level, for example 50, 80, 100." />
+      <TextField v-model="form.thresholds" short label="Alert levels (%)" :error="errors.alertThresholds" hint="An alert opens when spend passes each level, for example 50, 80, 100." />
       <CheckField v-model="form.isActive" label="Active" description="Inactive budgets are kept but not enforced." />
     </form>
     <template #footer>

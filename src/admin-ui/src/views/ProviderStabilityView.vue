@@ -115,7 +115,6 @@ const rankLabel = (p: ProviderRank) => (p.exists ? p.name : `${p.name} (deleted)
 
   <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
     <SegmentedControl v-model="period" :options="periods" label="Period" />
-    <router-link :to="{ name: 'ops' }" class="text-small font-medium text-accent-ink underline">Back to operations</router-link>
   </div>
 
   <AsyncState :loading="loading" :error="error" :empty="!data" empty-text="No statistics yet." @retry="load">

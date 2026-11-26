@@ -276,7 +276,7 @@ async function remove(): Promise<void> {
           />
         </div>
       </FieldGroup>
-      <TextField id="prov-timeout" v-model="timeoutSeconds" label="Timeout (seconds)" type="number" min="1" max="900" inputmode="numeric" :error="errors.timeoutSeconds" />
+      <TextField id="prov-timeout" v-model="timeoutSeconds" short label="Timeout (seconds)" type="number" min="1" max="900" inputmode="numeric" :error="errors.timeoutSeconds" />
       <CheckField v-model="isEnabled" label="Enabled" description="Turn off to stop routing to this provider." />
       <CheckField
         v-model="autoUpdatePrices"

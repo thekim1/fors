@@ -158,10 +158,10 @@ function go(name: 'keys' | 'budgets'): void {
         hint="Optional. Team admins with this code in their teamCodes claim manage this team's keys themselves. Exact match, unique across teams."
         :error="errors.code"
       />
-      <TextField
-        v-if="!team"
+      <TextField v-if="!team"
         id="team-budget"
         v-model="budget"
+        short
         label="Monthly budget (USD)"
         inputmode="decimal"
         hint="Optional. You get alerts at 50, 80 and 100 percent. You can change it later under Budgets."

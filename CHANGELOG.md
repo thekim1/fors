@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Colour only for what needs attention, and fields as wide as their answer** (layout audit step 1; rules 3, 5, 8 and
+  9 in [docs/admin-ui.md](docs/admin-ui.md#layout-rules)):
+  - The normal state is plain text, not a green badge: *Active* keys, teams and integrations, *Enabled* providers and
+    models, *Healthy* components (without the "OK" under each). *Inactive*, *Disabled*, *Revoked* and the other states
+    keep their badges.
+  - Zeros and "never" are grey: *Never used*, a team's 0 keys, no failed usage writes, a budget with nothing spent.
+  - Number fields are short in every drawer and dialog: rate limits, the provider timeout, the team budget, the output
+    limit, context window and prices, the budget limit and alert levels.
+  - Every Settings card is 680 px wide; *Provider stability* drops *Back to operations*, which its breadcrumb says.
 - **The accessibility spec scans every page** (thekim1/fors#130 part D, as Källa's spec does): Integrations, Data API
   access, Provider stability and *Providers & models › Models* were not in its list. Every page is scanned with axe in the
   three themes at 1 280 and 390 px and checked for reflow at 320 px and 200 % text; the scans fail on a

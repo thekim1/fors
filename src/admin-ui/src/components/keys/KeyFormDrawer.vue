@@ -481,11 +481,11 @@ async function submit(): Promise<void> {
 
         <FieldGroup legend="Limits" hint="Leave a field empty for no limit.">
           <div class="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-            <TextField :id="ids.requestsPerMinute" v-model="values.requestsPerMinute" label="Requests per minute" inputmode="numeric" :error="errors.requestsPerMinute" />
-            <TextField :id="ids.tokensPerMinute" v-model="values.tokensPerMinute" label="Tokens per minute" inputmode="numeric" :error="errors.tokensPerMinute" />
-            <TextField
-              :id="ids.maxConcurrentRequests"
+            <TextField :id="ids.requestsPerMinute" v-model="values.requestsPerMinute" short label="Requests per minute" inputmode="numeric" :error="errors.requestsPerMinute" />
+            <TextField :id="ids.tokensPerMinute" v-model="values.tokensPerMinute" short label="Tokens per minute" inputmode="numeric" :error="errors.tokensPerMinute" />
+            <TextField :id="ids.maxConcurrentRequests"
               v-model="values.maxConcurrentRequests"
+              short
               label="Requests at once"
               inputmode="numeric"
               hint="Requests in progress at the same time, across all gateway instances. Protects shared on-prem servers from one busy key."

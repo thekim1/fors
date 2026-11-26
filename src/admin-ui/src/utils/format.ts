@@ -47,6 +47,14 @@ export function formatTokensPerSecond(value: number | null | undefined): string 
   return `${nbsp(decimalFormatter.format(value))}${NBSP}tok/s`
 }
 
+/**
+ * Layout rule 8 (docs/admin-ui.md): a zero or a missing count is grey text, so colour is left for what needs attention.
+ * Bind it as `:class` beside the number it greys. The same as Källa's.
+ */
+export function quietZero(value: number | null | undefined): string | undefined {
+  return isMissing(value) || value === 0 ? 'text-fg-3' : undefined
+}
+
 export function formatNumber(value: number | null | undefined): string {
   if (isMissing(value)) return DASH
   return nbsp(numberFormatter.format(value))
