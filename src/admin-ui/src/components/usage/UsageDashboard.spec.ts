@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import type { UsageMetrics, UsageMetricsBucket } from '@/api/types'
 import { useDepartmentsStore } from '@/stores/departments'
@@ -49,7 +49,7 @@ async function mountDashboard(f: UsageFilters = filters()) {
   setActivePinia(createPinia())
   // The Usage page loads the organisation for both of its tabs.
   await Promise.all([useDepartmentsStore().load(), useTeamsStore().load(), useKeysStore().load()])
-  const wrapper = mount(UsageDashboard, { props: { filters: f } })
+  const wrapper = mount(UsageDashboard, { props: { filters: f }, global: { stubs: { RouterLink: RouterLinkStub } } })
   await flushPromises()
   return wrapper
 }

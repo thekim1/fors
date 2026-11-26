@@ -8,15 +8,15 @@ import { useTeamsStore } from '@/stores/teams'
 import { useKeysStore } from '@/stores/keys'
 import { IS_DAY, IS_ID, ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
 import { FILTERS, OUTCOME_LABEL, PII_ACTION_LABEL, PII_CATEGORY_LABEL } from '@/utils/labels'
-import { formatDateTime, formatNumber } from '@/utils/format'
+import { formatDateTime, formatNumber, quietZero } from '@/utils/format'
 import { PERIODS, periodRange } from '@/utils/period'
 import AsyncState from '@/components/ui/AsyncState.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
 import FilterChip from '@/components/ui/FilterChip.vue'
-import MetricTile from '@/components/ui/MetricTile.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import Pagination from '@/components/ui/Pagination.vue'
 import PeriodPicker from '@/components/ui/PeriodPicker.vue'
+import SummaryTile from '@/components/ui/SummaryTile.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 
@@ -68,6 +68,12 @@ const categoryTiles = computed(() =>
   }),
 )
 const actionTiles = computed(() => ACTIONS.map((a) => ({ action: a, requests: report.value?.actions.find((x) => x.action === a)?.requests ?? 0 })))
+const actionRequests = (action: PiiAction) => actionTiles.value.find((t) => t.action === action)?.requests ?? 0
+// Layout rules 8 and 9: four tiles answer "is personal data getting through?"; every count is in the table under them.
+const mostFound = computed(() => {
+  const top = categoryTiles.value.reduce((best, t) => (t.requests > best.requests ? t : best), categoryTiles.value[0]!)
+  return top.requests > 0 ? top : null
+})
 
 async function load(): Promise<void> {
   await usage.loadPiiIncidents({
@@ -141,20 +147,43 @@ onMounted(() => {
       <section aria-labelledby="pii-summary-h" class="mb-8">
         <h2 id="pii-summary-h" class="mb-3 text-heading">Summary</h2>
         <p class="mb-3 text-fg-2">The category and action filters apply to the list below, not to these figures.</p>
-        <h3 class="mb-2 text-small font-medium text-fg-2">By category</h3>
-        <div class="mb-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]" data-testid="category-tiles">
-          <MetricTile
-            v-for="tile in categoryTiles"
-            :key="tile.category"
-            :label="PII_CATEGORY_LABEL[tile.category]"
-            :value="formatNumber(tile.requests)"
-            :context="`${formatNumber(tile.occurrences)} ${tile.occurrences === 1 ? 'value' : 'values'} found`"
+        <div class="mb-4 grid grid-cols-2 gap-3 md:[grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]" data-testid="pii-tiles">
+          <SummaryTile title="Requests with PII" :value="formatNumber(report.totalIncidents)" :quiet="!report.totalIncidents" />
+          <SummaryTile
+            title="Most found"
+            :value="mostFound ? PII_CATEGORY_LABEL[mostFound.category] : '—'"
+            :quiet="!mostFound"
+            :detail="mostFound ? `${formatNumber(mostFound.requests)} ${mostFound.requests === 1 ? 'request' : 'requests'}` : 'None found'"
           />
+          <SummaryTile title="Blocked" :value="formatNumber(actionRequests('Block'))" :quiet="!actionRequests('Block')" />
+          <SummaryTile title="Redacted" :value="formatNumber(actionRequests('Redact'))" :quiet="!actionRequests('Redact')" />
         </div>
-        <h3 class="mb-2 text-small font-medium text-fg-2">By action</h3>
-        <div class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]" data-testid="action-tiles">
-          <MetricTile v-for="tile in actionTiles" :key="tile.action" :label="PII_ACTION_LABEL[tile.action].label" :value="formatNumber(tile.requests)" />
-        </div>
+        <table class="w-full max-w-xl text-small" data-testid="pii-counts">
+          <caption class="sr-only">Requests with PII by category and by action</caption>
+          <thead>
+            <tr class="border-b border-border text-left text-fg-2">
+              <th scope="col" class="py-1.5 pr-4 font-medium"><span class="sr-only">Category or action</span></th>
+              <th scope="col" class="py-1.5 pr-4 text-right font-medium">Requests</th>
+              <th scope="col" class="py-1.5 text-right font-medium">Values found</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th scope="colgroup" colspan="3" class="pt-3 pb-1 text-left font-medium text-fg-2">By category</th></tr>
+            <tr v-for="tile in categoryTiles" :key="tile.category" class="border-b border-border">
+              <th scope="row" class="py-1.5 pr-4 text-left font-normal">{{ PII_CATEGORY_LABEL[tile.category] }}</th>
+              <td class="py-1.5 pr-4 text-right tabular" :class="quietZero(tile.requests)">{{ formatNumber(tile.requests) }}</td>
+              <td class="py-1.5 text-right tabular" :class="quietZero(tile.occurrences)">{{ formatNumber(tile.occurrences) }}</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr><th scope="colgroup" colspan="3" class="pt-3 pb-1 text-left font-medium text-fg-2">By action</th></tr>
+            <tr v-for="tile in actionTiles" :key="tile.action" class="border-b border-border">
+              <th scope="row" class="py-1.5 pr-4 text-left font-normal">{{ PII_ACTION_LABEL[tile.action].label }}</th>
+              <td class="py-1.5 pr-4 text-right tabular" :class="quietZero(tile.requests)">{{ formatNumber(tile.requests) }}</td>
+              <td class="py-1.5 text-right text-fg-3"><span aria-hidden="true">—</span><span class="sr-only">Not counted per action</span></td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section aria-labelledby="pii-list-h">
