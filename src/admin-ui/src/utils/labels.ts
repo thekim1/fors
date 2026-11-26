@@ -7,6 +7,7 @@ import type {
   CircuitState,
   DataPermission,
   DataResidency,
+  GatewayEndpointName,
   HealthStatus,
   KeyStatus,
   ModelKind,
@@ -454,3 +455,18 @@ export const MENU = {
   more: (name: string) => `More actions for ${name}`,
   delete: 'Delete…',
 } as const
+
+/** The gateway's endpoints, by name (the Usage dashboard's Endpoint filter). */
+export const ENDPOINT_LABEL: Record<GatewayEndpointName, string> = {
+  ChatCompletions: 'Chat completions',
+  Responses: 'Responses',
+  AnthropicMessages: 'Anthropic messages',
+  Embeddings: 'Embeddings',
+  AudioTranscriptions: 'Audio transcriptions',
+  AudioTranslations: 'Audio translations',
+  Realtime: 'Live audio',
+  RealtimeTranslations: 'Live translation',
+  ImageGenerations: 'Image generation',
+  ImageEdits: 'Image edits',
+  AnthropicCountTokens: 'Token counting',
+}

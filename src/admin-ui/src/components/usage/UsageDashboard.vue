@@ -1,15 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { GATEWAY_ENDPOINTS, REQUEST_OUTCOMES, type GatewayEndpointName, type RequestOutcome, type UsageMetrics, type UsageMetricsBucket, type UsageMetricsQuery } from '@/api/types'
+import { computed, onMounted, watch } from 'vue'
+import { type GatewayEndpointName, type RequestOutcome, type UsageMetrics, type UsageMetricsBucket, type UsageMetricsQuery } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
-import { useDepartmentsStore } from '@/stores/departments'
-import { useKeysStore } from '@/stores/keys'
 import { useProvidersStore } from '@/stores/providers'
-import { useTeamsStore } from '@/stores/teams'
 import { useUsageStore } from '@/stores/usage'
-import { useModelOptions } from '@/composables/useModelOptions'
-import { OUTCOME_LABEL } from '@/utils/labels'
-import { requestsLink } from '@/utils/requestsLink'
+import { periodRange } from '@/utils/period'
+import { requestsLink, type RequestsOutcomeFilter } from '@/utils/requestsLink'
 import {
   formatCompact,
   formatDate,
@@ -20,137 +16,65 @@ import {
   formatTime,
   formatTokensPerSecond,
   formatUsdCost,
-  todayIso,
   toIsoDate,
 } from '@/utils/format'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import AsyncState from '@/components/ui/AsyncState.vue'
-import FilterSelect from '@/components/ui/FilterSelect.vue'
-import InlineError from '@/components/ui/InlineError.vue'
-import SegmentedControl from '@/components/ui/SegmentedControl.vue'
-import TextField from '@/components/ui/TextField.vue'
-import UiButton from '@/components/ui/UiButton.vue'
 import CacheGaugeCard from './CacheGaugeCard.vue'
 import MetricChartCard from './MetricChartCard.vue'
 import type { ChartSeries } from './TimeSeriesChart.vue'
 
-type Period = '24h' | '7d' | '30d' | '90d' | 'custom'
+/** The filters the Usage page keeps in the address for both of its tabs (one set; see UsageView). */
+export interface UsageFilters {
+  period: string
+  from: string
+  to: string
+  departmentId: string
+  teamId: string
+  keyId: string
+  model: string
+  provider: string
+  outcome: string
+  endpoint: string
+}
+
 const DAY_MS = 86_400_000
-const PERIOD_DAYS: Record<Exclude<Period, 'custom'>, number> = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 }
-const periods: { value: Period; label: string }[] = [
-  { value: '24h', label: '24 hours' },
-  { value: '7d', label: '7 days' },
-  { value: '30d', label: '30 days' },
-  { value: '90d', label: '90 days' },
-  { value: 'custom', label: 'Custom' },
-]
-const ENDPOINT_LABEL: Record<GatewayEndpointName, string> = {
-  ChatCompletions: 'Chat completions',
-  Responses: 'Responses',
-  AnthropicMessages: 'Anthropic messages',
-  Embeddings: 'Embeddings',
-  AudioTranscriptions: 'Audio transcriptions',
-  AudioTranslations: 'Audio translations',
-  Realtime: 'Live audio',
-  RealtimeTranslations: 'Live translation',
-  ImageGenerations: 'Image generation',
-  ImageEdits: 'Image edits',
-  AnthropicCountTokens: 'Token counting',
-}
+/** Rolling periods, ending now; *This month* and *Custom…* are whole days (periodRange). */
+const PERIOD_DAYS: Record<string, number> = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 }
 
-const auth = useAuthStore()
+const props = defineProps<{ filters: UsageFilters }>()
 const usage = useUsageStore()
-const departments = useDepartmentsStore()
-const teams = useTeamsStore()
-const keys = useKeysStore()
 const providers = useProvidersStore()
-const { options: modelOptions } = useModelOptions()
+const auth = useAuthStore()
 
-const period = ref<Period>('7d')
-const from = ref(toIsoDate(new Date(Date.now() - 7 * DAY_MS)))
-const to = ref(todayIso())
-const departmentId = ref('')
-const teamId = ref('')
-const keyId = ref('')
-const model = ref('')
-const provider = ref('')
-const outcome = ref<RequestOutcome | ''>('')
-const endpoint = ref<GatewayEndpointName | ''>('')
-const rangeError = ref<string | null>(null)
-
-const departmentOptions = computed(() => [{ value: '', label: 'All' }, ...departments.items.map((d) => ({ value: d.id, label: d.name }))])
-const teamOptions = computed(() => [
-  { value: '', label: 'All' },
-  ...teams.items.filter((t) => !departmentId.value || t.departmentId === departmentId.value).map((t) => ({ value: t.id, label: t.name })),
-])
-const keyOptions = computed(() => [
-  { value: '', label: 'All' },
-  ...keys.items
-    .filter((k) => (!departmentId.value || k.departmentId === departmentId.value) && (!teamId.value || k.teamId === teamId.value))
-    .map((k) => ({ value: k.id, label: k.name })),
-])
-const modelSelectOptions = computed(() => {
-  const names = new Set(modelOptions.value.map((m) => m.name))
-  if (model.value) names.add(model.value)
-  return [{ value: '', label: 'All' }, ...[...names].sort((a, b) => a.localeCompare(b)).map((n) => ({ value: n, label: n }))]
-})
-const providerOptions = computed(() => [{ value: '', label: 'All' }, ...providers.items.map((p) => ({ value: p.name, label: p.displayName || p.name }))])
-const outcomeOptions = [{ value: '', label: 'All' }, ...REQUEST_OUTCOMES.map((o) => ({ value: o, label: OUTCOME_LABEL[o].label }))]
-const endpointOptions = [{ value: '', label: 'All' }, ...GATEWAY_ENDPOINTS.map((e) => ({ value: e, label: ENDPOINT_LABEL[e] }))]
-const filtered = computed(() => !!(departmentId.value || teamId.value || keyId.value || model.value || provider.value || outcome.value || endpoint.value))
-
-function clearFilters(): void {
-  departmentId.value = ''
-  teamId.value = ''
-  keyId.value = ''
-  model.value = ''
-  provider.value = ''
-  outcome.value = ''
-  endpoint.value = ''
-}
-
-function range(): { from: string; to: string } | null {
-  if (period.value !== 'custom') {
+function range(): { from: string; to: string } {
+  const { period, from, to } = props.filters
+  const days = PERIOD_DAYS[period]
+  if (days) {
     const now = Date.now()
-    return { from: new Date(now - PERIOD_DAYS[period.value] * DAY_MS).toISOString(), to: new Date(now).toISOString() }
+    return { from: new Date(now - days * DAY_MS).toISOString(), to: new Date(now).toISOString() }
   }
-  if (!from.value || !to.value) {
-    rangeError.value = 'Choose both a start and an end date.'
-    return null
-  }
-  if (from.value > to.value) {
-    rangeError.value = 'The start date must be on or before the end date.'
-    return null
-  }
-  return { from: new Date(`${from.value}T00:00:00`).toISOString(), to: new Date(`${to.value}T23:59:59.999`).toISOString() }
+  const r = periodRange(period, from, to)
+  return { from: new Date(`${r.from}T00:00:00`).toISOString(), to: new Date(`${r.to}T23:59:59.999`).toISOString() }
 }
 
 function load(): void {
-  rangeError.value = null
-  const dates = range()
-  if (!dates) return
+  const f = props.filters
   const query: UsageMetricsQuery = {
-    ...dates,
-    ...(departmentId.value && { departmentId: departmentId.value }),
-    ...(teamId.value && { teamId: teamId.value }),
-    ...(keyId.value && { keyId: keyId.value }),
-    ...(model.value && { model: model.value }),
-    ...(provider.value && { provider: provider.value }),
-    ...(outcome.value && { outcome: outcome.value }),
-    ...(endpoint.value && { endpoint: endpoint.value }),
+    ...range(),
+    ...(f.departmentId && { departmentId: f.departmentId }),
+    ...(f.teamId && { teamId: f.teamId }),
+    ...(f.keyId && { keyId: f.keyId }),
+    ...(f.model && { model: f.model }),
+    ...(f.provider && { provider: f.provider }),
+    ...(f.outcome && { outcome: f.outcome as RequestOutcome }),
+    ...(f.endpoint && { endpoint: f.endpoint as GatewayEndpointName }),
   }
   void usage.loadMetrics(query)
 }
 
-watch(departmentId, () => {
-  if (teamId.value && !teams.items.some((t) => t.id === teamId.value && t.departmentId === departmentId.value)) teamId.value = ''
-})
-watch(teamId, () => {
-  if (keyId.value && !keys.items.some((k) => k.id === keyId.value && (!teamId.value || k.teamId === teamId.value))) keyId.value = ''
-})
-watch([period, departmentId, teamId, keyId, model, provider, outcome, endpoint], () => {
-  if (period.value !== 'custom') load()
-})
+// The filters are the page's, in the address: any change (a chip, a link, back or forward) reloads.
+watch(() => ({ ...props.filters }), load)
 
 onMounted(() => {
   if (auth.isGatewayAdmin && !providers.loaded) void providers.load()
@@ -220,16 +144,17 @@ const errorShare = computed(() => {
 /** The failed requests behind the Requests card, with the dashboard's period and filters (not the endpoint: the list has no such filter). */
 const failedRequests = computed(() => {
   const d = data.value
-  if (!d || d.totals.requests === d.totals.successes || outcome.value === 'Success') return null
+  const f = props.filters
+  if (!d || d.totals.requests === d.totals.successes || f.outcome === 'Success') return null
   return requestsLink({
     from: toIsoDate(new Date(d.from)),
     to: toIsoDate(new Date(d.to)),
-    departmentId: departmentId.value,
-    teamId: teamId.value,
-    keyId: keyId.value,
-    model: model.value,
-    provider: provider.value,
-    outcome: outcome.value || 'errors',
+    departmentId: f.departmentId,
+    teamId: f.teamId,
+    keyId: f.keyId,
+    model: f.model,
+    provider: f.provider,
+    outcome: (f.outcome || 'errors') as RequestsOutcomeFilter,
   })
 })
 const modelCount = computed(() => {
@@ -241,27 +166,6 @@ const percentiles = (s: { p95: number | null; p99?: number | null } | undefined)
 
 <template>
   <div class="flex flex-col gap-4">
-    <div class="flex flex-wrap items-end justify-between gap-3">
-      <SegmentedControl v-model="period" :options="periods" label="Time range" />
-      <form v-if="period === 'custom'" class="flex flex-wrap items-end gap-3" novalidate @submit.prevent="load">
-        <TextField v-model="from" label="From" type="date" />
-        <TextField v-model="to" label="To" type="date" />
-        <UiButton type="submit" variant="primary">Apply</UiButton>
-      </form>
-    </div>
-    <InlineError v-if="rangeError" :message="rangeError" />
-
-    <div class="flex flex-wrap items-center gap-x-4 gap-y-2" role="group" aria-label="Dashboard filters">
-      <FilterSelect v-model="departmentId" label="Department" :options="departmentOptions" />
-      <FilterSelect v-model="teamId" label="Team" :options="teamOptions" />
-      <FilterSelect v-model="keyId" label="Key" :options="keyOptions" />
-      <FilterSelect v-model="model" label="Model" :options="modelSelectOptions" />
-      <FilterSelect v-if="auth.isGatewayAdmin" v-model="provider" label="Provider" :options="providerOptions" />
-      <FilterSelect v-model="outcome" label="Outcome" :options="outcomeOptions" />
-      <FilterSelect v-model="endpoint" label="Endpoint" :options="endpointOptions" />
-      <UiButton v-if="filtered" size="sm" variant="quiet" icon="filter_alt_off" @click="clearFilters">Clear filters</UiButton>
-    </div>
-
     <p v-if="data?.recordsFrom" class="flex items-start gap-2 text-small text-fg-2">
       <AppIcon name="info" :size="18" class="mt-px shrink-0" />
       The charts start on {{ formatDate(data.recordsFrom) }}: older usage is only kept as monthly totals (data retention, see Settings), without timings.
