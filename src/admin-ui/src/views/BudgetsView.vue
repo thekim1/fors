@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useDirty } from '@/composables/useDirty'
+import { ONE_OF, useQueryFilters } from '@/composables/useQueryFilters'
 import { BUDGET_PERIODS, BUDGET_SCOPES, DATA_RESIDENCIES, type Budget, type BudgetPeriod, type BudgetScope, type BudgetUnit, type DataResidency } from '@/api/types'
 import { useBudgetsStore } from '@/stores/budgets'
 import { useDepartmentsStore } from '@/stores/departments'
@@ -18,6 +19,7 @@ import AsyncState from '@/components/ui/AsyncState.vue'
 import CheckField from '@/components/ui/CheckField.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/ui/DataTable.vue'
+import FilterChip from '@/components/ui/FilterChip.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import MenuButton from '@/components/ui/MenuButton.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
@@ -29,7 +31,6 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import UiMeter from '@/components/ui/UiMeter.vue'
 
-type ScopeFilter = 'all' | BudgetScope
 
 const budgets = useBudgetsStore()
 const departments = useDepartmentsStore()
@@ -37,7 +38,8 @@ const teams = useTeamsStore()
 const keys = useKeysStore()
 const ui = useUiStore()
 
-const filter = ref<ScopeFilter>('all')
+// Layout rule 2: which owners' budgets, a chip kept in the address (?scope=Team), counts in its options (Q2 of the audit).
+const { filters, clear: clearFilters } = useQueryFilters({ scope: '' }, { scope: ONE_OF(BUDGET_SCOPES) })
 const ackError = ref<unknown>(null)
 const ackBusy = ref<string | null>(null)
 
@@ -63,10 +65,9 @@ const { errors, formError, clear, validate, applyServerError } = useFormErrors({
 })
 
 const openAlerts = computed(() => budgets.alerts.filter((a) => !a.acknowledged))
-const filtered = computed(() => (filter.value === 'all' ? budgets.items : budgets.items.filter((b) => b.scope === filter.value)))
+const filtered = computed(() => (filters.scope ? budgets.items.filter((b) => b.scope === filters.scope) : budgets.items))
 const filterOptions = computed(() => [
-  { value: 'all' as ScopeFilter, label: 'All', count: budgets.items.length },
-  ...BUDGET_SCOPES.map((s) => ({ value: s as ScopeFilter, label: SCOPE_LABEL[s], count: budgets.items.filter((b) => b.scope === s).length })),
+  ...BUDGET_SCOPES.map((s) => ({ value: s as string, label: `${SCOPE_LABEL[s]} (${budgets.items.filter((b) => b.scope === s).length})` })),
 ])
 const scopeOptions = BUDGET_SCOPES.map((s) => ({ value: s, label: SCOPE_LABEL[s] }))
 const periodOptions = BUDGET_PERIODS.map((p) => ({ value: p, label: PERIOD_LABEL[p] }))
@@ -247,7 +248,9 @@ async function remove(): Promise<void> {
   <section aria-labelledby="budgets-h">
     <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
       <h2 id="budgets-h" class="text-heading">Budgets</h2>
-      <SegmentedControl v-model="filter" :options="filterOptions" label="Filter by scope" />
+      <form role="search" aria-label="Filter budgets" @submit.prevent>
+        <FilterChip v-model="filters.scope" label="Owner" :options="filterOptions" :any="`All (${budgets.items.length})`" />
+      </form>
     </div>
     <AsyncState :loading="budgets.loading" :error="budgets.error" :empty="!budgets.loaded" @retry="load">
       <DataTable
@@ -259,7 +262,7 @@ async function remove(): Promise<void> {
         clearable
         empty-text="No budgets match this filter."
         @row-click="openForm"
-        @clear="filter = 'all'"
+        @clear="clearFilters()"
       >
         <template #cell-owner="{ row }">
           <span class="font-medium" lang="sv">{{ row.scopeName }}</span>

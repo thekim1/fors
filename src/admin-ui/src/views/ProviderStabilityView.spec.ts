@@ -82,10 +82,11 @@ describe('ProviderStabilityView', () => {
     expect(table.findAll('tbody tr')[1]!.text()).toContain('—')
   })
 
-  it('asks for day buckets for 30 days', async () => {
+  it('asks for day buckets for 30 days, and keeps the period in the address (layout rule 2)', async () => {
     const wrapper = await mountView()
-    await button(wrapper, '30 days').trigger('click')
+    await wrapper.get('[data-test="chip-Period"] select').setValue('30d')
     await flushPromises()
     expect(providerStats).toHaveBeenLastCalledWith(expect.objectContaining({ bucket: 'day' }))
+    expect(wrapper.vm.$router.currentRoute.value.query).toEqual({ period: '30d' })
   })
 })

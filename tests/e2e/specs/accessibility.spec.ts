@@ -131,6 +131,13 @@ for (const theme of themes) {
     await page.keyboard.press('Escape')
     await expect(drawer).toBeHidden()
 
+    // Filter chips set on the pages that took them in step 3 of the layout audit.
+    for (const path of ['/keys?status=Revoked&q=key', '/budgets?scope=Team', '/operations/stability?period=7d']) {
+      await ready(page, path)
+      await expect(page.getByRole('search').getByRole('button', { name: /^Remove the .* filter$/ }).first()).toBeVisible()
+      await scan(page, `${theme}: the filter row of ${path}`)
+    }
+
     await ready(page, '/pii-incidents?period=custom&category=Email')
     await expect(page.getByLabel('From')).toBeVisible()
     await scan(page, `${theme}: filter chips with a custom period`)
@@ -161,6 +168,8 @@ for (const theme of themes) {
     await scan(page, `${theme}, 390 px: a drawer's ⋯ menu as a sheet`)
     await drawerSheet.getByRole('button', { name: 'Close' }).last().click()
     await page.keyboard.press('Escape')
+    await ready(page, '/keys?status=Revoked')
+    await scan(page, `${theme}, 390 px: the filter row of /keys`)
     await ready(page, '/usage?tab=requests&outcome=errors')
     await scan(page, `${theme}, 390 px: filter chips`)
   })
