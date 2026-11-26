@@ -175,6 +175,18 @@ for (const theme of themes) {
   })
 }
 
+// Layout rule 10: a page's summary tiles are two by two on a phone, not one per row.
+test('summary tiles are two by two at 390 px', async ({ page }) => {
+  await login(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  for (const path of ['/', '/operations', '/pii-incidents']) {
+    await ready(page, path)
+    const tops = await page.locator('[data-test="summary-tile"]').evaluateAll(tiles => tiles.slice(0, 4).map(t => Math.round(t.getBoundingClientRect().top)))
+    expect.soft(tops.length, `${path}: four tiles`).toBe(4)
+    expect.soft(new Set(tops).size, `${path}: two rows`).toBe(2)
+  }
+})
+
 // One test per width: every page waits for its content, and twenty pages twice do not fit one test's time.
 for (const [width, label] of [[320, 'at 320px'], [640, 'at 200 percent text size']] as const) {
   test(`all pages reflow ${label}`, async ({ page }) => {

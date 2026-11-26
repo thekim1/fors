@@ -82,16 +82,19 @@ const chip = (wrapper: ReturnType<typeof mount>, label: string) => wrapper.get(`
 beforeEach(() => piiIncidents.mockReset())
 
 describe('PiiIncidentsView', () => {
-  it('shows tiles per category and action and links each incident to its request', async () => {
+  it('sums up in four tiles and one table of every category and action, zeros grey, and links each incident to its request', async () => {
     piiIncidents.mockResolvedValue(report([incident(), incident({ requestId: 'req_2', action: 'Block', outcome: 'PiiBlocked', statusCode: 422 })]))
     const { wrapper } = await mountView()
 
     expect(wrapper.find('h1').text()).toBe('PII incidents')
-    const categories = wrapper.find('[data-testid="category-tiles"]').text()
-    expect(categories).toContain('Personal identity number')
-    expect(categories).toContain('3 values found')
-    expect(wrapper.find('[data-testid="action-tiles"]').text()).toContain('Blocked1')
-    const rows = wrapper.findAll('tbody tr')
+    const tiles = wrapper.findAll('[data-testid="pii-tiles"] [data-test="summary-tile"]').map((t) => t.text())
+    expect(tiles).toEqual(['Requests with PII2', 'Most foundPersonal identity number2 requests', 'Blocked1', 'Redacted1'])
+    const counts = wrapper.findAll('[data-testid="pii-counts"] tbody tr').map((r) => r.text())
+    expect(counts).toContain('Personal identity number23')
+    expect(counts).toContain('Sent on-prem0—Not counted per action')
+    const zero = wrapper.findAll('[data-testid="pii-counts"] td').find((td) => td.text() === '0')!
+    expect(zero.classes()).toContain('text-fg-3')
+    const rows = wrapper.findAll('table.data-table tbody tr')
     expect(rows).toHaveLength(2)
     expect(rows[0]!.text()).toContain('Personal identity number × 2')
     expect(rows[0]!.text()).toContain('Redacted')

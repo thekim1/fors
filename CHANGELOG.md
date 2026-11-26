@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Summary tiles on Health & operations and PII incidents** (layout audit step 6, rules 8 to 10, Q4 A). *Health &
+  operations* starts with four tiles (components, usage writer, providers degraded or down, version), each saying in
+  text what needs attention; the component list folds under *Details* while all are healthy and otherwise lists only
+  the ones that are not. *PII incidents* replaces nine big tiles with four (requests with PII, the most found
+  category, blocked, redacted) and one compact table of every category and action, zeros grey. On a phone the tiles
+  of these pages and the Overview are two by two.
 - **Fixed: a live session whose provider dropped could be recorded as a success.** When the provider's connection
   broke, the gateway told the client (`provider_disconnected`) and closed it, but if the client answered that close
   before the gateway had noted the provider's failure, the session was recorded as *Success* rather than *Provider

@@ -148,7 +148,8 @@ const providerRows = computed(() => ops.health?.providers.filter((p) => p.isEnab
 
     <section aria-labelledby="figures-h" class="mb-8">
       <h2 id="figures-h" class="sr-only">Key figures</h2>
-      <div class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+      <!-- Rule 10: two by two on a phone. -->
+      <div class="grid grid-cols-2 gap-3 md:[grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]" data-testid="key-figures">
         <SummaryTile
           title="Spend this month"
           :value="formatUsdCost(month?.totalCostUsd)"

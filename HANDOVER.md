@@ -17,7 +17,7 @@ Everything in the original scope and the routing rules feature is implemented, t
 | Admin UI (`src/admin-ui`) | Done: Vue 3, Pinia, Reka UI, Tailwind v4, English, light/dark/Lumen. Follows Källa's [layout rules](docs/admin-ui.md#layout-rules); the design system and its shared components are copied by Källa (*Shared with Källa* there), so offer a change to them to Källa too |
 | Aspire AppHost, Compose publish with mandatory hardening, backup/restore | Done; `deploy/Test-Deployment.ps1` passes |
 | Data-plane performance | Benchmarked and optimised, see [docs/performance.md](docs/performance.md) (`benchmarks/Fors.Benchmarks`) |
-| Tests | Domain, gateway, admin API, integration (Testcontainers), UI (Vitest) and Playwright e2e (41 tests, own test database via `scripts/Start-E2E.ps1`) all pass |
+| Tests | Domain, gateway, admin API, integration (Testcontainers), UI (Vitest) and Playwright e2e (42 tests, own test database via `scripts/Start-E2E.ps1`) all pass |
 
 The project is not a production approval, legal attestation or WCAG certification (see the release gates in
 [docs/security-and-compliance.md](docs/security-and-compliance.md)).

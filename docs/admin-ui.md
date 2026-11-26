@@ -247,9 +247,13 @@ radius, colour or icon set.
 8. **Colour only for what needs attention.** Zeros, "none", "never" and "not yet" are grey text (`text-fg-3`). Green is
    for a state someone waits for; amber and red for something to do.
 9. **One rhythm.** Lists use the full width, forms one column; a page's figures are up to four summary tiles
-   (`SummaryTile`), and the one that needs action says so in text besides its border.
+   (`SummaryTile`), and the one that needs action says so in text besides its border. The Overview, *Health &
+   operations* (components, usage writer, providers degraded or down, version) and *PII incidents* (requests with PII,
+   the most found category, blocked, redacted; every count in one compact table under them) start with them. On *Health
+   & operations* the component list folds under *Details* while every component is healthy and lists only the ones
+   that are not otherwise.
 10. **As good on a phone.** One column below 760 px with no sideways scrolling down to 320 px; menus become bottom
-    sheets; touch targets are at least 44 × 44 px on a phone (`max-md:h-11`).
+    sheets; touch targets are at least 44 × 44 px on a phone (`max-md:h-11`); summary tiles are two by two.
 11. **Accessible by construction:** WCAG 2.2 AA in the three themes and at phone width. Fors checks this automatically
     (`tests/e2e/specs/accessibility.spec.ts`: axe on every page and on the menus, sheets, filter chips and save bar while
     open, at 1 280 and 390 px; reflow at 320 px; target size; keyboard and focus), and does not plan a manual

@@ -13,7 +13,7 @@ const titleId = `tile-${useId()}`
 <template>
   <!-- A group named by its title, not a landmark or a heading (four tiles would add four regions and skip a level). -->
   <div
-    class="material grid content-start gap-1 rounded-card p-4"
+    class="material grid min-w-0 content-start gap-1 rounded-card p-4 [overflow-wrap:anywhere]"
     :class="attention ? 'shadow-[inset_0_0_0_2px_var(--warn)]' : ''"
     role="group" :aria-labelledby="titleId"
     data-test="summary-tile"
