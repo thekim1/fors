@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Departments, routes and routing rules have addresses of their own** (layout audit step 9, Q1 A, rule 10):
+  `/organisation/<department>`, `/routes/<name>` and `/routing-rules/<rule>` open that item, so it can be linked and
+  survives a reload. A wide screen keeps the list beside the detail, and the address follows the choice. Where the page
+  stacks (below 1 024 px) it shows the list alone, or the chosen item alone with its name as the page's title and a
+  breadcrumb back to the list (Back returns to the list too); before, the whole list came first and the detail started
+  screens further down. An address that names nothing (a deleted route) shows the list. The accessibility spec scans
+  each of them at 390 px and checks their reflow.
 - **Fixed: `init-deployment.sh` run again as yourself.** Its first run gives `certs/<service>` and `secrets/<service>`
   to the services' users (mode 700), so a later run as an ordinary user saw none of their files, tried to make new
   ones and failed on `openssl` (an upgrade into a new release directory hit it too, #143). It now runs itself again

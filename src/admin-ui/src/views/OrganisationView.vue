@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api'
 import type { Budget, Department, RoutingRulesChoice, ScopedRulesProblem, Team } from '@/api/types'
+import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
 import DepartmentDetail from '@/components/org/DepartmentDetail.vue'
 import DepartmentFormDrawer from '@/components/org/DepartmentFormDrawer.vue'
 import DepartmentList from '@/components/org/DepartmentList.vue'
@@ -12,6 +13,7 @@ import AsyncState from '@/components/ui/AsyncState.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import UiButton from '@/components/ui/UiButton.vue'
+import { useListDetail } from '@/composables/useListDetail'
 import { useAuthStore } from '@/stores/auth'
 import { useDepartmentsStore } from '@/stores/departments'
 import { useTeamsStore } from '@/stores/teams'
@@ -25,7 +27,6 @@ const teams = useTeamsStore()
 const ui = useUiStore()
 const router = useRouter()
 
-const selectedId = ref<string | null>(null)
 const budgets = ref<Budget[]>([])
 const detail = ref<InstanceType<typeof DepartmentDetail> | null>(null)
 
@@ -38,7 +39,16 @@ const deletingTeam = ref<Team | null>(null)
 /** Set when a delete was refused because routing rules belong to the team/department: the user decides what happens to them. */
 const scopedRules = ref<{ kind: 'team' | 'department'; id: string; name: string; rules: ScopedRulesProblem['rules'] } | null>(null)
 
-const selected = computed(() => departments.items.find((d) => d.id === selectedId.value) ?? null)
+// Layout audit Q1 A: the department is in the address (/organisation/<id>); on a phone the list or the department.
+const { selected, narrow, detailPage, showList, select: open, listTo } = useListDetail({
+  param: 'department',
+  items: () => departments.items,
+  keyOf: (d) => d.id,
+  first: () => departments.items[0],
+  ready: () => !departments.loading && departments.loaded,
+  focusDetail: () => detail.value?.focus(),
+})
+const selectedId = computed(() => selected.value?.id ?? null)
 const selectedTeams = computed(() => teams.items.filter((t) => t.departmentId === selectedId.value))
 const selectedBudget = computed(() => {
   const forDepartment = budgets.value.filter((b) => b.scope === 'Department' && b.scopeId === selectedId.value && b.isActive)
@@ -46,13 +56,6 @@ const selectedBudget = computed(() => {
 })
 const manageableDepartments = computed(() => departments.items.filter((d) => auth.canManageDepartment(d.costCenterCode)))
 const canManageTeams = computed(() => !!selected.value && auth.canManageDepartment(selected.value.costCenterCode))
-
-watch(
-  () => departments.items,
-  (items) => {
-    if (!items.some((d) => d.id === selectedId.value)) selectedId.value = items[0]?.id ?? null
-  },
-)
 
 async function load(): Promise<void> {
   await Promise.all([departments.load(), teams.load(), loadBudgets()])
@@ -67,8 +70,7 @@ async function loadBudgets(): Promise<void> {
 }
 
 function select(id: string): void {
-  selectedId.value = id
-  void nextTick(() => detail.value?.focus())
+  open(id)
 }
 
 function newDepartment(): void {
@@ -139,14 +141,12 @@ async function deleteWithRules(choice: RoutingRulesChoice): Promise<void> {
   ui.notify(choice === 'deactivate' ? `${what} deleted. ${count} deactivated: assign a new owner under Routing rules.` : `${what} deleted. ${count} deleted.`)
 }
 
-onMounted(async () => {
-  await load()
-  if (!selectedId.value) selectedId.value = departments.items[0]?.id ?? null
-})
+onMounted(load)
 </script>
 
 <template>
-  <PageHeader title="Organisation">
+  <PageBreadcrumb v-if="detailPage" :items="[{ label: 'Organisation', to: listTo }]" />
+  <PageHeader v-else title="Organisation">
     <template #description>Departments (<span lang="sv">förvaltningar</span>) own teams. Teams own keys.</template>
     <UiButton v-if="auth.isGatewayAdmin" variant="primary" icon="add" @click="newDepartment">New department</UiButton>
   </PageHeader>
@@ -159,7 +159,7 @@ onMounted(async () => {
     @retry="load"
   >
     <div class="grid grid-cols-[minmax(240px,300px)_1fr] items-start gap-6 max-lg:grid-cols-1">
-      <DepartmentList :departments="departments.items" :selected-id="selectedId" @select="select" />
+      <DepartmentList v-if="showList" :departments="departments.items" :selected-id="narrow ? null : selectedId" @select="select" />
       <DepartmentDetail
         v-if="selected"
         ref="detail"
@@ -168,6 +168,7 @@ onMounted(async () => {
         :budget="selectedBudget"
         :can-edit-department="auth.isGatewayAdmin"
         :can-manage-teams="canManageTeams"
+        :as-page="detailPage"
         @edit="editDepartment"
         @delete="deletingDepartment = true"
         @add-team="addTeam"

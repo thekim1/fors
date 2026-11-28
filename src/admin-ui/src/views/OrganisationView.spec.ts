@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { createMemoryHistory, createRouter } from 'vue-router'
 import { ApiError } from '@/api/client'
 import type { Department, Team } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
 import { inlineOverlay } from '@/test/fixtures'
-import { button, chooseMenuItem } from '@/test/helpers'
+import { button, chooseMenuItem, pageRouter } from '@/test/helpers'
 import OrganisationView from './OrganisationView.vue'
 
 const departmentsList = vi.fn()
@@ -43,7 +42,7 @@ async function mountView(departments: Department[], teams: Team[]) {
   auth.status = 'authenticated'
   departmentsList.mockResolvedValue(departments)
   teamsList.mockResolvedValue(teams)
-  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
+  const router = await pageRouter('organisation')
   const wrapper = mount(OrganisationView, {
     global: { plugins: [pinia, router], stubs: { DepartmentFormDrawer: true, TeamFormDrawer: true, UiDialog: inlineOverlay } },
   })
@@ -158,5 +157,38 @@ describe('deleting a team or department', () => {
     await flushPromises()
     expect(departmentsRemove).toHaveBeenNthCalledWith(2, 'd1', 'deactivate')
     expect(toasts()).toContain('Department deleted. 1 routing rule deactivated: assign a new owner under Routing rules.')
+  })
+})
+
+describe('a department of its own (layout audit Q1 A)', () => {
+  const phone = (on: boolean) =>
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: on && query.includes('max-width'), addEventListener: () => undefined, removeEventListener: () => undefined }))
+
+  it('on a phone shows the list, then only the chosen department with a breadcrumb back', async () => {
+    phone(true)
+    try {
+      const wrapper = await mountView([department(1)], [team])
+      expect(wrapper.find('h1').text()).toBe('Organisation')
+      expect(wrapper.find('#dept-title').exists()).toBe(false)
+      await wrapper.find('nav[aria-label="Departments"] button').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('nav[aria-label="Departments"]').exists()).toBe(false)
+      expect(wrapper.find('h1#page-title').text()).toBe('Kommunstyrelsen') // the page's heading: focus and the skip link find it
+      expect(wrapper.find('[data-test="breadcrumb"]').text()).toContain('Organisation')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('on a wide screen keeps the list beside the first department', async () => {
+    phone(false)
+    try {
+      const wrapper = await mountView([department(1)], [team])
+      expect(wrapper.find('nav[aria-label="Departments"]').exists()).toBe(true)
+      expect(wrapper.find('h2#dept-title').text()).toBe('Kommunstyrelsen')
+      expect(wrapper.find('[data-test="breadcrumb"]').exists()).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

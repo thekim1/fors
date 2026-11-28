@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type { RoutingRule, RoutingScope } from '@/api/types'
 import { ROUTING_SCOPES } from '@/api/types'
+import PageBreadcrumb from '@/components/layout/PageBreadcrumb.vue'
 import ReassignRuleDialog from '@/components/rules/ReassignRuleDialog.vue'
 import RuleDetail from '@/components/rules/RuleDetail.vue'
 import RuleFormDrawer from '@/components/rules/RuleFormDrawer.vue'
@@ -14,6 +15,7 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import MenuButton from '@/components/ui/MenuButton.vue'
 import UiButton from '@/components/ui/UiButton.vue'
+import { useListDetail } from '@/composables/useListDetail'
 import { useRoutingRulesStore } from '@/stores/routingRules'
 import { useUiStore } from '@/stores/ui'
 import { ROUTING_SCOPE_LABEL } from '@/utils/labels'
@@ -26,7 +28,6 @@ const rules = useRoutingRulesStore()
 const ui = useUiStore()
 
 const filter = ref<Filter>('all')
-const selectedId = ref<string | null>(null)
 const detail = ref<InstanceType<typeof RuleDetail> | null>(null)
 const drawer = ref(false)
 const editing = ref<RoutingRule | null>(null)
@@ -48,7 +49,17 @@ const filtered = computed(() => {
   return rules.items.filter((r) => r.scope === filter.value)
 })
 const sections = computed(() => groupRules(filtered.value))
-const selected = computed(() => rules.items.find((r) => r.id === selectedId.value) ?? null)
+// Layout audit Q1 A: the rule is in the address (/routing-rules/<id>); on a phone the list or the rule. Any rule can be
+// named; a wide screen without one shows the first rule the filter shows.
+const { selected, narrow, detailPage, showList, select: open, listTo } = useListDetail({
+  param: 'rule',
+  items: () => rules.items,
+  keyOf: (r) => r.id,
+  first: () => sections.value[0]?.rules[0],
+  ready: () => !rules.loading && rules.loaded,
+  focusDetail: () => detail.value?.focus(),
+})
+const selectedId = computed(() => selected.value?.id ?? null)
 const filterOptions = computed(() => [
   { value: 'all' as Filter, label: 'All', count: rules.items.length },
   ...ROUTING_SCOPES.map((s) => ({ value: s as Filter, label: ROUTING_SCOPE_LABEL[s], count: rules.items.filter((r) => r.scope === s).length })),
@@ -63,22 +74,20 @@ const siblings = computed(() => {
 })
 const position = computed(() => siblings.value.findIndex((r) => r.id === selectedId.value) + 1)
 
-watch(
-  [() => rules.items, filter],
-  () => {
-    if (filtered.value.some((r) => r.id === selectedId.value)) return
-    selectedId.value = sections.value[0]?.rules[0]?.id ?? null
-  },
-)
+// A filter that hides the chosen rule chooses the first rule it shows (a wide screen; a phone's list chooses none).
+watch(filter, () => {
+  if (narrow.value || !selected.value || filtered.value.some((r) => r.id === selected.value!.id)) return
+  const first = sections.value[0]?.rules[0]
+  if (first) open(first.id)
+})
 
 async function load(): Promise<void> {
   await rules.load()
 }
 
 function select(id: string): void {
-  selectedId.value = id
   actionError.value = null
-  void nextTick(() => detail.value?.focus())
+  open(id)
 }
 
 function create(): void {
@@ -154,14 +163,12 @@ function saved(rule: RoutingRule): void {
   select(rule.id)
 }
 
-onMounted(async () => {
-  await load()
-  if (!selectedId.value) selectedId.value = sections.value[0]?.rules[0]?.id ?? null
-})
+onMounted(load)
 </script>
 
 <template>
-  <PageHeader title="Routing rules">
+  <PageBreadcrumb v-if="detailPage" :items="[{ label: 'Routing rules', to: listTo }]" />
+  <PageHeader v-else title="Routing rules">
     <template #description>A rule sends matching requests to a different model. The first match wins, most specific scope first.</template>
     <UiButton icon="play_arrow" class="max-md:hidden" @click="testing = true">Test a request</UiButton>
     <UiButton variant="primary" icon="add" @click="create">New rule</UiButton>
@@ -180,7 +187,7 @@ onMounted(async () => {
     @retry="load"
   >
     <div class="flex flex-col gap-4">
-      <div class="flex flex-wrap items-center justify-between gap-3">
+      <div v-if="showList" class="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl v-model="filter" :options="filterOptions" label="Filter rules by scope" />
         <p v-if="orphaned.length > 0 && filter !== 'orphaned'" class="flex flex-wrap items-center gap-2 text-small text-warn">
           {{ orphaned.length }} {{ orphaned.length === 1 ? 'rule needs' : 'rules need' }} a new owner and {{ orphaned.length === 1 ? 'is' : 'are' }} switched off.
@@ -191,7 +198,7 @@ onMounted(async () => {
       <InlineError v-if="toggleError" :title="`Could not switch “${toggleError.name}”`" :message="problemMessage(toggleError.error)" />
 
       <div class="grid grid-cols-[minmax(280px,360px)_1fr] items-start gap-6 max-lg:grid-cols-1">
-        <RuleList :sections="sections" :selected-id="selectedId" :pending-id="pendingId" @select="select" @toggle="setEnabled" />
+        <RuleList v-if="showList" :sections="sections" :selected-id="narrow ? null : selectedId" :pending-id="pendingId" @select="select" @toggle="setEnabled" />
 
         <div v-if="selected" class="flex min-w-0 flex-col gap-4">
           <InlineError v-if="actionError" :message="problemMessage(actionError)" />
@@ -201,6 +208,7 @@ onMounted(async () => {
             :position="position"
             :count="siblings.length"
             :busy="busy || pendingId === selected.id"
+            :as-page="detailPage"
             @edit="edit"
             @copy="createFromTemplate"
             @toggle="toggle"

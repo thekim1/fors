@@ -5,7 +5,7 @@ import { ApiError } from '@/api/client'
 import type { RoutingRule } from '@/api/types'
 import { useUiStore } from '@/stores/ui'
 import { inlineOverlay, rule } from '@/test/fixtures'
-import { button, buttonByLabel, chooseMenuItem } from '@/test/helpers'
+import { button, buttonByLabel, chooseMenuItem, pageRouter } from '@/test/helpers'
 import RoutingRulesView from './RoutingRulesView.vue'
 
 const list = vi.fn()
@@ -34,7 +34,7 @@ async function mountView(rules: RoutingRule[]) {
   setActivePinia(createPinia())
   list.mockResolvedValue(rules)
   const wrapper = mount(RoutingRulesView, {
-    global: { stubs: { RuleFormDrawer: true, ReassignRuleDialog: true, RuleTestDialog: true, UiDialog: inlineOverlay } },
+    global: { plugins: [await pageRouter('routing-rules')], stubs: { RuleFormDrawer: true, ReassignRuleDialog: true, RuleTestDialog: true, UiDialog: inlineOverlay } },
   })
   await flushPromises()
   return wrapper
@@ -67,7 +67,7 @@ describe('RoutingRulesView', () => {
   it('shows the error and lets the user try again', async () => {
     setActivePinia(createPinia())
     list.mockRejectedValueOnce(new ApiError(500, 'GET', null)).mockResolvedValueOnce([global])
-    const wrapper = mount(RoutingRulesView, { global: { stubs: { RuleFormDrawer: true, ReassignRuleDialog: true, RuleTestDialog: true } } })
+    const wrapper = mount(RoutingRulesView, { global: { plugins: [await pageRouter('routing-rules')], stubs: { RuleFormDrawer: true, ReassignRuleDialog: true, RuleTestDialog: true } } })
     await flushPromises()
     expect(wrapper.find('[role="alert"]').text()).toContain('The server had a problem')
     await button(wrapper, 'Try again').trigger('click')
@@ -135,6 +135,7 @@ describe('RoutingRulesView', () => {
   it('moves a rule one place by sending the whole new order', async () => {
     const wrapper = await mountView([first, second])
     await wrapper.findAll('nav button').find((b) => b.text().includes('Budget guard'))!.trigger('click')
+    await flushPromises() // choosing a rule is a navigation (/routing-rules/<id>)
     reorder.mockResolvedValue([{ ...second, priority: 0 }, { ...first, priority: 10 }])
     await buttonByLabel(wrapper, 'Check earlier').trigger('click')
     await flushPromises()

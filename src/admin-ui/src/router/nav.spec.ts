@@ -16,7 +16,7 @@ describe('routing rules navigation', () => {
   it('is only for gateway administrators, in the menu and as a page', () => {
     expect(item?.roles).toEqual(GATEWAY_ADMIN)
     const route = routes.find((r) => r.name === 'routing-rules')
-    expect(route?.path).toBe('/routing-rules')
+    expect(route?.path).toBe('/routing-rules/:rule?') // a rule's own address (layout audit Q1 A)
     expect(route?.meta?.roles).toEqual(GATEWAY_ADMIN)
     expect(route?.meta?.title).toBe('Routing rules')
     const allowed = (roles: string[]) => GATEWAY_ADMIN.some((r) => effectiveRoles(roles).has(r))

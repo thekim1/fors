@@ -199,6 +199,21 @@ export const pages = ['/', '/usage', '/usage?tab=requests', '/operations', '/ope
   '/organisation', '/integrations', '/data-access', '/catalog', '/routes', '/routing-rules', '/providers', '/providers?tab=models',
   '/budgets', '/audit', '/settings', '/forbidden', '/no-such-page']
 
+/**
+ * The list-and-detail pages (layout audit Q1 A) and their lists' names: where a page stacks (below 1 024 px), a chosen
+ * item is a page of its own (`/routes/<name>`), which the narrow scans open from the list.
+ */
+export const listDetailPages: [path: string, list: string][] = [['/organisation', 'Departments'], ['/routes', 'Routes'], ['/routing-rules', 'Routing rules']]
+
+/** Opens the first item of a list-and-detail page's list and waits for its detail page. */
+export async function openFirstDetail(page: Page, path: string, list: string): Promise<void> {
+  await ready(page, path)
+  await page.getByRole('navigation', { name: list }).getByRole('button').first().click()
+  await expect(page.getByRole('navigation', { name: list })).toHaveCount(0)
+  await expect(page.locator('[data-test="breadcrumb"]')).toBeVisible()
+  await expect(page.locator('h1#page-title')).toBeVisible()
+}
+
 /** Content-Security-Policy violations the browser reports on the console while the test runs, as Källa's spec checks. */
 export function watchCsp(page: Page): string[] {
   const violations: string[] = []
