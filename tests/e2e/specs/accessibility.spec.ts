@@ -137,7 +137,7 @@ for (const theme of themes) {
     await expect(drawer).toBeHidden()
 
     // Filter chips set on the pages that took them in step 3 of the layout audit.
-    for (const path of ['/keys?status=Revoked&q=key', '/budgets?scope=Team', '/operations/stability?period=7d', '/audit?type=Team&actor=admin', '/providers?tab=models&kind=Chat&q=fake', '/usage?period=90d&endpoint=Embeddings']) {
+    for (const path of ['/keys?status=Revoked&q=key', '/budgets?scope=Team', '/operations/stability?period=7d', '/audit?type=Team&actor=admin', '/providers?tab=models&kind=Chat&q=fake', '/usage?period=90d&endpoint=Embeddings', '/catalog?kind=Chat&q=fors']) {
       await ready(page, path)
       await expect(page.getByRole('search').getByRole('button', { name: /^Remove the .* filter$/ }).first()).toBeVisible()
       await scan(page, `${theme}: the filter row of ${path}`)

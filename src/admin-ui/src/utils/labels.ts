@@ -277,6 +277,25 @@ export const CAPABILITY_LABEL: Record<ProviderCapability, string> = {
   Rerank: 'Rerank (Cohere-compatible)',
 }
 
+/** The website's guides the admin UI links to (site/content.mjs: /docs/<slug>/). */
+export const DOCS = {
+  integrations: 'https://thekim1.github.io/fors/docs/integrations/',
+  dataAccess: 'https://thekim1.github.io/fors/docs/data-access/',
+} as const
+
+/** A capability in a chip (layout audit step 10): the Catalogue shows each alias's as short chips, the full name as the title. */
+export const CAPABILITY_SHORT: Record<ProviderCapability, string> = {
+  ChatCompletions: 'Chat',
+  Embeddings: 'Embeddings',
+  Responses: 'Responses',
+  AnthropicMessages: 'Messages',
+  Streaming: 'Streaming',
+  AudioTranscriptions: 'Speech to text',
+  Realtime: 'Realtime',
+  Images: 'Images',
+  Rerank: 'Rerank',
+}
+
 export const OUTCOME_LABEL: Record<RequestOutcome, { label: string; tone: Tone }> = {
   Success: { label: 'Success', tone: 'ok' },
   ProviderError: { label: 'Provider error', tone: 'danger' },
