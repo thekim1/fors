@@ -43,8 +43,10 @@ See [runbook](runbook.md) for the actual deployment procedure.
   with 0.12.2's file. Step 3's statement stays as the fallback: if `roles` fails, its log says why, and the statement
   does the same by hand. In a stack that also holds Källa, the gateway's roles are renamed before `migrations` runs,
   and Källa's bootstrap waits for `migrations`; Källa's own database follows Källa's guide.
-- **Compose from 0.11:** unchanged, `deploy/upgrade/upgrade-to-0.12.sh` (it renames the variables and moves the
-  database volume, whose name follows the project). Its step 3 still renames the roles; `roles` then does nothing.
+- **Compose from 0.11:** `deploy/upgrade/upgrade-to-0.12.sh` (it renames the variables and moves the database
+  volume, whose name follows the project). Its step 3 still renames the roles; `roles` then does nothing. It now
+  prints its plan unless you pass `--apply`, and it reads the installation instead of assuming the bundle's names
+  (see 0.12.0, *Compose*).
 - **Kubernetes from 0.11:** unchanged, the roles are renamed by hand (0.12.0, *Kubernetes*, step 2): the base uses a
   Postgres outside the cluster, whose superuser it does not have.
 - **What changes in the files:** Postgres's socket directory `/var/run/postgresql` is the volume `postgres-socket` (a
@@ -129,16 +131,33 @@ Back up first, as for every release: the database and the key pepper with the Da
 ### Compose (`init-deployment.sh`)
 
 `deploy/upgrade/upgrade-to-0.12.sh` does the upgrade. Run it from the new release's directory with the old installation
-still running, and with its `deploy/.env` (and `deploy/keycloak/.env`) copied into the new `deploy/`:
+still running, and with its `deploy/.env` (and `deploy/keycloak/.env`) copied into the new `deploy/`. Without
+`--apply` it only prints its plan: the old project it found, where the database is, and every step it would take.
 
 ```bash
-./deploy/upgrade/upgrade-to-0.12.sh        # renames the variables, stops the services, renames the roles, moves the volume
+./deploy/upgrade/upgrade-to-0.12.sh          # the plan; changes nothing
+./deploy/upgrade/upgrade-to-0.12.sh --apply  # renames the variables, copies the old deploy/certs and deploy/secrets,
+                                             # stops the services, renames the roles, moves the volume
 ./deploy/init-deployment.sh                # writes the connection strings with the new role names; keeps your settings
 docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait
 ./deploy/keycloak/init-keycloak.sh         # only with the bundled Keycloak; keeps realm ume
 docker compose -f deploy/keycloak/compose.yaml --env-file deploy/keycloak/.env up -d --build --wait
 docker volume rm ume-gateway_postgres-data # once everything runs
 ```
+
+**It reads the installation** (`deploy/upgrade/lib.sh`), so a host that differs from the bundle works too:
+
+- **The old project** is the one running a gateway and a Postgres (`--old-project` names it when there are several);
+  **the new one** is `COMPOSE_PROJECT_NAME` from the shell or the env file, else `fors-gateway` (`--project`). With the
+  same name for both, the database stays where it is.
+- **The database** is found at Postgres's mount: a named volume is copied to `<project>_postgres-data`; a volume on a
+  host directory (a `device` option) gets a new volume on the same directory; a direct bind mount stays, and your
+  Compose override goes on mounting it. Nothing on a host directory is copied, and a missing or empty database is
+  refused before anything changes.
+- **The certificates and secrets** (the key pepper, the Data Protection certificate) and the integration manifests and
+  secrets are copied from the old release's `deploy/` into the new one, owners kept, when the env file names them
+  there; `init-deployment.sh` would otherwise make new ones. A directory you chose (`--certs-dir`, `--secrets-dir`)
+  stays, and the script prints the `init-deployment.sh` options that keep it.
 
 The script keeps the old files as `.env.pre-0.12`. It adds `FORS_OIDC_CLIENT_ID=ume-admin` (when the file sets an
 authority but no client) and `FORS_DATA_AUDIENCE=ume-data-api`. For Keycloak it adds `FORS_KEYCLOAK_REALM=ume`,
