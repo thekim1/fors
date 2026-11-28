@@ -233,8 +233,10 @@ fi
 cat <<EOF
 
 Done. Next (docs/upgrade-guide.md, "0.12.0"):
-  1. ./deploy/init-deployment.sh${init_args[*]:+ ${init_args[*]}}
+  1. sudo ./deploy/init-deployment.sh${init_args[*]:+ ${init_args[*]}}
                                           writes the connection strings with the new role names; keeps your settings
+                                          (as root: the files it made before belong to the services' users),
+     then sudo chown "\$USER" $env_file      (it wrote the env file as root)
   2. start the release as usual (docker compose -p $new_project -f deploy/compose.prod.yaml --env-file $env_file up -d --wait)
      and, with the bundled Keycloak, ./deploy/keycloak/init-keycloak.sh and its compose up
 EOF

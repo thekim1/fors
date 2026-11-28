@@ -117,7 +117,11 @@ fi
 ok "--apply renamed the variables, copied the old bundle's certificates and secrets, and removed $old_project"
 
 # The rest as the upgrade guide says: init-deployment.sh, then up with the override that keeps the bind.
-( cd "$work/new" && ./deploy/init-deployment.sh --yes >/dev/null ) # it uses sudo itself for the owners
+# A re-run of init-deployment.sh needs root: its first run gave certs/<service> and secrets/<service> to the services'
+# users with mode 700, so as a user it sees no files there and tries to make new ones. It writes deploy/.env anew as
+# root's, which the guide hands back to the user.
+( cd "$work/new" && as_root ./deploy/init-deployment.sh --yes >/dev/null )
+as_root chown "$(id -u)" "$work/new/deploy/.env"
 "${new[@]}" up -d --wait --wait-timeout 300 >/dev/null || { "${new[@]}" logs --tail 50 >&2; fail "the new release did not start"; }
 pg="$(postgres_of "$new_project")"
 mounted="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Type}} {{if eq .Type "bind"}}{{.Source}}{{else}}{{.Name}}{{end}}{{end}}{{end}}' "$pg")"
