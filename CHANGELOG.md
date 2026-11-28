@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.14.0 - 2026-11-28
+
+Minor release: the admin UI follows Källa's layout rules on every page (the layout audit, steps 0 to 10: a user menu,
+filters as chips kept in the address, ⋯ menus for rare actions, summary tiles, phone headers, Settings in sections,
+and addresses of their own for departments, routes and routing rules), the Compose upgrade from 0.11 reads the
+installation, and `init-deployment.sh` can be run again as yourself. Two fixes: a model no longer costs 0 until the
+next catalogue reload, and a live session whose provider dropped is recorded as a provider error. No migration, no
+configuration change. **Rolling update: yes** from 0.13.0 and 0.12.2; from 0.12.0, 0.12.1 and 0.11 as for 0.13.0.
+
 - **Smaller page items** (layout audit step 10, rules 2 to 5):
   - **Catalogue:** a search over names and descriptions and a *Kind* chip, both kept in the address (`?q=&kind=`) and
     over both tables; each alias's capabilities are short chips (*Chat*, *Streaming*) instead of a sentence, the full

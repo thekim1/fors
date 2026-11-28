@@ -11,6 +11,21 @@ Production deployment now uses chiseled-extra images, immutable base digests, fi
 secrets, verified TLS, restricted DB roles/Redis ACL, static SPA serving and segmented Compose.
 See [runbook](runbook.md) for the actual deployment procedure.
 
+## 0.14.0: the admin UI's layout rules, and the Compose upgrade reads the installation
+
+- **Rolling update: yes** from 0.13.0 and 0.12.2. No migration, no configuration change. From 0.12.0 or 0.12.1, upgrade
+  straight to 0.14.0 and follow the 0.12.2 steps below (its first update recreates `postgres` once). From 0.11, upgrade
+  straight to 0.14.0 and follow the 0.12.2 steps for an upgrade from 0.11.
+- **Compose from 0.11:** `deploy/upgrade/upgrade-to-0.12.sh` prints its plan and changes nothing without `--apply`
+  (0.12.0, *Compose*). It reads the installation, so a custom project name, a volume on a host directory or a direct
+  bind mount upgrade too, and it copies the old release's `deploy/certs`, `deploy/secrets` and integration files into
+  the new `deploy/` (#143).
+- **`init-deployment.sh` run again** (to renew certificates, or after an upgrade): as yourself, it asks for `sudo` when
+  the last run's files belong to the services' users, and gives `deploy/.env` back to you. Nothing to do.
+- **Also in 0.14.0, nothing to do:** the admin UI's pages follow the layout rules ([admin UI](admin-ui.md#layout-rules));
+  a department, a route and a routing rule have addresses of their own (`/organisation/<id>`, `/routes/<name>`,
+  `/routing-rules/<id>`), so links and bookmarks to them work; the audit log filters by who (`GET /api/audit?actor=`).
+
 ## 0.13.0: the organisation logo for integrations
 
 - **Rolling update: yes** from 0.12.2. No migration, no configuration change. From 0.12.0 or 0.12.1, upgrade straight
