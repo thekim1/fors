@@ -133,15 +133,15 @@ onBeforeUnmount(() => {
     <template v-if="store.settings.dataApiUrl">
       <CodeBlock :code="store.settings.dataApiUrl" label="Data API address" />
       <p class="text-small text-fg-2">
-        Use the address with a key below, or with OAuth client credentials from your identity provider
-        (<a class="text-accent-ink underline" :href="DOCS.dataAccess" target="_blank" rel="noopener">Data API guide<span class="sr-only"> (opens in a new tab)</span></a>).
-        <a class="text-accent-ink underline" :href="`${store.settings.dataApiUrl}/scalar`" target="_blank" rel="noopener noreferrer">API reference<AppIcon name="open_in_new" :size="16" class="ml-1 align-text-bottom" /><span class="sr-only"> (opens in a new tab)</span></a>
+        Use the address with a key below, or with OAuth client credentials from your identity provider:
+        <a class="inline-flex min-h-6 items-center text-accent-ink underline max-md:min-h-11" :href="DOCS.dataAccess" target="_blank" rel="noopener">Data API guide<AppIcon name="open_in_new" :size="16" class="ml-1" /><span class="sr-only"> (opens in a new tab)</span></a>.
+        <a class="inline-flex min-h-6 items-center text-accent-ink underline max-md:min-h-11" :href="`${store.settings.dataApiUrl}/scalar`" target="_blank" rel="noopener noreferrer">API reference<AppIcon name="open_in_new" :size="16" class="ml-1" /><span class="sr-only"> (opens in a new tab)</span></a>
       </p>
     </template>
     <p v-else class="flex flex-wrap items-center gap-2 text-small text-fg-2">
       <AppIcon name="info" :size="18" />
       The Data API address is not configured (DataApi:PublicUrl on the admin API).
-      <a class="text-accent-ink underline" :href="DOCS.dataAccess" target="_blank" rel="noopener">Data API guide<span class="sr-only"> (opens in a new tab)</span></a>
+      <a class="inline-flex min-h-6 items-center text-accent-ink underline max-md:min-h-11" :href="DOCS.dataAccess" target="_blank" rel="noopener">Data API guide<AppIcon name="open_in_new" :size="16" class="ml-1" /><span class="sr-only"> (opens in a new tab)</span></a>
     </p>
   </section>
 
