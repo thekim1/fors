@@ -185,3 +185,32 @@ test('24 hour rotation keeps both keys usable until the predecessor is revoked',
   const replacement = await page.request.get(`${catalogue.gatewayBaseUrl}/v1/models`, { headers: { Authorization: `Bearer ${rotated.secret}` } })
   expect(replacement.status()).toBe(200)
 })
+
+// Layout audit Q1 A: a list-and-detail page's item has an address of its own; on a phone it is a page of its own.
+test('a route has its own address: it follows the choice, survives a reload, and is a page of its own on a phone', async ({ page }) => {
+  await login(page)
+  await ready(page, '/routes')
+  const list = page.getByRole('navigation', { name: 'Routes' })
+  const second = list.getByRole('button').nth(1)
+  const name = (await second.locator('.font-mono').first().textContent())?.trim() ?? ''
+  expect(name).not.toBe('')
+  await second.click()
+  await expect(page).toHaveURL(new RegExp(`/routes/${encodeURIComponent(name)}$`))
+  await expect(page.locator('#route-title')).toHaveText(name)
+  await expect(page.locator('#route-title')).toBeFocused()
+  await page.reload()
+  await expect(page.locator('#route-title')).toHaveText(name)
+  await expect(list).toBeVisible()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(list).toHaveCount(0)
+  await expect(page.locator('h1#page-title')).toHaveText(name)
+  await page.locator('[data-test="breadcrumb"]').getByRole('link', { name: 'Routes' }).click()
+  await expect(page).toHaveURL(/\/routes$/)
+  await expect(list).toBeVisible()
+  await expect(page.locator('#page-title')).toBeFocused()
+  await list.getByRole('button').first().click()
+  await expect(page.locator('h1#page-title')).toBeVisible()
+  await page.goBack()
+  await expect(list).toBeVisible()
+})

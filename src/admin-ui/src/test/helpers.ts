@@ -1,3 +1,5 @@
+import { createMemoryHistory, createRouter, type Router } from 'vue-router'
+import { routes as appRoutes } from '@/router'
 import { DOMWrapper, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 /** The first button whose visible text contains `text` (icon buttons also carry the icon’s name as text). */
@@ -34,4 +36,18 @@ export async function chooseMenuItem(wrapper: VueWrapper, menuLabel: string, ite
   if (!found) throw new Error(`No menu item containing "${item}". Items: ${items.map((i) => i.text()).join(' | ')}`)
   await found.trigger('click')
   await flushPromises()
+}
+
+/**
+ * A router with one page of the app at its real path (an optional detail parameter included, useListDetail), at
+ * `params`; other paths render nothing. For views that read or change their address.
+ */
+export async function pageRouter(name: string, params: Record<string, string> = {}, query: Record<string, string> = {}): Promise<Router> {
+  const record = appRoutes.find((r) => r.name === name)
+  if (!record) throw new Error(`no route named ${name}`)
+  const blank = { template: '<div />' }
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: record.path, name, component: blank }, { path: '/:rest(.*)*', component: blank }] })
+  await router.push({ name, params, query })
+  await router.isReady()
+  return router
 }

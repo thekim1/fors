@@ -18,6 +18,8 @@ const props = defineProps<{
   canEditDepartment: boolean
   /** Show Add team / Edit team / Delete team. */
   canManageTeams: boolean
+  /** Shown as a page of its own (a phone, useListDetail): the name is the page's h1. */
+  asPage?: boolean
 }>()
 const emit = defineEmits<{
   (e: 'edit'): void
@@ -47,12 +49,12 @@ const summary = computed(() => `${plural(props.department.teamCount, 'team')} ·
 </script>
 
 <template>
-  <section aria-labelledby="dept-title" class="flex min-w-0 flex-col gap-4">
+  <section :aria-labelledby="asPage ? 'page-title' : 'dept-title'" class="flex min-w-0 flex-col gap-4">
     <div class="material flex flex-col gap-5 rounded-card p-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="flex min-w-0 flex-col gap-1">
           <span class="text-small text-fg-3">Department · cost center <span class="font-mono">{{ department.costCenterCode }}</span></span>
-          <h2 id="dept-title" ref="heading" tabindex="-1" lang="sv" class="text-title-2 outline-none">{{ department.name }}</h2>
+          <component :is="asPage ? 'h1' : 'h2'" :id="asPage ? 'page-title' : 'dept-title'" ref="heading" tabindex="-1" lang="sv" class="text-title-2 outline-none">{{ department.name }}</component>
           <span class="flex items-center gap-2 text-small text-fg-2">
             {{ summary }}
             <UiBadge v-if="!department.isActive" tone="neutral" label="Inactive" />

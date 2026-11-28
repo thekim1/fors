@@ -262,7 +262,10 @@ radius, colour or icon set.
     screen-reader pass (see the [accessibility statement](accessibility-statement.md)).
 
 Also: a page under another has a breadcrumb above its title (`PageBreadcrumb`) and the menu keeps its parent lit; a
-section's title is inside the card it titles; a radio card shows its choice with `has-checked:bg-accent-soft
+list-and-detail page (*Organisation*, *Routes*, *Routing rules*) keeps the chosen item in the address
+(`/organisation/<id>`, `/routes/<name>`, `/routing-rules/<id>`, with `useListDetail`): side by side on a wide screen,
+and where it stacks (below 1 024 px) the list alone or the item alone, its name the page's title, with a breadcrumb
+back to the list; a section's title is inside the card it titles; a radio card shows its choice with `has-checked:bg-accent-soft
 has-checked:shadow-inset-selected`, not only by its dot.
 
 ### Shared with Källa

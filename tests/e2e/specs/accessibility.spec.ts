@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import axe from 'axe-core'
 import { expect, test, type Page } from '@playwright/test'
-import { chooseMenuItem, login, mutate, openRow, openUserMenu, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls, userMenuButton, watchCsp } from '../helpers'
+import { chooseMenuItem, login, mutate, openRow, openUserMenu, pages, ready, remove, testKey, testTeam, themeStorageKey, themes, undersizedControls, userMenuButton, watchCsp, listDetailPages, openFirstDetail } from '../helpers'
 
 // The design target is WCAG 2.2 AA. AAA rules (7:1 contrast and so on) are not part of the gate: the old
 // high-contrast themes that met them are gone (the target is WCAG 2.2 AA, see docs/accessibility-statement.md).
@@ -104,6 +104,11 @@ for (const theme of themes) {
       await ready(page, path)
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
       await scan(page, `${theme}, 390 px: ${path}`)
+    }
+    // A list-and-detail page's item is a page of its own at this width, with a breadcrumb back (layout audit Q1 A).
+    for (const [path, list] of listDetailPages) {
+      await openFirstDetail(page, path, list)
+      await scan(page, `${theme}, 390 px: ${path}, an item`)
     }
     expect(csp, 'Content-Security-Policy violations').toEqual([])
   })
@@ -243,6 +248,12 @@ for (const [width, label] of [[320, 'at 320px'], [640, 'at 200 percent text size
       if (width === 640) await page.evaluate(() => { document.documentElement.style.fontSize = '200%' })
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
       expect.soft(overflow, `${width}px: ${path}`).toBe(false)
+    }
+    for (const [path, list] of listDetailPages) {
+      await openFirstDetail(page, path, list)
+      if (width === 640) await page.evaluate(() => { document.documentElement.style.fontSize = '200%' })
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
+      expect.soft(overflow, `${width}px: ${path}, an item`).toBe(false)
     }
   })
 }

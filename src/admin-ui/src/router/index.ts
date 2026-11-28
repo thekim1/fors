@@ -29,14 +29,14 @@ export const routes: RouteRecordRaw[] = [
   { path: '/pii-incidents', name: 'pii-incidents', component: () => import('@/views/PiiIncidentsView.vue'), meta: { title: 'PII incidents', readsUsage: true } },
   { path: '/operations', name: 'ops', component: () => import('@/views/OpsView.vue'), meta: { title: 'Health & operations', roles: GATEWAY_ADMIN } },
   { path: '/keys', name: 'keys', component: () => import('@/views/KeysView.vue'), meta: { title: 'Keys', roles: KEY_ROLES } },
-  { path: '/organisation', name: 'organisation', component: () => import('@/views/OrganisationView.vue'), meta: { title: 'Organisation', roles: ADMIN_ROLES } },
+  { path: '/organisation/:department?', name: 'organisation', component: () => import('@/views/OrganisationView.vue'), meta: { title: 'Organisation', roles: ADMIN_ROLES } },
   { path: '/integrations', name: 'integrations', component: () => import('@/views/IntegrationsView.vue'), meta: { title: 'Integrations', roles: GATEWAY_ADMIN } },
   { path: '/data-access', name: 'data-access', component: () => import('@/views/DataAccessView.vue'), meta: { title: 'Data API access', roles: GATEWAY_ADMIN } },
   { path: '/catalog', name: 'catalog', component: () => import('@/views/CatalogView.vue'), meta: { title: 'Catalogue' } },
   // Getting started moved to the website (site/); keep old bookmarks working.
   { path: '/getting-started', redirect: { name: 'catalog' } },
-  { path: '/routes', name: 'routes', component: () => import('@/views/RoutesView.vue'), meta: { title: 'Routes', roles: GATEWAY_ADMIN } },
-  { path: '/routing-rules', name: 'routing-rules', component: () => import('@/views/RoutingRulesView.vue'), meta: { title: 'Routing rules', roles: GATEWAY_ADMIN } },
+  { path: '/routes/:route?', name: 'routes', component: () => import('@/views/RoutesView.vue'), meta: { title: 'Routes', roles: GATEWAY_ADMIN } },
+  { path: '/routing-rules/:rule?', name: 'routing-rules', component: () => import('@/views/RoutingRulesView.vue'), meta: { title: 'Routing rules', roles: GATEWAY_ADMIN } },
   { path: '/providers', name: 'providers', component: () => import('@/views/ProvidersView.vue'), meta: { title: 'Providers & models', roles: GATEWAY_ADMIN } },
   { path: '/budgets', name: 'budgets', component: () => import('@/views/BudgetsView.vue'), meta: { title: 'Budgets & alerts', roles: ADMIN_ROLES } },
   { path: '/audit', name: 'audit', component: () => import('@/views/AuditView.vue'), meta: { title: 'Audit log', roles: GATEWAY_ADMIN } },
@@ -113,7 +113,8 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
       return
     }
     if (to.hash) focusSection(to.hash)
-    else if (to.path !== from.path) focusPageHeading()
+    // Within one page (a list-and-detail page choosing an item, useListDetail) the page moves focus itself.
+    else if (to.path !== from.path && to.name !== from.name) focusPageHeading()
   })
 
   return router

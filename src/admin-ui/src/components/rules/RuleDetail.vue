@@ -16,6 +16,8 @@ const props = defineProps<{
   position: number
   count: number
   busy?: boolean
+  /** Shown as a page of its own (a phone, useListDetail): the name is the page's h1. */
+  asPage?: boolean
 }>()
 const emit = defineEmits<{
   (e: 'edit'): void
@@ -47,7 +49,7 @@ function onMenu(key: string): void {
 </script>
 
 <template>
-  <section aria-labelledby="rule-title" class="flex min-w-0 flex-col gap-4">
+  <section :aria-labelledby="asPage ? 'page-title' : 'rule-title'" class="flex min-w-0 flex-col gap-4">
     <div class="material flex flex-col gap-6 rounded-card p-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="flex min-w-0 flex-col gap-1">
@@ -55,7 +57,7 @@ function onMenu(key: string): void {
             {{ ROUTING_SCOPE_LABEL[rule.scope] }} rule<template v-if="rule.scope !== 'Global'"> · {{ liveOwners.length === 0 ? 'no owner' : `${liveOwners.length} ${(liveOwners.length === 1 ? ROUTING_SCOPE_LABEL[rule.scope] : ROUTING_SCOPE_PLURAL[rule.scope]).toLowerCase()}` }}</template>
           </span>
           <div class="flex flex-wrap items-center gap-2">
-            <h2 id="rule-title" ref="heading" tabindex="-1" class="break-words text-title-2 outline-none">{{ rule.name }}</h2>
+            <component :is="asPage ? 'h1' : 'h2'" :id="asPage ? 'page-title' : 'rule-title'" ref="heading" tabindex="-1" class="break-words text-title-2 outline-none">{{ rule.name }}</component>
             <UiBadge v-if="rule.isTemplate" tone="accent" label="Template" :dot="false" />
             <UiBadge v-if="!rule.isEnabled" tone="warn" label="Disabled" />
             <UiBadge v-if="rule.chain" tone="neutral" label="Chain" :dot="false" />
