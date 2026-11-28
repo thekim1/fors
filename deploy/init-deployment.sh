@@ -46,6 +46,7 @@ gateway_port=8443; admin_port=9443; bind=""; yes=0; renew=0; renew_ca=0; rolling
 oidc_secret_file=""; proxy=0; upstream_host=""; gw_cert=""; gw_key=""; adm_cert=""; adm_key=""; ca_file=""
 
 usage() { sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+args=("$@")
 die() { echo "error: $*" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
@@ -79,6 +80,19 @@ while [ $# -gt 0 ]; do
   esac
 done
 command -v openssl >/dev/null || die "openssl is required"
+# A re-run as yourself: the last run gave certs/<service> and secrets/<service> to the services' users (mode 700), so
+# as you this script would see none of their files and try to make new ones. It runs itself again with sudo then, and
+# gives the files that are yours (the env file, its backup, the integration manifests) back to you at the end.
+if [ "$(id -u)" != 0 ]; then
+  for d in "$certs"/{postgres,redis,gateway,adminapi,dataapi,migrations} \
+           "$secrets"/{postgres,redis,gateway,adminapi,dataapi,migrations} "$here/integration-secrets"; do
+    if [ -d "$d" ] && { [ ! -r "$d" ] || [ ! -x "$d" ]; }; then
+      command -v sudo >/dev/null || die "$d belongs to its service's user: run this script as root"
+      echo "The files of the last run belong to the services' users: running again with sudo."
+      exec sudo "${BASH_SOURCE[0]}" "${args[@]}"
+    fi
+  done
+fi
 env_value() { sed -n "s/^$1=//p" "$env_file" | tail -n 1; } # env_value NAME — its last value in deploy/.env
 # A re-run without --oidc-authority or --oidc-client-id keeps the value in deploy/.env: a declared sign-in does not move to
 # the setup wizard because an option was left out. The deployer's FORS_SETUP_REOPEN is kept too (set by hand, never here).
@@ -399,6 +413,12 @@ else
      --oidc-authority), or delete the file and enter the secret in the wizard."
   signin_step="$signin_step
      The optional Data API takes access tokens only from FORS_DATA_AUTHORITY then (never the wizard's provider)."
+fi
+# Run with sudo (above, or by hand): the files that are not a service's go back to whoever ran sudo.
+if [ "$(id -u)" = 0 ] && [ -n "${SUDO_UID:-}" ] && [ "$SUDO_UID" != 0 ]; then
+  for f in "$env_file" "$env_file.bak" "$manifests"; do
+    [ ! -e "$f" ] || chown -R "$SUDO_UID:${SUDO_GID:-$SUDO_UID}" "$f"
+  done
 fi
 own_step="  0. File ownership is set."
 [ "$chown" = 1 ] || own_step="  0. Files stay owned by you (--no-chown). For Kubernetes, run deploy/kubernetes/create-secrets.sh next."

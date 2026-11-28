@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Fixed: `init-deployment.sh` run again as yourself.** Its first run gives `certs/<service>` and `secrets/<service>`
+  to the services' users (mode 700), so a later run as an ordinary user saw none of their files, tried to make new
+  ones and failed on `openssl` (an upgrade into a new release directory hit it too, #143). It now runs itself again
+  with `sudo` when it finds such a directory, and gives `deploy/.env`, its backup and the integration manifests back to
+  whoever ran `sudo`, so `docker compose --env-file deploy/.env` works as before. Without `sudo` it says to run it as
+  root.
 - **`upgrade-to-0.12.sh` reads the installation** (#143, from Källa's thekim1/kalla#1101): it finds the old project by
   its Compose labels and the database at Postgres's mount, so a custom project name, a volume on a host directory or a
   direct bind mount upgrade too (data on a host directory is never copied); it refuses a missing or empty database;
