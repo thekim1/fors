@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **`upgrade-to-0.12.sh` reads the installation** (#143, from Källa's thekim1/kalla#1101): it finds the old project by
+  its Compose labels and the database at Postgres's mount, so a custom project name, a volume on a host directory or a
+  direct bind mount upgrade too (data on a host directory is never copied); it refuses a missing or empty database;
+  it copies the old release's certificates, secrets and integration files into the new `deploy/`, so the key pepper
+  carries over when the release is unpacked beside the old one; and it prints its plan unless you pass `--apply`
+  (`--yes` still skips the question). `deploy/upgrade/lib.sh` is Källa's upgrade library. `deploy-e2e.yml` upgrades a
+  0.11.0 Compose installation both ways (`deploy/tests/compose-upgrade-odd.sh`).
 - **Settings in sections, and address lists as chips** (layout audit step 8, Q6 A, rules 3 and 4): Settings groups its
   cards under *Network*, *Data*, *Prices* and *This console*, with a section menu at the top (a *Section* picker on a
   phone). *Proxy addresses* and a key's *Allowed client addresses* are chip inputs: type an address and press Enter (or
