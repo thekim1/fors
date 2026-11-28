@@ -158,7 +158,8 @@ for (const theme of themes) {
     await expect(bar).toBeHidden()
 
     await page.setViewportSize({ width: 390, height: 844 })
-    await ready(page, '/organisation')
+    // On a phone a department is a page of its own (layout audit Q1 A): its ⋯ menus are there.
+    await openFirstDetail(page, '/organisation', 'Departments')
     await page.getByRole('main').getByRole('button', { name: /^More actions for / }).first().click()
     const sheet = page.getByRole('dialog', { name: /^More actions for / })
     await expect(sheet).toBeVisible()
