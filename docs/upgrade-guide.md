@@ -138,8 +138,7 @@ still running, and with its `deploy/.env` (and `deploy/keycloak/.env`) copied in
 ./deploy/upgrade/upgrade-to-0.12.sh          # the plan; changes nothing
 ./deploy/upgrade/upgrade-to-0.12.sh --apply  # renames the variables, copies the old deploy/certs and deploy/secrets,
                                              # stops the services, renames the roles, moves the volume
-sudo ./deploy/init-deployment.sh           # writes the connection strings with the new role names; keeps your settings
-sudo chown "$USER" deploy/.env             # init-deployment.sh wrote it as root
+./deploy/init-deployment.sh                # writes the connection strings with the new role names; keeps your settings
 docker compose -f deploy/compose.prod.yaml --env-file deploy/.env up -d --wait
 ./deploy/keycloak/init-keycloak.sh         # only with the bundled Keycloak; keeps realm ume
 docker compose -f deploy/keycloak/compose.yaml --env-file deploy/keycloak/.env up -d --build --wait
@@ -160,9 +159,8 @@ docker volume rm ume-gateway_postgres-data # once everything runs
   there; `init-deployment.sh` would otherwise make new ones. A directory you chose (`--certs-dir`, `--secrets-dir`)
   stays, and the script prints the `init-deployment.sh` options that keep it.
 
-`init-deployment.sh` runs as root here (`sudo`): its first run gave the files under `certs/` and `secrets/` to the
-services' users, so as your own user it would see none of them and try to make new ones. It writes `deploy/.env`
-anew, as root's; `chown` gives it back to you for `docker compose`.
+`init-deployment.sh` asks for `sudo` here: the copied `certs/` and `secrets/` belong to the services' users, so it runs
+itself again as root and gives `deploy/.env` back to you afterwards.
 
 The script keeps the old files as `.env.pre-0.12`. It adds `FORS_OIDC_CLIENT_ID=ume-admin` (when the file sets an
 authority but no client) and `FORS_DATA_AUDIENCE=ume-data-api`. For Keycloak it adds `FORS_KEYCLOAK_REALM=ume`,

@@ -117,11 +117,13 @@ fi
 ok "--apply renamed the variables, copied the old bundle's certificates and secrets, and removed $old_project"
 
 # The rest as the upgrade guide says: init-deployment.sh, then up with the override that keeps the bind.
-# A re-run of init-deployment.sh needs root: its first run gave certs/<service> and secrets/<service> to the services'
-# users with mode 700, so as a user it sees no files there and tries to make new ones. It writes deploy/.env anew as
-# root's, which the guide hands back to the user.
-( cd "$work/new" && as_root ./deploy/init-deployment.sh --yes >/dev/null )
-as_root chown "$(id -u)" "$work/new/deploy/.env"
+# As the user, as the guide says: the copied certs/<service> and secrets/<service> belong to the services' users, so the
+# script runs itself again with sudo, and the env file is the user's again afterwards.
+( cd "$work/new" && ./deploy/init-deployment.sh --yes > "$work/init.log" 2>&1 ) || { tail -20 "$work/init.log" >&2; fail "init-deployment.sh failed"; }
+if [ "$(id -u)" != 0 ]; then
+  grep -q 'running again with sudo' "$work/init.log" || fail "init-deployment.sh did not run itself with sudo"
+  [ -O "$work/new/deploy/.env" ] || fail "the env file is not the user's after init-deployment.sh"
+fi
 "${new[@]}" up -d --wait --wait-timeout 300 >/dev/null || { "${new[@]}" logs --tail 50 >&2; fail "the new release did not start"; }
 pg="$(postgres_of "$new_project")"
 mounted="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Type}} {{if eq .Type "bind"}}{{.Source}}{{else}}{{.Name}}{{end}}{{end}}{{end}}' "$pg")"
@@ -131,6 +133,13 @@ if [ "$layout" = odd ]; then want="bind $data"; else want="volume ${new_project}
 [ "$(psql_in "$pg" "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'ume\\_%'")" = 0 ] || fail "ume_* roles are left"
 [ "$(as_root sha256sum "$work/new/deploy/secrets/.pepper" | cut -d' ' -f1)" = "$pepper" ] || fail "init-deployment.sh replaced the key pepper"
 ok "this release runs as $new_project on $want with the old row, the same key pepper and the roles renamed"
+
+# A plain re-run in place, as the user: the same files, the same pepper, the env file still the user's.
+( cd "$work/new" && ./deploy/init-deployment.sh --yes > "$work/init2.log" 2>&1 ) || { tail -20 "$work/init2.log" >&2; fail "a re-run of init-deployment.sh failed"; }
+[ "$(as_root sha256sum "$work/new/deploy/secrets/.pepper" | cut -d' ' -f1)" = "$pepper" ] || fail "a re-run of init-deployment.sh replaced the key pepper"
+[ "$(id -u)" = 0 ] || [ -O "$work/new/deploy/.env" ] || fail "the env file is not the user's after a re-run"
+"${new[@]}" up -d --wait --wait-timeout 300 >/dev/null || fail "the release did not start after a re-run of init-deployment.sh"
+ok "init-deployment.sh runs again as the user (through sudo) and keeps every secret"
 
 again="$("${upgrade[@]}" --apply --yes 2>&1)" || fail "a second --apply failed: $again"
 grep -q 'done already' <<< "$again" || fail "a second --apply did something: $again"
