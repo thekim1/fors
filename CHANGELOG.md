@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Smaller page items** (layout audit step 10, rules 2 to 5):
+  - **Catalogue:** a search over names and descriptions and a *Kind* chip, both kept in the address (`?q=&kind=`) and
+    over both tables; each alias's capabilities are short chips (*Chat*, *Streaming*) instead of a sentence, the full
+    names kept for screen readers.
+  - **Data API access:** the Data API address is a card with a copy button, as the Catalogue's gateway base URL, with
+    the API reference and the Data API guide under it.
+  - **Integrations:** the paragraph above the list is one line with a link to the integrations guide.
+  - **Usage › Requests and costs:** *Group by* is a compact select beside the summary's heading, and *Look up a
+    request* is a small form beside the *Requests* heading instead of a card at the end of the page.
 - **Departments, routes and routing rules have addresses of their own** (layout audit step 9, Q1 A, rule 10):
   `/organisation/<department>`, `/routes/<name>` and `/routing-rules/<rule>` open that item, so it can be linked and
   survives a reload. A wide screen keeps the list beside the detail, and the address follows the choice. Where the page

@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CreateDataApiKeyResponse, DataApiKey, DataPermission } from '@/api/types'
 import { useDataAccessStore } from '@/stores/dataAccess'
 import { useUiStore } from '@/stores/ui'
-import { DATA_PERMISSION, MENU, plural } from '@/utils/labels'
+import { DATA_PERMISSION, DOCS, MENU, plural } from '@/utils/labels'
 import { formatDate, formatRelative, startOfMonthIso, todayIso } from '@/utils/format'
 import DataApiKeyFormDrawer from '@/components/dataAccess/DataApiKeyFormDrawer.vue'
 import CodeBlock from '@/components/keys/CodeBlock.vue'
@@ -127,15 +127,23 @@ onBeforeUnmount(() => {
     <UiButton variant="primary" icon="add" @click="openCreate">New Data API key</UiButton>
   </PageHeader>
 
-  <p v-if="store.settings" class="mb-4 flex flex-wrap items-center gap-2 text-small text-fg-2">
-    <AppIcon name="info" :size="18" />
+  <!-- Layout audit step 10 (rule 4, "how do I connect?"): the address in a card of its own, as the Catalogue's base URL. -->
+  <section v-if="store.settings" aria-labelledby="data-connect" class="mb-6 flex flex-col gap-3" data-test="data-api-address">
+    <h2 id="data-connect" class="sr-only">Connect an integration</h2>
     <template v-if="store.settings.dataApiUrl">
-      Data API: <span class="font-mono">{{ store.settings.dataApiUrl }}</span> ·
-      <a class="underline" :href="`${store.settings.dataApiUrl}/scalar`" target="_blank" rel="noopener noreferrer">API reference</a>
+      <CodeBlock :code="store.settings.dataApiUrl" label="Data API address" />
+      <p class="text-small text-fg-2">
+        Use the address with a key below, or with OAuth client credentials from your identity provider:
+        <a class="inline-flex min-h-6 items-center text-accent-ink underline max-md:min-h-11" :href="DOCS.dataAccess" target="_blank" rel="noopener">Data API guide<AppIcon name="open_in_new" :size="16" class="ml-1" /><span class="sr-only"> (opens in a new tab)</span></a>.
+        <a class="inline-flex min-h-6 items-center text-accent-ink underline max-md:min-h-11" :href="`${store.settings.dataApiUrl}/scalar`" target="_blank" rel="noopener noreferrer">API reference<AppIcon name="open_in_new" :size="16" class="ml-1" /><span class="sr-only"> (opens in a new tab)</span></a>
+      </p>
     </template>
-    <template v-else>The Data API address is not configured (DataApi:PublicUrl on the admin API).</template>
-    <span>Integrations can also use OAuth client credentials from your identity provider; see docs/data-access.md.</span>
-  </p>
+    <p v-else class="flex flex-wrap items-center gap-2 text-small text-fg-2">
+      <AppIcon name="info" :size="18" />
+      The Data API address is not configured (DataApi:PublicUrl on the admin API).
+      <a class="inline-flex min-h-6 items-center text-accent-ink underline max-md:min-h-11" :href="DOCS.dataAccess" target="_blank" rel="noopener">Data API guide<AppIcon name="open_in_new" :size="16" class="ml-1" /><span class="sr-only"> (opens in a new tab)</span></a>
+    </p>
+  </section>
 
   <AsyncState
     :loading="store.loading"

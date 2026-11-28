@@ -23,11 +23,9 @@ import FilterChip from '@/components/ui/FilterChip.vue'
 import InlineError from '@/components/ui/InlineError.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import PeriodPicker from '@/components/ui/PeriodPicker.vue'
-import SelectField from '@/components/ui/SelectField.vue'
-import TextField from '@/components/ui/TextField.vue'
+import FilterSelect from '@/components/ui/FilterSelect.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
-import UiCard from '@/components/ui/UiCard.vue'
 import UiDrawer from '@/components/ui/UiDrawer.vue'
 import UiTabs from '@/components/ui/UiTabs.vue'
 import UsageDashboard from '@/components/usage/UsageDashboard.vue'
@@ -289,7 +287,8 @@ onMounted(() => {
     <section aria-labelledby="summary-h" class="mb-8">
       <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 id="summary-h" class="text-heading">Summary by {{ GROUP_LABEL[group].toLowerCase() }}</h2>
-        <SelectField v-model="view.group" label="Group by" :options="groupOptions" class="w-48" />
+        <!-- Layout audit step 10 (rule 3): a compact select with its label beside it, at the heading it changes. -->
+        <FilterSelect v-model="view.group" label="Group by" :options="groupOptions" />
       </div>
       <AsyncState :loading="usage.summaryLoading" :error="usage.summaryError" :empty="!usage.summary" @retry="load">
         <p v-if="usage.summary" class="mb-3 text-fg-2">
@@ -319,7 +318,24 @@ onMounted(() => {
     </section>
 
     <section aria-labelledby="requests-h" class="mb-8">
-      <h2 id="requests-h" class="mb-3 scroll-mt-4 text-heading">{{ showingErrors ? 'Failed requests' : 'Requests' }}</h2>
+      <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <h2 id="requests-h" class="scroll-mt-4 text-heading">{{ showingErrors ? 'Failed requests' : 'Requests' }}</h2>
+        <!-- Layout audit step 10 (rule 4): looking up one request is its own small form at the list it belongs to. -->
+        <form class="flex flex-col gap-1 max-md:w-full" role="search" aria-label="Look up a request" novalidate data-test="lookup" @submit.prevent="lookup">
+          <span class="flex items-center gap-2">
+            <label for="lookup-id" class="sr-only">Request ID</label>
+            <input
+              id="lookup-id" v-model="lookupId" type="search" autocomplete="off" spellcheck="false" placeholder="Request ID"
+              aria-describedby="lookup-hint" :aria-invalid="lookupMessage ? 'true' : undefined" :aria-errormessage="lookupMessage ? 'lookup-message' : undefined"
+              class="field-input !h-ctl w-72 font-mono max-md:!h-11 max-md:w-auto max-md:flex-1"
+            />
+            <UiButton type="submit" size="sm" class="max-md:h-11" :loading="lookupBusy">Look up</UiButton>
+          </span>
+          <span id="lookup-hint" class="text-caption text-fg-3">From the x-request-id response header.</span>
+          <span v-if="lookupMessage" id="lookup-message" class="text-caption text-danger" role="alert">{{ lookupMessage }}</span>
+        </form>
+      </div>
+      <InlineError v-if="lookupError" :message="problemMessage(lookupError)" class="mb-3" />
       <AsyncState :loading="usage.requestsLoading" :error="usage.requestsError" :empty="!usage.requestsLoaded" @retry="load">
         <DataTable
           :columns="requestColumns"
@@ -353,13 +369,6 @@ onMounted(() => {
       </AsyncState>
     </section>
 
-    <UiCard title="Look up a request" heading-id="lookup-h">
-      <form class="flex flex-wrap items-end gap-3" novalidate @submit.prevent="lookup">
-        <TextField v-model="lookupId" label="Request ID" mono hint="Find it in the x-request-id response header." :error="lookupMessage" />
-        <UiButton type="submit" :loading="lookupBusy">Look up</UiButton>
-      </form>
-      <InlineError v-if="lookupError" :message="problemMessage(lookupError)" class="mt-3" />
-    </UiCard>
   </div>
 
   <UiDrawer v-model:open="drawerOpen" :title="selected?.keyName ?? 'Request'" :subtitle="selected?.requestId">

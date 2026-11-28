@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import type { Integration, IntegrationImportResult } from '@/api/types'
 import { useIntegrationsStore } from '@/stores/integrations'
 import { useUiStore } from '@/stores/ui'
-import { MENU, plural } from '@/utils/labels'
+import { DOCS, MENU, plural } from '@/utils/labels'
 import { formatDate } from '@/utils/format'
 import IntegrationFormDrawer from '@/components/integrations/IntegrationFormDrawer.vue'
 import IntegrationImportDrawer from '@/components/integrations/IntegrationImportDrawer.vue'
@@ -95,11 +95,12 @@ onMounted(() => {
     </span>
   </PageHeader>
 
+  <!-- Layout audit step 10 (rule 5): one line and the guide, not the guide's text. -->
   <p class="mb-4 flex items-start gap-2 text-small text-fg-2">
     <AppIcon name="info" :size="18" class="mt-px shrink-0" />
     <span>
-      Credential keys are what the integration’s services sign in with; create them on the Keys page in the owner team, or add an integration with all its keys at once with Add from manifest. Department and team
-      admins create assigned keys for their own chatbots and knowledge bases there too, and set their limits and budgets. See docs/integrations.md.
+      An integration signs in with its credential keys, made on the Keys page or with Add from manifest.
+      <a class="text-accent-ink underline" :href="DOCS.integrations" target="_blank" rel="noopener">How integrations work<AppIcon name="open_in_new" :size="16" class="ml-1 align-text-bottom" /><span class="sr-only"> (opens in a new tab)</span></a>
     </span>
   </p>
 
